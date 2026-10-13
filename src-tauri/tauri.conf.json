@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Remined",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.remined.launcher",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -22,6 +22,14 @@
     ],
     "security": {
       "csp": null
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU0NTIxQTY0M0M1NkQxNjMKUldSajBWWThaQnBTNUlVQlJ1Z1dlaVFPT2o5YkJwdVdvdTJOSUdyd0ltYWVmMmFrRzJ2TERhU1oK",
+      "endpoints": [
+        "https://github.com/LAYT73/ReminedLauncher/releases/latest/download/latest.json"
+      ]
     }
   },
   "bundle": {

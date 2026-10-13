@@ -22,9 +22,9 @@ rustup update stable
 
 ## Что умеет сейчас
 
-- Список локальных сборок (VanillaPro)
+- Список паков из Supabase + локальные установки
 - Ник + скин (PNG)
-- Play → вызывает `scripts/launch_vanillapro.py`
+- Play → встроенный Rust runtime (Java + Fabric libs/assets)
 - Скин кладётся в SkinShuffle перед стартом
 
 Сервер / CDN / апдейты паков — ещё нет.

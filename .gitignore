@@ -9,3 +9,5 @@ src-tauri/target
 .env
 .env.local
 .env.*.local
+# keep .env.example tracked; prefer `.env.local` for real keys
+*.tsbuildinfo

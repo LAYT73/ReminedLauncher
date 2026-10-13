@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
+import type { Session } from "@supabase/supabase-js";
+import { AuthScreen } from "./components/AuthScreen";
+import { OnboardingScreen } from "./components/OnboardingScreen";
 import { PackGallery } from "./components/PackGallery";
 import { PackSelect } from "./components/PackSelect";
 import { SkinModel } from "./components/SkinModel";
-import { PACK_CONTENT } from "./packs";
+import { supabase } from "./lib/supabase";
+import {
+  CatalogPack,
+  fetchCatalogFromSupabase,
+  pickDefaultPack,
+} from "./lib/packsCatalog";
 
 type Pack = {
   id: string;
@@ -34,7 +44,7 @@ const RAM_OPTIONS_GB = [2, 4, 6, 8, 12, 16] as const;
 const DEFAULT_PROFILE: Profile = {
   username: "Player",
   skin_path: null,
-  selected_pack: "vanillapro",
+  selected_pack: "",
   ram_mb: 4096,
   java_path: null,
   jvm_args: "",
@@ -60,8 +70,24 @@ type GamePhase = "idle" | "launching" | "running";
 
 type TopTab = "play" | "installations" | "skins" | "settings";
 
+type RuntimeStatus = {
+  onboarding: {
+    completed: boolean;
+    java_ok: boolean;
+    pack_ok: boolean;
+    runtime_ok: boolean;
+    java_path: string | null;
+    pack_version: string | null;
+  };
+};
+
+type Gate = "loading" | "auth" | "onboarding" | "app";
+
 export default function App() {
+  const [gate, setGate] = useState<Gate>("loading");
+  const [session, setSession] = useState<Session | null>(null);
   const [packs, setPacks] = useState<Pack[]>([]);
+  const [catalog, setCatalog] = useState<CatalogPack[]>([]);
   const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
   const [skinPreview, setSkinPreview] = useState<string | null>(null);
   const [status, setStatus] = useState("");
@@ -70,6 +96,9 @@ export default function App() {
   const [topTab, setTopTab] = useState<TopTab>("play");
   const [rail, setRail] = useState<"home" | "java" | "settings">("java");
   const [javaInfo, setJavaInfo] = useState<JavaInfo | null>(null);
+  const [appVersion, setAppVersion] = useState("0.1.0");
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [packBusy, setPackBusy] = useState(false);
 
   async function refreshJava(path?: string | null) {
     try {
@@ -82,30 +111,90 @@ export default function App() {
     }
   }
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        const [packList, saved, gamePhase] = await Promise.all([
+  async function bootstrapLauncher() {
+    try {
+      const [packList, saved, gamePhase, version, remoteCatalog] =
+        await Promise.all([
           invoke<Pack[]>("list_packs"),
           invoke<Profile>("get_profile"),
           invoke<GamePhase>("get_game_phase"),
+          invoke<string>("get_app_version").catch(() => "0.1.0"),
+          fetchCatalogFromSupabase().catch(() => [] as CatalogPack[]),
         ]);
-        const next = normalizeProfile(saved);
-        setPacks(packList);
-        setProfile(next);
-        setPhase(gamePhase);
-        void refreshJava(next.java_path);
-        if (next.skin_path) {
-          const data = await invoke<string | null>("read_skin_data_url", {
-            path: next.skin_path,
-          });
-          setSkinPreview(data);
-        }
-      } catch (err) {
-        setStatus(String(err));
-        setStatusKind("error");
+      const next = normalizeProfile(saved);
+      setCatalog(remoteCatalog);
+      setPacks(packList);
+
+      // Prefer installed packs; fall back to catalog ids for selection UI
+      const merged: Pack[] =
+        packList.length > 0
+          ? packList.map((p) => {
+              const meta = remoteCatalog.find((c) => c.id === p.id);
+              return {
+                ...p,
+                name: meta?.name || p.name,
+                description: meta?.blurb || p.description,
+              };
+            })
+          : remoteCatalog.map((c) => ({
+              id: c.id,
+              name: c.name,
+              version: "—",
+              description: c.blurb,
+            }));
+      setPacks(merged);
+
+      if (!next.selected_pack) {
+        const def = pickDefaultPack(remoteCatalog);
+        if (def) next.selected_pack = def.id;
+        else if (merged[0]) next.selected_pack = merged[0].id;
       }
+
+      setProfile(next);
+      setPhase(gamePhase);
+      setAppVersion(version);
+      void refreshJava(next.java_path);
+      if (next.skin_path) {
+        const data = await invoke<string | null>("read_skin_data_url", {
+          path: next.skin_path,
+        });
+        setSkinPreview(data);
+      }
+    } catch (err) {
+      setStatus(String(err));
+      setStatusKind("error");
+    }
+  }
+
+  async function resolveGate(nextSession: Session | null) {
+    setSession(nextSession);
+    if (!nextSession) {
+      setGate("auth");
+      return;
+    }
+    try {
+      const runtime = await invoke<RuntimeStatus>("get_runtime_status");
+      if (!runtime.onboarding.completed) {
+        setGate("onboarding");
+        return;
+      }
+      await bootstrapLauncher();
+      setGate("app");
+    } catch {
+      setGate("onboarding");
+    }
+  }
+
+  useEffect(() => {
+    void (async () => {
+      const { data } = await supabase.auth.getSession();
+      await resolveGate(data.session);
     })();
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
+      void resolveGate(next);
+    });
+    return () => sub.subscription.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -122,9 +211,10 @@ export default function App() {
     [packs, profile.selected_pack],
   );
 
-  const packContent = selectedPack
-    ? PACK_CONTENT[selectedPack.id]
-    : undefined;
+  const packContent = useMemo(() => {
+    if (!selectedPack) return undefined;
+    return catalog.find((c) => c.id === selectedPack.id);
+  }, [catalog, selectedPack]);
 
   async function persist(next: Profile) {
     setProfile(next);
@@ -263,12 +353,96 @@ export default function App() {
         </div>
       </div>
 
-      <div className="settings-row">
-        <span>Launcher</span>
-        <span className="settings-value">0.1.0</span>
+      <div className="settings-block">
+        <h3 className="settings-heading">Pack</h3>
+        <div className="update-row">
+          <button
+            type="button"
+            className="btn-mc"
+            disabled={packBusy}
+            onClick={() => void syncPack()}
+          >
+            {packBusy ? "Updating…" : "Update pack"}
+          </button>
+          <span className="settings-value">
+            {selectedPack?.name ?? profile.selected_pack ?? "—"}
+            {selectedPack?.version ? ` · ${selectedPack.version}` : ""}
+          </span>
+        </div>
+        <p className="pack-sync-note">
+          Catalog from Supabase · artifacts from GitHub Releases (`catalog.json`).
+        </p>
+      </div>
+
+      <div className="settings-block">
+        <h3 className="settings-heading">Launcher</h3>
+        <div className="settings-row">
+          <span>Version</span>
+          <span className="settings-value">{appVersion}</span>
+        </div>
+        <div className="update-row">
+          <button
+            type="button"
+            className="btn-mc"
+            disabled={updateBusy}
+            onClick={() => void checkForUpdate()}
+          >
+            {updateBusy ? "Checking…" : "Check for updates"}
+          </button>
+          <button
+            type="button"
+            className="btn-mc dim"
+            onClick={() => void supabase.auth.signOut()}
+          >
+            Sign out
+            {session?.user?.email ? ` (${session.user.email})` : ""}
+          </button>
+        </div>
       </div>
     </section>
   );
+
+  async function syncPack() {
+    setPackBusy(true);
+    setStatus("Updating pack…");
+    setStatusKind("idle");
+    try {
+      const packId = profile.selected_pack || selectedPack?.id;
+      if (!packId) throw new Error("No pack selected");
+      await invoke("sync_selected_pack", { packId });
+      await bootstrapLauncher();
+      setStatus("Pack up to date");
+      setStatusKind("ok");
+    } catch (err) {
+      setStatus(String(err));
+      setStatusKind("error");
+    } finally {
+      setPackBusy(false);
+    }
+  }
+
+  async function checkForUpdate() {
+    setUpdateBusy(true);
+    setStatus("Checking for launcher updates…");
+    setStatusKind("idle");
+    try {
+      const update = await check();
+      if (!update) {
+        setStatus("Already on the latest launcher");
+        setStatusKind("ok");
+        return;
+      }
+      setStatus(`Downloading ${update.version}…`);
+      await update.downloadAndInstall();
+      setStatus("Restarting…");
+      await relaunch();
+    } catch (err) {
+      setStatus(String(err));
+      setStatusKind("error");
+    } finally {
+      setUpdateBusy(false);
+    }
+  }
 
   const playLabel =
     phase === "launching"
@@ -307,6 +481,31 @@ export default function App() {
     }
   }
 
+  if (gate === "loading") {
+    return (
+      <div className="gate-screen">
+        <div className="gate-panel">
+          <p className="gate-kicker">Remined</p>
+          <h1 className="gate-title">Loading</h1>
+        </div>
+      </div>
+    );
+  }
+
+  if (gate === "auth") {
+    return <AuthScreen onAuthed={() => setGate("loading")} />;
+  }
+
+  if (gate === "onboarding") {
+    return (
+      <OnboardingScreen
+        onDone={() => {
+          void bootstrapLauncher().then(() => setGate("app"));
+        }}
+      />
+    );
+  }
+
   return (
     <div className="shell">
       <aside className="rail">
@@ -324,16 +523,16 @@ export default function App() {
         <button
           type="button"
           className={`rail-game ${rail === "java" ? "active" : ""}`}
-          title="VanillaPro"
+          title={selectedPack?.name ?? "Pack"}
           onClick={() => {
             setRail("java");
             setTopTab("play");
           }}
         >
-          {PACK_CONTENT.vanillapro?.logo ? (
+          {packContent?.logo_url ? (
             <img
               className="rail-pack-logo"
-              src={PACK_CONTENT.vanillapro.logo}
+              src={packContent.logo_url}
               alt=""
             />
           ) : (
@@ -393,20 +592,33 @@ export default function App() {
             <div className="content">
               {topTab === "play" && (
                 <>
-                  <header className="hero">
+                  <header
+                    className="hero"
+                    style={
+                      packContent?.wallpaper_url
+                        ? {
+                            backgroundImage: [
+                              "linear-gradient(180deg, transparent 22%, rgba(30, 30, 30, 0.55) 70%, var(--bg) 100%)",
+                              "linear-gradient(90deg, rgba(10, 10, 12, 0.78) 0%, rgba(10, 10, 12, 0.35) 42%, rgba(10, 10, 12, 0.15) 100%)",
+                              `url("${packContent.wallpaper_url}")`,
+                            ].join(", "),
+                          }
+                        : undefined
+                    }
+                  >
                     <p className="hero-kicker">Java Edition</p>
                     <h1 className="hero-title">Remined</h1>
                   </header>
 
-                  {selectedPack && packContent ? (
+                  {selectedPack ? (
                     <section className="pack-about">
                       <div className="pack-about-head">
                         <div
-                          className={`pack-logo ${packContent.logo ? "has-art" : "is-placeholder"}`}
-                          aria-hidden={!packContent.logo}
+                          className={`pack-logo ${packContent?.logo_url ? "has-art" : "is-placeholder"}`}
+                          aria-hidden={!packContent?.logo_url}
                         >
-                          {packContent.logo ? (
-                            <img src={packContent.logo} alt="" />
+                          {packContent?.logo_url ? (
+                            <img src={packContent.logo_url} alt="" />
                           ) : (
                             <span className="pack-logo-fallback">
                               {selectedPack.name.slice(0, 2).toUpperCase()}
@@ -417,28 +629,38 @@ export default function App() {
                           <h2 className="pack-about-title">
                             {selectedPack.name}
                           </h2>
-                          <p className="pack-about-tagline">
-                            {packContent.tagline}
-                          </p>
+                          {packContent?.tagline ? (
+                            <p className="pack-about-tagline">
+                              {packContent.tagline}
+                            </p>
+                          ) : null}
                           <p className="pack-about-version">
                             {selectedPack.version}
                           </p>
                         </div>
                       </div>
 
-                      <p className="pack-about-blurb">{packContent.blurb}</p>
+                      {packContent?.blurb ? (
+                        <p className="pack-about-blurb">{packContent.blurb}</p>
+                      ) : null}
 
-                      <ul className="pack-highlights">
-                        {packContent.highlights.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
+                      {packContent?.highlights?.length ? (
+                        <ul className="pack-highlights">
+                          {packContent.highlights.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      ) : null}
 
-                      <h3 className="pack-gallery-heading">Screenshots</h3>
-                      <PackGallery
-                        images={packContent.gallery}
-                        altPrefix={selectedPack.name}
-                      />
+                      {packContent?.gallery?.length ? (
+                        <>
+                          <h3 className="pack-gallery-heading">Screenshots</h3>
+                          <PackGallery
+                            images={packContent.gallery}
+                            altPrefix={selectedPack.name}
+                          />
+                        </>
+                      ) : null}
                     </section>
                   ) : null}
                 </>
@@ -462,10 +684,13 @@ export default function App() {
                               })
                             }
                           >
-                            {PACK_CONTENT[pack.id]?.logo ? (
+                            {catalog.find((c) => c.id === pack.id)?.logo_url ? (
                               <img
                                 className="install-icon"
-                                src={PACK_CONTENT[pack.id].logo}
+                                src={
+                                  catalog.find((c) => c.id === pack.id)!
+                                    .logo_url!
+                                }
                                 alt=""
                               />
                             ) : (

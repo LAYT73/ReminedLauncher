@@ -282,7 +282,7 @@ ul {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Hero — VanillaPro wallpaper, title only */
+/* Hero — pack wallpaper / title */
 .hero {
   position: relative;
   min-height: 260px;
@@ -298,10 +298,9 @@ ul {
   background-image:
     linear-gradient(180deg, transparent 22%, rgba(30, 30, 30, 0.55) 70%, var(--bg) 100%),
     linear-gradient(90deg, rgba(10, 10, 12, 0.78) 0%, rgba(10, 10, 12, 0.35) 42%, rgba(10, 10, 12, 0.15) 100%),
-    url("./assets/wallpaper.jpg");
+    linear-gradient(135deg, #1a2a16 0%, #121512 45%, #0c1014 100%);
   background-size: cover;
-  /* Bias toward sky / campfire — avoid cropping the in-shot player as a “portrait” */
-  background-position: 72% 32%;
+  background-position: center;
   background-repeat: no-repeat;
 }
 
@@ -1163,4 +1162,199 @@ img.install-icon {
     height: auto;
     min-height: 200px;
   }
+}
+
+/* Auth / onboarding gates */
+.gate-screen {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background:
+    linear-gradient(180deg, rgba(20, 20, 20, 0.55), rgba(10, 10, 10, 0.92)),
+    linear-gradient(135deg, #1a2a16 0%, #121512 45%, #0c1014 100%);
+}
+
+.gate-panel {
+  width: min(440px, 100%);
+  padding: 28px 28px 24px;
+  background: #1a1a1a;
+  border: 3px solid #000;
+  box-shadow:
+    inset 0 0 0 2px #3a3a3a,
+    0 12px 0 rgba(0, 0, 0, 0.45);
+}
+
+.onboard-panel {
+  width: min(520px, 100%);
+}
+
+.gate-kicker {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mc-green-hi);
+}
+
+.gate-title {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 1.05;
+  letter-spacing: 0.04em;
+}
+
+.gate-sub {
+  margin: 0 0 22px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.gate-form {
+  display: grid;
+  gap: 14px;
+}
+
+.gate-submit {
+  width: 100%;
+  margin-top: 6px;
+  min-height: 44px;
+}
+
+.gate-switch {
+  margin-top: 16px;
+  width: 100%;
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.gate-switch:hover {
+  color: var(--text);
+}
+
+.gate-error {
+  margin: 0;
+  color: #ff8f8f;
+  font-size: 13px;
+}
+
+.onboard-steps {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 20px;
+}
+
+.onboard-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.onboard-step.is-active {
+  color: var(--text);
+}
+
+.onboard-step.is-done {
+  color: var(--mc-green-hi);
+}
+
+.onboard-step-block {
+  width: 12px;
+  height: 12px;
+  background: #2a2a2a;
+  border: 2px solid #000;
+  box-shadow: inset 0 0 0 1px #444;
+}
+
+.onboard-step.is-active .onboard-step-block,
+.onboard-step.is-done .onboard-step-block {
+  background: var(--mc-green);
+  box-shadow:
+    inset 2px 2px 0 0 var(--mc-green-hi),
+    inset -2px -2px 0 0 #2a5c1a;
+}
+
+.onboard-error {
+  margin-top: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+/* Pixel progress — green square Minecraft bar */
+.pixel-progress {
+  display: grid;
+  gap: 10px;
+}
+
+.pixel-progress-meta {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+.pixel-progress-phase {
+  font-family: var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mc-green-hi);
+}
+
+.pixel-progress-label {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pixel-progress-pct {
+  font-family: var(--font-display);
+  color: var(--text);
+}
+
+.pixel-progress-track {
+  display: grid;
+  grid-template-columns: repeat(20, 1fr);
+  gap: 3px;
+  padding: 4px;
+  background: #0c0c0c;
+  border: 3px solid #000;
+  box-shadow: inset 0 0 0 2px #2f2f2f;
+  image-rendering: pixelated;
+}
+
+.pixel-progress-cell {
+  aspect-ratio: 1;
+  background: #1a1a1a;
+  border: 1px solid #000;
+  box-shadow: inset 0 0 0 1px #2a2a2a;
+}
+
+.pixel-progress-cell.is-on {
+  background: var(--mc-green);
+  box-shadow:
+    inset 2px 2px 0 0 var(--mc-green-hi),
+    inset -2px -2px 0 0 #245218;
+}
+
+.update-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.pack-sync-note {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
 }
