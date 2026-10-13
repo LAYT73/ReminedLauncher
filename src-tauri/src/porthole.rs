@@ -174,9 +174,9 @@ pub fn status() -> PortholeStatus {
         }
     });
     let message = if installed {
-        "Porthole found. Steam must be running and logged in to host or join.".into()
+        "Leave Steam open and logged in to host or join.".into()
     } else {
-        "Porthole is not installed. Get it free on Steam, then come back.".into()
+        "Install free Porthole on Steam to play with friends online.".into()
     };
     PortholeStatus {
         installed,

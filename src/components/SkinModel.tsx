@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { IdleAnimation, SkinViewer } from "skinview3d";
+import { FunctionAnimation, SkinViewer } from "skinview3d";
 import steveUrl from "../assets/steve.png";
 
 type Variant = "full" | "bust";
@@ -9,6 +9,45 @@ type Props = {
   variant?: Variant;
   className?: string;
 };
+
+/** Standing idle — breathing, arm sway, weight shift, slow look-around. */
+function createStandingIdle() {
+  const anim = new FunctionAnimation((player, progress) => {
+    const t = progress;
+    const breath = Math.sin(t * 1.55) * 0.028;
+    player.skin.body.rotation.x = breath;
+
+    const armBase = Math.PI * 0.025;
+    player.skin.leftArm.rotation.z = Math.cos(t * 1.05) * 0.14 + armBase;
+    player.skin.rightArm.rotation.z = Math.cos(t * 1.05 + Math.PI) * 0.14 - armBase;
+    player.skin.leftArm.rotation.x = Math.sin(t * 0.85) * 0.08 + breath * 0.4;
+    player.skin.rightArm.rotation.x = Math.sin(t * 0.85 + 0.9) * 0.08 + breath * 0.4;
+
+    player.skin.leftLeg.rotation.z = Math.sin(t * 0.65) * 0.03;
+    player.skin.rightLeg.rotation.z = -Math.sin(t * 0.65) * 0.03;
+    player.skin.leftLeg.rotation.x = Math.sin(t * 0.65) * 0.02;
+    player.skin.rightLeg.rotation.x = -Math.sin(t * 0.65) * 0.02;
+
+    // Uneven look — not a perfect sine loop
+    player.skin.head.rotation.y =
+      Math.sin(t * 0.42) * 0.38 + Math.sin(t * 0.16) * 0.18;
+    player.skin.head.rotation.x = Math.sin(t * 0.5) * 0.1 + breath * 0.5;
+  });
+  anim.speed = 0.85;
+  return anim;
+}
+
+/** Bust / avatar — only head is visible. */
+function createHeadIdle() {
+  const anim = new FunctionAnimation((player, progress) => {
+    const t = progress;
+    player.skin.head.rotation.y =
+      Math.sin(t * 0.55) * 0.22 + Math.sin(t * 0.19) * 0.1;
+    player.skin.head.rotation.x = Math.sin(t * 0.7) * 0.08;
+  });
+  anim.speed = 0.7;
+  return anim;
+}
 
 /**
  * PlayerObject shifts SkinObject by +8.
@@ -45,8 +84,9 @@ function frameFull(viewer: SkinViewer) {
   viewer.fov = 50;
   viewer.zoom = 0.9;
   viewer.resetCameraPose();
+  // Gentle spin so idle body motion stays readable
   viewer.autoRotate = true;
-  viewer.autoRotateSpeed = 0.5;
+  viewer.autoRotateSpeed = 0.28;
 }
 
 export function SkinModel({ skinUrl, variant = "full", className }: Props) {
@@ -73,7 +113,8 @@ export function SkinModel({ skinUrl, variant = "full", className }: Props) {
       height,
       skin: source,
       enableControls: variant === "full",
-      animation: variant === "full" ? new IdleAnimation() : undefined,
+      animation:
+        variant === "full" ? createStandingIdle() : createHeadIdle(),
     });
 
     viewer.controls.enablePan = false;

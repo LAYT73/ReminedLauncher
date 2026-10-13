@@ -1,3 +1,4 @@
+mod asset_cache;
 mod config;
 mod instance;
 mod java_runtime;
@@ -7,11 +8,13 @@ mod paths;
 mod porthole;
 mod progress;
 mod runtime;
+mod vanilla;
 
 use java_runtime::JavaInfo;
 use onboarding::{OnboardingState, RuntimeStatus};
 use pack_sync::{PackCatalog, PackRelease, PackStatus};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -164,6 +167,72 @@ fn clear_skinshuffle(instance: &Path) -> Result<(), String> {
     .map_err(|e| e.to_string())
 }
 
+/// Bundled Remined default skin (same PNG as the launcher UI Steve).
+fn default_steve_png() -> &'static [u8] {
+    include_bytes!("../assets/steve.png")
+}
+
+fn apply_default_steve_skin(instance: &Path) -> Result<(), String> {
+    let dir = instance
+        .join("config")
+        .join("skinshuffle")
+        .join("skins");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let dest = dir.join("remined_default.png");
+    fs::write(&dest, default_steve_png()).map_err(|e| e.to_string())?;
+    apply_skinshuffle(instance, &dest)
+}
+
+/// Point CustomSkinLoader at Remined Supabase CustomSkinAPI (friends see each other's skins).
+fn apply_customskinloader_config(instance: &Path) -> Result<(), String> {
+    let root = crate::config::remined_config().skins_csl_root.trim();
+    if root.is_empty() {
+        return Ok(());
+    }
+    let root = if root.ends_with('/') {
+        root.to_string()
+    } else {
+        format!("{root}/")
+    };
+
+    let dir = instance.join("CustomSkinLoader");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join("CustomSkinLoader.json");
+
+    let cfg = serde_json::json!({
+        "version": "14.20",
+        "buildNumber": 0,
+        "enable": true,
+        "enableSkull": true,
+        "enableDynamicSkull": true,
+        "enableTransparentSkin": true,
+        "ignoreHttpsCertificate": false,
+        "cacheExpiry": 30,
+        "enableUpdateSkull": false,
+        "enableLocalProfileCache": false,
+        "enableCacheAutoClean": false,
+        "forceLoadAllTextures": false,
+        "enableCape": true,
+        "threadPoolSize": 8,
+        "loadlist": [
+            {
+                "name": "Remined",
+                "type": "CustomSkinAPI",
+                "root": root
+            },
+            {
+                "name": "Mojang",
+                "type": "MojangAPI"
+            }
+        ]
+    });
+    fs::write(
+        path,
+        serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())
+}
+
 fn apply_skinshuffle(instance: &Path, skin_src: &Path) -> Result<(), String> {
     if !skin_src.is_file() {
         return Err(format!("Skin file not found: {}", skin_src.display()));
@@ -204,7 +273,7 @@ fn apply_skinshuffle(instance: &Path, skin_src: &Path) -> Result<(), String> {
     .map_err(|e| e.to_string())
 }
 
-fn base64_encode(data: &[u8]) -> String {
+pub(crate) fn base64_encode(data: &[u8]) -> String {
     const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     let mut i = 0;
@@ -366,6 +435,26 @@ async fn materialize_skin_path(app: AppHandle, skin: String) -> Result<String, S
     Ok(path.display().to_string())
 }
 
+/// Download remote media into `.remined/cache/media/` and return data-URL map.
+#[tauri::command]
+async fn cache_media_urls(
+    app: AppHandle,
+    urls: Vec<String>,
+) -> Result<HashMap<String, String>, String> {
+    let root = paths::remined_root(&app)?;
+    Ok(asset_cache::ensure_many(&root, &urls).await)
+}
+
+/// Read already-cached media only (offline-safe, no network).
+#[tauri::command]
+fn resolve_media_cache(
+    app: AppHandle,
+    urls: Vec<String>,
+) -> Result<HashMap<String, String>, String> {
+    let root = paths::remined_root(&app)?;
+    Ok(asset_cache::resolve_many(&root, &urls))
+}
+
 #[tauri::command]
 fn get_game_phase(session: State<'_, Mutex<GameSession>>) -> GamePhase {
     let mut session = session.lock().expect("game session lock");
@@ -415,6 +504,24 @@ async fn ensure_pack(app: AppHandle, pack_id: String) -> Result<PackStatus, Stri
         return Err("No pack selected".into());
     }
     onboarding::ensure_pack(&app, &root, pack_id.trim()).await
+}
+
+#[tauri::command]
+async fn list_vanilla_versions(
+    app: AppHandle,
+) -> Result<vanilla::VanillaListResponse, String> {
+    let root = paths::remined_root(&app)?;
+    let (latest, versions) = vanilla::list_versions(&root).await?;
+    Ok(vanilla::VanillaListResponse { latest, versions })
+}
+
+#[tauri::command]
+async fn install_vanilla_version(
+    app: AppHandle,
+    version_id: String,
+) -> Result<PackStatus, String> {
+    let root = paths::remined_root(&app)?;
+    vanilla::install_version(&app, &root, version_id.trim()).await
 }
 
 #[tauri::command]
@@ -550,7 +657,10 @@ async fn launch_pack(
     let mut profile = load_profile(&root);
     profile.username = name.to_string();
     profile.skin_path = skin_path.clone();
-    profile.selected_pack = pack_id.clone();
+    // Keep Remined pack selection stable — vanilla installs are a separate rail.
+    if !vanilla::is_vanilla_pack_id(&pack_id) {
+        profile.selected_pack = pack_id.clone();
+    }
     if let Err(err) = write_profile(&root, &profile) {
         session.lock().expect("game session lock").phase = GamePhase::Idle;
         return Err(err);
@@ -567,6 +677,9 @@ async fn launch_pack(
         session.lock().expect("game session lock").phase = GamePhase::Idle;
         return Err(err);
     }
+    if let Err(err) = apply_customskinloader_config(&instance) {
+        eprintln!("[remined] CustomSkinLoader config: {err}");
+    }
     if let Some(ref skin) = skin_path {
         match materialize_skin(&root, skin).await {
             Ok(local) => {
@@ -580,8 +693,9 @@ async fn launch_pack(
                 return Err(err);
             }
         }
-    } else if let Err(err) = clear_skinshuffle(&instance) {
-        // No cloud skin → default Steve (don't keep previous account's SkinShuffle preset)
+    } else if let Err(err) = apply_default_steve_skin(&instance) {
+        // No cloud skin → Remined default Steve (same as UI), not vanilla blank preset
+        let _ = clear_skinshuffle(&instance);
         session.lock().expect("game session lock").phase = GamePhase::Idle;
         return Err(err);
     }
@@ -680,6 +794,8 @@ pub fn run() {
             probe_java,
             read_skin_data_url,
             materialize_skin_path,
+            cache_media_urls,
+            resolve_media_cache,
             launch_pack,
             get_game_phase,
             get_app_version,
@@ -690,6 +806,8 @@ pub fn run() {
             sync_selected_pack,
             get_pack_status,
             ensure_pack,
+            list_vanilla_versions,
+            install_vanilla_version,
             delete_pack,
             porthole_status,
             porthole_selftest,

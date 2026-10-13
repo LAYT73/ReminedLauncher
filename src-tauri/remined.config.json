@@ -1,4 +1,5 @@
 {
   "packs_catalog_url": "https://github.com/LAYT73/ReminedPacks/releases/latest/download/catalog.json",
-  "packs_release_base": "https://github.com/LAYT73/ReminedPacks/releases/latest/download"
+  "packs_release_base": "https://github.com/LAYT73/ReminedPacks/releases/latest/download",
+  "skins_csl_root": "https://ymfggtkgthknizugadoi.supabase.co/functions/v1/csl/"
 }

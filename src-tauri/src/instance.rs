@@ -17,6 +17,9 @@ pub struct PackInstallMeta {
     pub client_jar: Option<String>,
     #[serde(default)]
     pub java_major: Option<u32>,
+    /// `"vanilla"` for Mojang installs; empty/omitted for Remined packs.
+    #[serde(default)]
+    pub kind: Option<String>,
 }
 
 pub fn meta_path(instance: &Path) -> PathBuf {

@@ -118,21 +118,28 @@ export function FriendsPanel({
             — yours is <span className="friends-id-inline">#{myReminedId}</span>
           </>
         ) : null}
-        . To play together: host Open to LAN → friends hit <strong>Join</strong>
-        . Setup lives under{" "}
-        {onOpenNetworkPlay ? (
-          <button
-            type="button"
-            className="friends-inline-link"
-            onClick={() => onOpenNetworkPlay()}
-          >
-            Network Play
-          </button>
-        ) : (
-          "Network Play"
-        )}
         .
       </p>
+
+      <div className="friends-info-block" role="note">
+        <p>
+          To play together: host{" "}
+          <strong>Open to LAN</strong> → friends hit <strong>Join</strong>.
+          Setup lives under{" "}
+          {onOpenNetworkPlay ? (
+            <button
+              type="button"
+              className="friends-inline-link"
+              onClick={() => onOpenNetworkPlay()}
+            >
+              Network Play
+            </button>
+          ) : (
+            "Network Play"
+          )}
+          .
+        </p>
+      </div>
 
       {hostingSelf ? (
         <p className="friends-hosting-banner" role="status">
@@ -269,12 +276,6 @@ export function FriendsPanel({
                       #{row.profile.remined_id}
                     </button>
                   </div>
-                  <span
-                    className={`friend-status is-${row.sessionStatus ?? "offline"}`}
-                    title={presenceLabel(row)}
-                  >
-                    {presenceLabel(row)}
-                  </span>
                   {joinable ? (
                     <button
                       type="button"
@@ -296,6 +297,12 @@ export function FriendsPanel({
                   >
                     Remove
                   </button>
+                  <span
+                    className={`friend-status is-${row.sessionStatus ?? "offline"}`}
+                    title={presenceLabel(row)}
+                  >
+                    {presenceLabel(row)}
+                  </span>
                 </li>
               );
             })}
@@ -318,7 +325,6 @@ export function FriendsPanel({
                   <strong>{row.profile.username}</strong>
                   <span className="friend-id-static">#{row.profile.remined_id}</span>
                 </div>
-                <span className="friend-status">Pending</span>
                 <button
                   type="button"
                   className="btn-mc dim"
@@ -328,6 +334,7 @@ export function FriendsPanel({
                 >
                   Cancel
                 </button>
+                <span className="friend-status">Pending</span>
               </li>
             ))}
           </ul>

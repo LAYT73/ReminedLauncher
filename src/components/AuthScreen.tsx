@@ -10,9 +10,17 @@ import { supabase, supabaseConfigured } from "../lib/supabase";
 
 type Props = {
   onAuthed: () => void;
+  canOffline?: boolean;
+  offlineHint?: string | null;
+  onContinueOffline?: () => void;
 };
 
-export function AuthScreen({ onAuthed }: Props) {
+export function AuthScreen({
+  onAuthed,
+  canOffline,
+  offlineHint,
+  onContinueOffline,
+}: Props) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -79,6 +87,12 @@ export function AuthScreen({ onAuthed }: Props) {
           Friends-only launcher. Email confirmation is off — sign up and play.
         </p>
 
+        {offlineHint ? (
+          <p className="gate-offline-hint" role="status">
+            {offlineHint}
+          </p>
+        ) : null}
+
         <form className="gate-form" onSubmit={(e) => void submit(e)}>
           {mode === "register" ? (
             <div className="field">
@@ -130,6 +144,17 @@ export function AuthScreen({ onAuthed }: Props) {
             {busy ? "…" : mode === "login" ? "Sign in" : "Register"}
           </button>
         </form>
+
+        {canOffline && onContinueOffline ? (
+          <button
+            type="button"
+            className="btn-mc dim gate-offline-btn"
+            disabled={busy}
+            onClick={() => onContinueOffline()}
+          >
+            Continue offline
+          </button>
+        ) : null}
 
         <button
           type="button"

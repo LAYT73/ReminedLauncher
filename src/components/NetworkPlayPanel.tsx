@@ -86,16 +86,20 @@ export function NetworkPlayPanel({
       : "is-missing";
   const title = check
     ? check.ok
-      ? "Check passed"
-      : "Check failed"
+      ? "All set"
+      : "Needs attention"
     : installed
-      ? "Porthole installed"
-      : "Porthole needed";
+      ? "Ready"
+      : "Not installed";
   const body = checking
-    ? "Running selftest (Steam + relays)…"
+    ? "Checking Steam connection…"
     : check
-      ? check.message
-      : (status?.message ?? "Checking Steam install…");
+      ? check.ok
+        ? "Steam and the tunnel look good."
+        : check.message
+      : installed
+        ? "Leave Steam open and logged in to host or join."
+        : "Install free Porthole on Steam to play with friends online.";
 
   return (
     <section className="section network-panel">
@@ -109,10 +113,7 @@ export function NetworkPlayPanel({
       <div className={`network-status ${statusClass}`}>
         <div className="network-status-copy">
           <strong>{title}</strong>
-          <p>
-            {body}
-            {!check && status?.version ? ` (${status.version})` : null}
-          </p>
+          <p>{body}</p>
         </div>
         <div className="network-status-actions">
           {!installed ? (

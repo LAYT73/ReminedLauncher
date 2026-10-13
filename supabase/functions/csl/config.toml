@@ -1,0 +1,2 @@
+# Minecraft CustomSkinLoader has no Supabase JWT — allow public GETs.
+verify_jwt = false

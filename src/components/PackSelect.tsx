@@ -23,6 +23,7 @@ export function PackSelect({
 }: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLUListElement>(null);
   const listId = useId();
   const selected = packs.find((p) => p.id === value) ?? packs[0];
 
@@ -41,6 +42,18 @@ export function PackSelect({
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !menuRef.current) return;
+    const active = menuRef.current.querySelector<HTMLElement>(
+      '[aria-selected="true"]',
+    );
+    if (active) {
+      active.scrollIntoView({ block: "nearest" });
+    } else {
+      menuRef.current.scrollTop = 0;
+    }
+  }, [open, value, packs]);
 
   return (
     <div
@@ -82,6 +95,7 @@ export function PackSelect({
           id={listId}
           role="listbox"
           aria-labelledby={`${listId}-label`}
+          ref={menuRef}
         >
           {packs.map((pack) => {
             const active = pack.id === (selected?.id ?? "");

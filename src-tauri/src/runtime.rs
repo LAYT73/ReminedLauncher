@@ -206,10 +206,17 @@ fn resolve_existing_library(root: &Path, rel: &str) -> Option<PathBuf> {
         return Some(local);
     }
     let global = global_mc_dir().join("libraries").join(rel);
-    if global.is_file() && global.metadata().ok()?.len()> 0 {
+    if global.is_file() && global.metadata().ok()?.len() > 0 {
         return Some(global);
     }
     None
+}
+
+/// Fabric packs flatten `artifact`; Mojang version JSON uses `downloads.artifact`.
+fn library_artifact(entry: &Value) -> Option<&Value> {
+    entry
+        .get("artifact")
+        .or_else(|| entry.pointer("/downloads/artifact"))
 }
 
 pub struct LaunchOpts {
@@ -275,7 +282,7 @@ async fn ensure_libraries(
         if !rule_allows(entry.get("rules")) {
             continue;
         }
-        let Some(artifact) = entry.get("artifact") else {
+        let Some(artifact) = library_artifact(entry) else {
             continue;
         };
         let path = artifact
@@ -289,7 +296,11 @@ async fn ensure_libraries(
         }
         let dest = libs_dir.join(&rel);
         let url = artifact.get("url").and_then(|u| u.as_str()).unwrap_or("");
-        todo.push((rel.clone(), mirror_urls(url, &rel), dest));
+        let mut urls = mirror_urls(url, &rel);
+        if urls.is_empty() {
+            urls.push(format!("https://libraries.minecraft.net/{rel}"));
+        }
+        todo.push((rel.clone(), urls, dest));
     }
 
     let total = todo.len().max(1);
@@ -450,6 +461,30 @@ async fn ensure_log_config(root: &Path, version: &Value) -> Result<Option<PathBu
     Ok(if dest.is_file() { Some(dest) } else { None })
 }
 
+/// Fabric packs use `values: []`; Mojang version JSON uses `value` as string or array.
+fn argument_values(item: &Value) -> (Vec<String>, Option<&Value>) {
+    if let Some(s) = item.as_str() {
+        return (vec![s.to_string()], None);
+    }
+    let rules = item.get("rules");
+    let values = item
+        .get("values")
+        .or_else(|| item.get("value"))
+        .map(|v| {
+            if let Some(s) = v.as_str() {
+                vec![s.to_string()]
+            } else if let Some(arr) = v.as_array() {
+                arr.iter()
+                    .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                    .collect()
+            } else {
+                Vec::new()
+            }
+        })
+        .unwrap_or_default();
+    (values, rules)
+}
+
 fn build_jvm_args(
     version: &Value,
     classpath: &str,
@@ -473,20 +508,7 @@ fn build_jvm_args(
         .ok_or("missing arguments.jvm")?;
 
     for item in jvm {
-        let (values, rules) = if let Some(s) = item.as_str() {
-            (vec![s.to_string()], None)
-        } else {
-            let values = item
-                .get("values")
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|x| x.as_str().map(|s| s.to_string()))
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            (values, item.get("rules"))
-        };
+        let (values, rules) = argument_values(item);
         if !rule_allows(rules) {
             continue;
         }
@@ -553,20 +575,7 @@ fn build_game_args(
 
     let mut args = Vec::new();
     for item in game {
-        let (values, rules) = if let Some(s) = item.as_str() {
-            (vec![s.to_string()], None)
-        } else {
-            let values = item
-                .get("values")
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|x| x.as_str().map(|s| s.to_string()))
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            (values, item.get("rules"))
-        };
+        let (values, rules) = argument_values(item);
         if !rule_allows(rules) {
             continue;
         }
@@ -704,7 +713,7 @@ fn collect_classpath_paths(
         if !rule_allows(entry.get("rules")) {
             continue;
         }
-        let Some(artifact) = entry.get("artifact") else {
+        let Some(artifact) = library_artifact(entry) else {
             continue;
         };
         let path = artifact

@@ -5,6 +5,9 @@ use std::sync::OnceLock;
 pub struct ReminedConfig {
     pub packs_catalog_url: String,
     pub packs_release_base: String,
+    /// CustomSkinAPI root (trailing slash). Empty = skip CSL config inject.
+    #[serde(default)]
+    pub skins_csl_root: String,
 }
 
 fn default_config() -> ReminedConfig {
@@ -13,6 +16,7 @@ fn default_config() -> ReminedConfig {
             .into(),
         packs_release_base: "https://github.com/LAYT73/ReminedPacks/releases/latest/download"
             .into(),
+        skins_csl_root: String::new(),
     }
 }
 

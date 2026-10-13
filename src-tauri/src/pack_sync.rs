@@ -332,6 +332,7 @@ pub async fn sync_pack(app: &AppHandle, root: &Path, pack_id: &str) -> Result<Pa
                 version_json: release.version_json.clone(),
                 client_jar: release.client_jar.clone(),
                 java_major: release.java_major,
+                kind: None,
             };
             instance::write_meta(&dest, &meta)?;
             fs::write(local_version_file(&dest), &release.version).map_err(|e| e.to_string())?;
@@ -407,6 +408,7 @@ pub async fn sync_pack(app: &AppHandle, root: &Path, pack_id: &str) -> Result<Pa
         version_json: release.version_json.clone(),
         client_jar: release.client_jar.clone(),
         java_major: release.java_major,
+        kind: None,
     };
     instance::write_meta(&dest, &meta)?;
     fs::write(local_version_file(&dest), &release.version).map_err(|e| e.to_string())?;
