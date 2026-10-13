@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -7,6 +13,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import type { Session } from "@supabase/supabase-js";
 import { AuthScreen } from "./components/AuthScreen";
 import { FriendsPanel } from "./components/FriendsPanel";
+import { NetworkPlayPanel } from "./components/NetworkPlayPanel";
 import { OnboardingScreen } from "./components/OnboardingScreen";
 import { PackGallery } from "./components/PackGallery";
 import { PackSelect } from "./components/PackSelect";
@@ -27,6 +34,18 @@ import { clearAccountSkin, publishAccountSkin } from "./lib/skinsCloud";
 import { supabase } from "./lib/supabase";
 import brandLogo from "./assets/logo.png";
 import { setPresence } from "./lib/presence";
+import type { FriendRow } from "./lib/friends";
+import { canJoinFriend } from "./lib/friends";
+import {
+  openPortholeOnSteam,
+  portholeStartHost,
+  portholeStartJoin,
+  portholeStatus,
+  portholeStopAll,
+  portholeStopHost,
+  portholeStopJoin,
+  readLanPort,
+} from "./lib/porthole";
 import {
   applyTheme,
   DEFAULT_THEME,
@@ -34,6 +53,12 @@ import {
   THEME_PRESETS,
   type ThemeId,
 } from "./lib/themes";
+
+type HostingLan = {
+  packId: string;
+  shareCode: string;
+  gamePort: number;
+};
 
 type Pack = {
   id: string;
@@ -95,12 +120,14 @@ type TopTab =
   | "play"
   | "installations"
   | "friends"
+  | "network"
   | "skins"
   | "settings";
 
 const HOME_TABS: Array<[Exclude<TopTab, "home" | "play">, string]> = [
   ["installations", "Installations"],
   ["friends", "Friends"],
+  ["network", "Network"],
   ["skins", "Skins"],
   ["settings", "Settings"],
 ];
@@ -160,7 +187,7 @@ export default function App() {
   const [topTab, setTopTab] = useState<TopTab>("home");
   const [rail, setRail] = useState<"home" | "java" | "settings">("home");
   const [javaInfo, setJavaInfo] = useState<JavaInfo | null>(null);
-  const [appVersion, setAppVersion] = useState("0.3.0");
+  const [appVersion, setAppVersion] = useState("0.4.0");
   const [updateBusy, setUpdateBusy] = useState(false);
   const [packBusy, setPackBusy] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -171,6 +198,11 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [usernameDraft, setUsernameDraft] = useState<string | null>(null);
   const [usernameBusy, setUsernameBusy] = useState(false);
+  const [hostingLan, setHostingLan] = useState<HostingLan | null>(null);
+  const [joiningFriendId, setJoiningFriendId] = useState<string | null>(null);
+  const hostingBusyRef = useRef(false);
+  const lastHostPortRef = useRef<number | null>(null);
+  const hostFailRef = useRef<{ port: number; at: number } | null>(null);
 
   async function refreshJava(path?: string | null) {
     try {
@@ -190,7 +222,7 @@ export default function App() {
           invoke<Pack[]>("list_packs"),
           invoke<Profile>("get_profile"),
           invoke<GamePhase>("get_game_phase"),
-          invoke<string>("get_app_version").catch(() => "0.3.0"),
+          invoke<string>("get_app_version").catch(() => "0.4.0"),
           fetchCatalogFromSupabase().catch(() => [] as CatalogPack[]),
         ]);
       const next = normalizeProfile(saved);
@@ -443,11 +475,23 @@ export default function App() {
     const packId = selectedPack?.id ?? profile.selected_pack ?? null;
 
     const push = () => {
+      if (hostingLan) {
+        void setPresence({
+          userId,
+          status: "hosting",
+          packId: hostingLan.packId,
+          shareCode: hostingLan.shareCode,
+          gamePort: hostingLan.gamePort,
+        });
+        return;
+      }
       const playing = phase === "running" || phase === "launching";
       void setPresence({
         userId,
         status: playing ? "in_game" : "online",
         packId: playing ? packId : null,
+        shareCode: null,
+        gamePort: null,
       });
     };
     push();
@@ -468,7 +512,95 @@ export default function App() {
     phase,
     selectedPack?.id,
     profile.selected_pack,
+    hostingLan,
   ]);
+
+  // Watch Open-to-LAN → Porthole expose → publish share code while game runs.
+  useEffect(() => {
+    if (gate !== "app" || phase !== "running" || !selectedPack) {
+      if (phase === "idle") {
+        setHostingLan(null);
+        lastHostPortRef.current = null;
+        hostingBusyRef.current = false;
+        void portholeStopAll().catch(() => undefined);
+      }
+      return;
+    }
+    const packId = selectedPack.id;
+    let cancelled = false;
+
+    const tick = window.setInterval(() => {
+      void (async () => {
+        if (cancelled || hostingBusyRef.current) return;
+        try {
+          const port = await readLanPort(packId);
+          if (cancelled) return;
+
+          // World left / LAN closed (log shows stop after publish) — tear down tunnel.
+          if (!port) {
+            if (lastHostPortRef.current !== null) {
+              lastHostPortRef.current = null;
+              hostFailRef.current = null;
+              setHostingLan(null);
+              await portholeStopHost().catch(() => undefined);
+              if (!cancelled) {
+                setToast("Hosting stopped");
+              }
+            }
+            return;
+          }
+
+          if (lastHostPortRef.current === port) return;
+          const fail = hostFailRef.current;
+          if (fail && fail.port === port && Date.now() - fail.at < 20_000) {
+            return;
+          }
+          hostingBusyRef.current = true;
+          setStatus("Opening Network Play tunnel…");
+          setStatusKind("idle");
+          try {
+            if (lastHostPortRef.current && lastHostPortRef.current !== port) {
+              await portholeStopHost();
+            }
+            const info = await portholeStartHost(port);
+            if (cancelled) {
+              await portholeStopHost();
+              return;
+            }
+            lastHostPortRef.current = port;
+            hostFailRef.current = null;
+            setHostingLan({
+              packId,
+              shareCode: info.share_code,
+              gamePort: info.port,
+            });
+            setToast("Hosting — friends can Join you now");
+            setStatus("");
+            setStatusKind("ok");
+          } catch (err) {
+            hostFailRef.current = { port, at: Date.now() };
+            if (!cancelled) {
+              setStatus(
+                err instanceof Error
+                  ? err.message
+                  : "Could not start Network Play — check Steam + Porthole",
+              );
+              setStatusKind("error");
+            }
+          } finally {
+            hostingBusyRef.current = false;
+          }
+        } catch {
+          /* keep polling */
+        }
+      })();
+    }, 2000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(tick);
+    };
+  }, [gate, phase, selectedPack?.id]);
 
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -922,9 +1054,13 @@ export default function App() {
     }
   }
 
-  async function launch() {
-    if (!selectedPack || playBusy) return;
-    if (!packReady) {
+  async function launchWithOpts(opts?: {
+    packId?: string;
+    quickPlay?: string | null;
+  }) {
+    const packId = opts?.packId ?? selectedPack?.id;
+    if (!packId || playBusy) return;
+    if (!opts?.packId && !packReady) {
       await downloadPack();
       return;
     }
@@ -935,30 +1071,97 @@ export default function App() {
       return;
     }
 
-    const ready = await ensurePackUpToDate();
-    if (!ready) return;
+    if (!opts?.quickPlay) {
+      const ready = await ensurePackUpToDate();
+      if (!ready) return;
+    } else {
+      setStatus("Preparing pack…");
+      setStatusKind("idle");
+      try {
+        await invoke("ensure_pack", { packId });
+        setInstalledIds((prev) => new Set(prev).add(packId));
+      } catch (err) {
+        setStatus(String(err));
+        setStatusKind("error");
+        return;
+      }
+    }
 
     setPhase("launching");
-    setStatus("");
+    if (!opts?.quickPlay) {
+      setHostingLan(null);
+      lastHostPortRef.current = null;
+      void portholeStopAll().catch(() => undefined);
+    }
+    setStatus(opts?.quickPlay ? "Joining friend…" : "");
     setStatusKind("idle");
     try {
       if (session) {
         await syncCloudProfile(session);
       }
       const result = await invoke<LaunchResult>("launch_pack", {
-        packId: selectedPack.id,
+        packId,
         username: name,
         skinPath: profile.skin_path,
+        quickPlay: opts?.quickPlay ?? null,
       });
       setPhase(result.phase);
       if (!result.ok) {
+        if (opts?.quickPlay) {
+          void portholeStopJoin().catch(() => undefined);
+        }
         setStatus(result.message);
         setStatusKind("error");
+      } else if (opts?.quickPlay) {
+        setStatus("Joined — connecting in Minecraft");
+        setStatusKind("ok");
+        setRail("java");
+        setTopTab("play");
       }
     } catch (err) {
+      if (opts?.quickPlay) {
+        void portholeStopJoin().catch(() => undefined);
+      }
       setPhase("idle");
       setStatus(String(err));
       setStatusKind("error");
+    }
+  }
+
+  async function launch() {
+    await launchWithOpts();
+  }
+
+  async function joinFriendSession(row: FriendRow) {
+    if (!canJoinFriend(row) || joiningFriendId) return;
+    const packId = row.sessionPackId!;
+    const shareCode = row.sessionShareCode!.trim();
+    const port = row.sessionGamePort!;
+    setJoiningFriendId(row.friendshipId);
+    setToast(`Joining ${row.profile.username}…`);
+    setStatus("Connecting Network Play…");
+    setStatusKind("idle");
+    try {
+      const st = await portholeStatus();
+      if (!st.installed) {
+        setStatus(st.message);
+        setStatusKind("error");
+        setToast("Install Porthole from Network Play first");
+        setTopTab("network");
+        return;
+      }
+      await portholeStartJoin(shareCode, port);
+      await launchWithOpts({
+        packId,
+        quickPlay: `127.0.0.1:${port}`,
+      });
+    } catch (err) {
+      void portholeStopJoin().catch(() => undefined);
+      setStatus(err instanceof Error ? err.message : String(err));
+      setStatusKind("error");
+      setPhase("idle");
+    } finally {
+      setJoiningFriendId(null);
     }
   }
 
@@ -1059,6 +1262,24 @@ export default function App() {
       <FriendsPanel
         userId={session.user.id}
         myReminedId={reminedId}
+        onToast={setToast}
+        joiningFriendId={joiningFriendId}
+        hostingSelf={Boolean(hostingLan)}
+        onOpenNetworkPlay={() => setTopTab("network")}
+        onInstallPorthole={() => {
+          void openPortholeOnSteam().then(() =>
+            setToast("Opening Steam — install Porthole, then Refresh"),
+          );
+        }}
+        onJoinFriend={(row) => void joinFriendSession(row)}
+      />
+    ) : null;
+
+  const networkPanel =
+    topTab === "network" ? (
+      <NetworkPlayPanel
+        hostingSelf={Boolean(hostingLan)}
+        hostingPort={hostingLan?.gamePort ?? null}
         onToast={setToast}
       />
     ) : null;
@@ -1177,11 +1398,13 @@ export default function App() {
       ? installationsPanel
       : topTab === "friends"
         ? friendsPanel
-        : topTab === "skins"
-          ? skinsPanel
-          : topTab === "settings"
-            ? settingsForm
-            : null;
+        : topTab === "network"
+          ? networkPanel
+          : topTab === "skins"
+            ? skinsPanel
+            : topTab === "settings"
+              ? settingsForm
+              : null;
 
   return (
     <div className="shell">

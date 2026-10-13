@@ -1,25 +1,42 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  canJoinFriend,
   listFriendships,
   removeFriendship,
   respondFriendRequest,
   sendFriendRequest,
   type FriendRow,
 } from "../lib/friends";
+import { portholeStatus, type PortholeStatus } from "../lib/porthole";
 import { SkinHead } from "./SkinHead";
 
 type Props = {
   userId: string;
   myReminedId: string | null;
   onToast: (msg: string) => void;
+  onJoinFriend: (row: FriendRow) => void;
+  joiningFriendId?: string | null;
+  hostingSelf?: boolean;
+  onOpenNetworkPlay?: () => void;
+  onInstallPorthole?: () => void;
 };
 
-export function FriendsPanel({ userId, myReminedId, onToast }: Props) {
+export function FriendsPanel({
+  userId,
+  myReminedId,
+  onToast,
+  onJoinFriend,
+  joiningFriendId,
+  hostingSelf,
+  onOpenNetworkPlay,
+  onInstallPorthole,
+}: Props) {
   const [rows, setRows] = useState<FriendRow[]>([]);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [phStatus, setPhStatus] = useState<PortholeStatus | null>(null);
 
   function errText(err: unknown): string {
     if (err instanceof Error) return err.message;
@@ -51,6 +68,12 @@ export function FriendsPanel({ userId, myReminedId, onToast }: Props) {
     }, 12_000);
     return () => window.clearInterval(id);
   }, [refresh]);
+
+  useEffect(() => {
+    void portholeStatus()
+      .then(setPhStatus)
+      .catch(() => setPhStatus(null));
+  }, []);
 
   function presenceLabel(row: FriendRow): string {
     const st = row.sessionStatus ?? "offline";
@@ -95,8 +118,56 @@ export function FriendsPanel({ userId, myReminedId, onToast }: Props) {
             — yours is <span className="friends-id-inline">#{myReminedId}</span>
           </>
         ) : null}
+        . To play together: host Open to LAN → friends hit <strong>Join</strong>
+        . Setup lives under{" "}
+        {onOpenNetworkPlay ? (
+          <button
+            type="button"
+            className="friends-inline-link"
+            onClick={() => onOpenNetworkPlay()}
+          >
+            Network Play
+          </button>
+        ) : (
+          "Network Play"
+        )}
         .
       </p>
+
+      {hostingSelf ? (
+        <p className="friends-hosting-banner" role="status">
+          You are hosting — friends can Join your LAN world now.
+        </p>
+      ) : null}
+
+      {phStatus && !phStatus.installed ? (
+        <div className="friends-zt-banner">
+          <p>
+            Network Join needs free <strong>Porthole</strong> from Steam (leave
+            Steam running).
+          </p>
+          <div className="friends-banner-actions">
+            {onInstallPorthole ? (
+              <button
+                type="button"
+                className="btn-mc"
+                onClick={() => onInstallPorthole()}
+              >
+                Install on Steam
+              </button>
+            ) : null}
+            {onOpenNetworkPlay ? (
+              <button
+                type="button"
+                className="btn-mc dim"
+                onClick={() => onOpenNetworkPlay()}
+              >
+                How it works
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       <form className="friends-add" onSubmit={(e) => void onAdd(e)}>
         <input
@@ -144,7 +215,9 @@ export function FriendsPanel({ userId, myReminedId, onToast }: Props) {
                     type="button"
                     className="btn-mc"
                     onClick={() =>
-                      void respondFriendRequest(row.friendshipId, true).then(refresh)
+                      void respondFriendRequest(row.friendshipId, true).then(() =>
+                        refresh(),
+                      )
                     }
                   >
                     Accept
@@ -153,7 +226,9 @@ export function FriendsPanel({ userId, myReminedId, onToast }: Props) {
                     type="button"
                     className="btn-mc dim"
                     onClick={() =>
-                      void respondFriendRequest(row.friendshipId, false).then(refresh)
+                      void respondFriendRequest(row.friendshipId, false).then(() =>
+                        refresh(),
+                      )
                     }
                   >
                     Decline
@@ -171,43 +246,59 @@ export function FriendsPanel({ userId, myReminedId, onToast }: Props) {
           <p className="friends-muted">No friends yet — send an id above.</p>
         ) : (
           <ul className="friends-list">
-            {friends.map((row) => (
-              <li key={row.friendshipId} className="friend-row">
-                <SkinHead
-                  skinUrl={row.profile.skin_path}
-                  className="friend-avatar"
-                  size={40}
-                />
-                <div className="friend-copy">
-                  <strong>{row.profile.username}</strong>
+            {friends.map((row) => {
+              const joinable = canJoinFriend(row);
+              const joining = joiningFriendId === row.friendshipId;
+              return (
+                <li key={row.friendshipId} className="friend-row has-join">
+                  <SkinHead
+                    skinUrl={row.profile.skin_path}
+                    className="friend-avatar"
+                    size={40}
+                  />
+                  <div className="friend-copy">
+                    <strong>{row.profile.username}</strong>
+                    <button
+                      type="button"
+                      className="friend-id"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(row.profile.remined_id);
+                        onToast("Copied Remined id");
+                      }}
+                    >
+                      #{row.profile.remined_id}
+                    </button>
+                  </div>
+                  <span
+                    className={`friend-status is-${row.sessionStatus ?? "offline"}`}
+                    title={presenceLabel(row)}
+                  >
+                    {presenceLabel(row)}
+                  </span>
+                  {joinable ? (
+                    <button
+                      type="button"
+                      className="btn-mc friend-join"
+                      disabled={Boolean(joiningFriendId)}
+                      onClick={() => onJoinFriend(row)}
+                    >
+                      {joining ? "Joining…" : "Join"}
+                    </button>
+                  ) : (
+                    <span className="friend-join-slot" aria-hidden />
+                  )}
                   <button
                     type="button"
-                    className="friend-id"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(row.profile.remined_id);
-                      onToast("Copied Remined id");
-                    }}
+                    className="btn-mc dim friend-remove"
+                    onClick={() =>
+                      void removeFriendship(row.friendshipId).then(() => refresh())
+                    }
                   >
-                    #{row.profile.remined_id}
+                    Remove
                   </button>
-                </div>
-                <span
-                  className={`friend-status is-${row.sessionStatus ?? "offline"}`}
-                  title={presenceLabel(row)}
-                >
-                  {presenceLabel(row)}
-                </span>
-                <button
-                  type="button"
-                  className="btn-mc dim friend-remove"
-                  onClick={() =>
-                    void removeFriendship(row.friendshipId).then(refresh)
-                  }
-                >
-                  Remove
-                </button>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
@@ -232,7 +323,7 @@ export function FriendsPanel({ userId, myReminedId, onToast }: Props) {
                   type="button"
                   className="btn-mc dim"
                   onClick={() =>
-                    void removeFriendship(row.friendshipId).then(refresh)
+                    void removeFriendship(row.friendshipId).then(() => refresh())
                   }
                 >
                   Cancel

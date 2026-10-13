@@ -219,6 +219,8 @@ pub struct LaunchOpts {
     pub username: String,
     pub ram_mb: u32,
     pub jvm_args: String,
+    /// Auto-join multiplayer (`host:port`) via --quickPlayMultiplayer / --server.
+    pub quick_play: Option<String>,
 }
 
 /// Ensure libraries + assets for the pack version JSON. Emits progress events.
@@ -630,13 +632,26 @@ pub async fn launch_game(app: &AppHandle, opts: LaunchOpts) -> Result<Child, Str
         opts.ram_mb.clamp(1024, 32768),
         &opts.jvm_args,
     )?;
-    let game = build_game_args(
+    let mut game = build_game_args(
         &version,
         &opts.instance,
         &assets_dir,
         &assets_index,
         &opts.username,
     )?;
+    if let Some(addr) = opts.quick_play.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        game.push("--quickPlayMultiplayer".into());
+        game.push(addr.to_string());
+        // Compatibility fallback for older argument parsers
+        if let Some((host, port)) = addr.rsplit_once(':') {
+            if !host.is_empty() && port.parse::<u16>().is_ok() {
+                game.push("--server".into());
+                game.push(host.to_string());
+                game.push("--port".into());
+                game.push(port.to_string());
+            }
+        }
+    }
     let main_class = version
         .get("mainClass")
         .and_then(|m| m.as_str())

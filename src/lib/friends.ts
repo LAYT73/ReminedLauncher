@@ -13,6 +13,8 @@ export type FriendRow = {
   sessionStatus?: string | null;
   sessionPackId?: string | null;
   sessionPackName?: string | null;
+  sessionShareCode?: string | null;
+  sessionGamePort?: number | null;
 };
 
 type FriendshipRecord = {
@@ -21,6 +23,17 @@ type FriendshipRecord = {
   addressee_id: string;
   status: FriendshipStatus;
 };
+
+export function canJoinFriend(row: FriendRow): boolean {
+  return (
+    row.direction === "friend" &&
+    row.sessionStatus === "hosting" &&
+    Boolean(row.sessionShareCode?.trim()) &&
+    typeof row.sessionGamePort === "number" &&
+    row.sessionGamePort > 0 &&
+    Boolean(row.sessionPackId?.trim())
+  );
+}
 
 export async function listFriendships(userId: string): Promise<FriendRow[]> {
   const { data: rows, error } = await supabase
@@ -43,12 +56,14 @@ export async function listFriendships(userId: string): Promise<FriendRow[]> {
 
   const { data: sessions } = await supabase
     .from("sessions")
-    .select("user_id, status, pack_id, updated_at")
+    .select("user_id, status, pack_id, share_code, game_port, updated_at")
     .in("user_id", otherIds);
 
   type SessionRow = {
     status: string;
     packId: string | null;
+    shareCode: string | null;
+    gamePort: number | null;
     updatedAt: string | null;
   };
   const sessionBy = new Map<string, SessionRow>();
@@ -62,9 +77,15 @@ export async function listFriendships(userId: string): Promise<FriendRow[]> {
       rawStatus === "offline" || !isPresenceFresh(updatedAt)
         ? "offline"
         : rawStatus;
+    const shareCode = ((s.share_code as string | null) ?? "").trim() || null;
+    const gamePortRaw = s.game_port as number | null;
+    const gamePort =
+      typeof gamePortRaw === "number" && gamePortRaw > 0 ? gamePortRaw : null;
     sessionBy.set(uid, {
       status,
       packId: status === "offline" ? null : packId,
+      shareCode: status === "hosting" ? shareCode : null,
+      gamePort: status === "hosting" ? gamePort : null,
       updatedAt,
     });
     if (status !== "offline" && packId) packIds.add(packId);
@@ -117,6 +138,8 @@ export async function listFriendships(userId: string): Promise<FriendRow[]> {
       sessionPackName: sessionPackId
         ? (packNameBy.get(sessionPackId) ?? sessionPackId)
         : null,
+      sessionShareCode: sess?.shareCode ?? null,
+      sessionGamePort: sess?.gamePort ?? null,
     });
   }
 

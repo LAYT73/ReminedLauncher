@@ -4,6 +4,7 @@ mod java_runtime;
 mod onboarding;
 mod pack_sync;
 mod paths;
+mod porthole;
 mod progress;
 mod runtime;
 
@@ -423,11 +424,88 @@ fn delete_pack(app: AppHandle, pack_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn porthole_status() -> porthole::PortholeStatus {
+    porthole::status()
+}
+
+#[tauri::command]
+async fn porthole_selftest() -> porthole::PortholeCheckResult {
+    tauri::async_runtime::spawn_blocking(porthole::selftest)
+        .await
+        .unwrap_or_else(|e| porthole::PortholeCheckResult {
+            ok: false,
+            installed: false,
+            steam_ok: false,
+            message: format!("Check failed: {e}"),
+            detail: String::new(),
+        })
+}
+
+#[tauri::command]
+async fn porthole_start_host(
+    app: AppHandle,
+    state: State<'_, porthole::PortholeState>,
+    port: u16,
+) -> Result<porthole::PortholeHostInfo, String> {
+    let state = state.inner().clone();
+    let app2 = app.clone();
+    tauri::async_runtime::spawn_blocking(move || porthole::start_host(app2, state, port))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn porthole_start_join(
+    app: AppHandle,
+    state: State<'_, porthole::PortholeState>,
+    share_code: String,
+    port: u16,
+) -> Result<(), String> {
+    let state = state.inner().clone();
+    let app2 = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        porthole::start_join(app2, state, &share_code, port)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn porthole_stop_host(state: State<'_, porthole::PortholeState>) {
+    porthole::stop_host(&state);
+}
+
+#[tauri::command]
+fn porthole_stop_join(state: State<'_, porthole::PortholeState>) {
+    porthole::stop_join(&state);
+}
+
+#[tauri::command]
+fn porthole_stop_all(state: State<'_, porthole::PortholeState>) {
+    porthole::stop_all(&state);
+}
+
+#[tauri::command]
+fn porthole_current_host(
+    state: State<'_, porthole::PortholeState>,
+) -> Option<porthole::PortholeHostInfo> {
+    porthole::current_host(&state)
+}
+
+#[tauri::command]
+fn read_lan_port(app: AppHandle, pack_id: String) -> Result<Option<u16>, String> {
+    let root = paths::remined_root(&app)?;
+    let log = paths::pack_dir(&root, &pack_id).join("logs").join("latest.log");
+    Ok(porthole::read_lan_port(&log))
+}
+
+#[tauri::command]
 async fn launch_pack(
     app: AppHandle,
     pack_id: String,
     username: String,
     skin_path: Option<String>,
+    quick_play: Option<String>,
     session: State<'_, Mutex<GameSession>>,
 ) -> Result<LaunchResult, String> {
     {
@@ -520,6 +598,9 @@ async fn launch_pack(
         username: name.to_string(),
         ram_mb: profile.ram_mb.clamp(1024, 32768),
         jvm_args: profile.jvm_args.trim().to_string(),
+        quick_play: quick_play
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
     };
 
     let mut child = match runtime::launch_game(&app, opts).await {
@@ -591,6 +672,7 @@ pub fn run() {
             Ok(())
         })
         .manage(Mutex::new(GameSession::default()))
+        .manage(porthole::PortholeState::default())
         .invoke_handler(tauri::generate_handler![
             list_packs,
             get_profile,
@@ -609,6 +691,15 @@ pub fn run() {
             get_pack_status,
             ensure_pack,
             delete_pack,
+            porthole_status,
+            porthole_selftest,
+            porthole_start_host,
+            porthole_start_join,
+            porthole_stop_host,
+            porthole_stop_join,
+            porthole_stop_all,
+            porthole_current_host,
+            read_lan_port,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

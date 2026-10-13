@@ -11,8 +11,10 @@
 - Keys live in `.env.local` (gitignored)
 - Auth: email/password, **confirm email OFF** (Dashboard → Authentication → Providers → Email)
 
-## ZeroTier (next)
-- Network ID + Central API token (server-side authorize) — pending
+## Network Play (Porthole)
+- See `docs/PORTHOLE.md`
+- Free Steam app `4963920` — deep link from Network tab
+- SQL: `migrations/005_sessions_lan.sql` + `006_sessions_share_code.sql`
 
 ## VanillaPro → ReminedPacks cleanup
 
