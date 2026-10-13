@@ -1,0 +1,11 @@
+node_modules
+dist
+.DS_Store
+src-tauri/target
+.cargo-home
+*.log
+
+# Remined secrets — never commit
+.env
+.env.local
+.env.*.local
