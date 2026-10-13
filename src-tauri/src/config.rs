@@ -19,7 +19,6 @@ fn default_config() -> ReminedConfig {
 pub fn remined_config() -> &'static ReminedConfig {
     static CFG: OnceLock<ReminedConfig> = OnceLock::new();
     CFG.get_or_init(|| {
-        // Embedded next to the binary crate
         let embedded = include_str!("../remined.config.json");
         serde_json::from_str(embedded).unwrap_or_else(|_| default_config())
     })

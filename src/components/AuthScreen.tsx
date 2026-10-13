@@ -1,4 +1,11 @@
 import { FormEvent, useState } from "react";
+import brandLogo from "../assets/logo.png";
+import {
+  ensureCloudProfile,
+  isUsernameAvailable,
+  updateCloudUsername,
+  validateUsername,
+} from "../lib/cloudProfile";
 import { supabase, supabaseConfigured } from "../lib/supabase";
 
 type Props = {
@@ -9,6 +16,7 @@ export function AuthScreen({ onAuthed }: Props) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -28,15 +36,32 @@ export function AuthScreen({ onAuthed }: Props) {
         });
         if (err) throw err;
       } else {
-        const { error: err } = await supabase.auth.signUp({
+        const nameErr = validateUsername(username);
+        if (nameErr) throw new Error(nameErr);
+
+        const free = await isUsernameAvailable(username);
+        if (!free) throw new Error("Username taken — try another");
+
+        const { data, error: err } = await supabase.auth.signUp({
           email: email.trim(),
           password,
         });
         if (err) throw err;
+        const userId = data.user?.id;
+        if (!userId) throw new Error("Could not create account");
+
+        await ensureCloudProfile(userId, username.trim());
+        await updateCloudUsername(userId, username.trim());
       }
       onAuthed();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const msg =
+        err instanceof Error
+          ? err.message
+          : err && typeof err === "object" && "message" in err
+            ? String((err as { message: unknown }).message)
+            : "Something went wrong";
+      setError(msg);
     } finally {
       setBusy(false);
     }
@@ -45,13 +70,34 @@ export function AuthScreen({ onAuthed }: Props) {
   return (
     <div className="gate-screen auth-screen">
       <div className="gate-panel">
+        <img className="gate-brand-logo" src={brandLogo} alt="Remined" />
         <p className="gate-kicker">Remined</p>
-        <h1 className="gate-title">{mode === "login" ? "Sign in" : "Create account"}</h1>
+        <h1 className="gate-title">
+          {mode === "login" ? "Sign in" : "Create account"}
+        </h1>
         <p className="gate-sub">
           Friends-only launcher. Email confirmation is off — sign up and play.
         </p>
 
         <form className="gate-form" onSubmit={(e) => void submit(e)}>
+          {mode === "register" ? (
+            <div className="field">
+              <label htmlFor="auth-user">Username</label>
+              <input
+                id="auth-user"
+                type="text"
+                autoComplete="username"
+                required
+                minLength={3}
+                maxLength={16}
+                spellCheck={false}
+                placeholder="3–16 chars"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
+            </div>
+          ) : null}
+
           <div className="field">
             <label htmlFor="auth-email">Email</label>
             <input
@@ -68,7 +114,9 @@ export function AuthScreen({ onAuthed }: Props) {
             <input
               id="auth-pass"
               type="password"
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
+              autoComplete={
+                mode === "login" ? "current-password" : "new-password"
+              }
               required
               minLength={6}
               value={password}
@@ -91,7 +139,9 @@ export function AuthScreen({ onAuthed }: Props) {
             setError("");
           }}
         >
-          {mode === "login" ? "Need an account? Register" : "Have an account? Sign in"}
+          {mode === "login"
+            ? "Need an account? Register"
+            : "Have an account? Sign in"}
         </button>
       </div>
     </div>

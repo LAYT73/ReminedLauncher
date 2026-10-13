@@ -175,7 +175,7 @@ async fn download_to_file(url: &str, dest: &Path, app: &AppHandle, phase: &str) 
         downloaded += chunk.len() as u64;
         if total > 0 {
             let pct = ((downloaded as f64 / total as f64) * 90.0) as u32;
-            progress::emit(app, phase, pct, format!("Downloading Java… {pct}%"));
+            progress::emit(app, phase, pct, "Downloading Java…");
         }
     }
     Ok(())

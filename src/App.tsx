@@ -1,20 +1,39 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import type { Session } from "@supabase/supabase-js";
 import { AuthScreen } from "./components/AuthScreen";
+import { FriendsPanel } from "./components/FriendsPanel";
 import { OnboardingScreen } from "./components/OnboardingScreen";
 import { PackGallery } from "./components/PackGallery";
 import { PackSelect } from "./components/PackSelect";
+import { PixelProgress } from "./components/PixelProgress";
+import { PlayButton } from "./components/PlayButton";
 import { SkinModel } from "./components/SkinModel";
-import { supabase } from "./lib/supabase";
+import { Toast } from "./components/Toast";
+import {
+  ensureCloudProfile,
+  updateCloudUsername,
+} from "./lib/cloudProfile";
 import {
   CatalogPack,
   fetchCatalogFromSupabase,
   pickDefaultPack,
 } from "./lib/packsCatalog";
+import { clearAccountSkin, publishAccountSkin } from "./lib/skinsCloud";
+import { supabase } from "./lib/supabase";
+import brandLogo from "./assets/logo.png";
+import { setPresence } from "./lib/presence";
+import {
+  applyTheme,
+  DEFAULT_THEME,
+  normalizeThemeId,
+  THEME_PRESETS,
+  type ThemeId,
+} from "./lib/themes";
 
 type Pack = {
   id: string;
@@ -30,6 +49,7 @@ type Profile = {
   ram_mb: number;
   java_path: string | null;
   jvm_args: string;
+  theme: ThemeId;
 };
 
 type JavaInfo = {
@@ -48,6 +68,7 @@ const DEFAULT_PROFILE: Profile = {
   ram_mb: 4096,
   java_path: null,
   jvm_args: "",
+  theme: DEFAULT_THEME,
 };
 
 function normalizeProfile(raw: Partial<Profile> | null | undefined): Profile {
@@ -57,6 +78,7 @@ function normalizeProfile(raw: Partial<Profile> | null | undefined): Profile {
     ram_mb: Math.max(1024, Number(raw?.ram_mb) || DEFAULT_PROFILE.ram_mb),
     java_path: raw?.java_path ?? null,
     jvm_args: raw?.jvm_args ?? "",
+    theme: normalizeThemeId(raw?.theme),
   };
 }
 
@@ -68,37 +90,87 @@ type LaunchResult = {
 
 type GamePhase = "idle" | "launching" | "running";
 
-type TopTab = "play" | "installations" | "skins" | "settings";
+type TopTab =
+  | "home"
+  | "play"
+  | "installations"
+  | "friends"
+  | "skins"
+  | "settings";
+
+const HOME_TABS: Array<[Exclude<TopTab, "home" | "play">, string]> = [
+  ["installations", "Installations"],
+  ["friends", "Friends"],
+  ["skins", "Skins"],
+  ["settings", "Settings"],
+];
+
+const PACK_TABS: Array<[Exclude<TopTab, "home">, string]> = [
+  ["play", "Play"],
+  ...HOME_TABS,
+];
+
+type PackRelease = {
+  id: string;
+  version: string;
+};
 
 type RuntimeStatus = {
   onboarding: {
     completed: boolean;
     java_ok: boolean;
-    pack_ok: boolean;
-    runtime_ok: boolean;
     java_path: string | null;
-    pack_version: string | null;
   };
 };
 
+type PackStatus = {
+  id: string;
+  installed: boolean;
+  local_version: string | null;
+  path: string;
+};
+
+type ProgressEvent = {
+  phase: string;
+  percent: number;
+  message: string;
+};
+
 type Gate = "loading" | "auth" | "onboarding" | "app";
+
+const PROGRESS_PHASE: Record<string, string> = {
+  pack: "Pack",
+  fabric: "Fabric",
+  assets: "Assets",
+  runtime: "Runtime",
+  done: "Done",
+};
 
 export default function App() {
   const [gate, setGate] = useState<Gate>("loading");
   const [session, setSession] = useState<Session | null>(null);
   const [packs, setPacks] = useState<Pack[]>([]);
   const [catalog, setCatalog] = useState<CatalogPack[]>([]);
+  const [installedIds, setInstalledIds] = useState<Set<string>>(new Set());
   const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
   const [skinPreview, setSkinPreview] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const [statusKind, setStatusKind] = useState<"idle" | "ok" | "error">("idle");
   const [phase, setPhase] = useState<GamePhase>("idle");
-  const [topTab, setTopTab] = useState<TopTab>("play");
-  const [rail, setRail] = useState<"home" | "java" | "settings">("java");
+  const [topTab, setTopTab] = useState<TopTab>("home");
+  const [rail, setRail] = useState<"home" | "java" | "settings">("home");
   const [javaInfo, setJavaInfo] = useState<JavaInfo | null>(null);
-  const [appVersion, setAppVersion] = useState("0.1.0");
+  const [appVersion, setAppVersion] = useState("0.3.0");
   const [updateBusy, setUpdateBusy] = useState(false);
   const [packBusy, setPackBusy] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const [installPercent, setInstallPercent] = useState(0);
+  const [installPhase, setInstallPhase] = useState("");
+  const [installMessage, setInstallMessage] = useState("");
+  const [reminedId, setReminedId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [usernameDraft, setUsernameDraft] = useState<string | null>(null);
+  const [usernameBusy, setUsernameBusy] = useState(false);
 
   async function refreshJava(path?: string | null) {
     try {
@@ -118,7 +190,7 @@ export default function App() {
           invoke<Pack[]>("list_packs"),
           invoke<Profile>("get_profile"),
           invoke<GamePhase>("get_game_phase"),
-          invoke<string>("get_app_version").catch(() => "0.1.0"),
+          invoke<string>("get_app_version").catch(() => "0.3.0"),
           fetchCatalogFromSupabase().catch(() => [] as CatalogPack[]),
         ]);
       const next = normalizeProfile(saved);
@@ -150,28 +222,144 @@ export default function App() {
         else if (merged[0]) next.selected_pack = merged[0].id;
       }
 
+      const ids = new Set(packList.map((p) => p.id));
+      // Also probe selected / catalog packs for install state
+      await Promise.all(
+        merged.map(async (p) => {
+          try {
+            const st = await invoke<PackStatus>("get_pack_status", {
+              packId: p.id,
+            });
+            if (st.installed) ids.add(p.id);
+          } catch {
+            /* ignore */
+          }
+        }),
+      );
+      setInstalledIds(ids);
+
       setProfile(next);
+      applyTheme(next.theme);
       setPhase(gamePhase);
       setAppVersion(version);
       void refreshJava(next.java_path);
-      if (next.skin_path) {
-        const data = await invoke<string | null>("read_skin_data_url", {
-          path: next.skin_path,
-        });
-        setSkinPreview(data);
-      }
+      // Skin preview comes from syncCloudProfile (per-account Supabase), not local leftovers
     } catch (err) {
       setStatus(String(err));
       setStatusKind("error");
     }
   }
 
+  function isSkinUrl(path: string | null | undefined): boolean {
+    if (!path) return false;
+    return /^https?:\/\//i.test(path.trim());
+  }
+
+  async function applySkinPreview(path: string | null | undefined) {
+    if (!path) {
+      setSkinPreview(null);
+      return;
+    }
+    if (isSkinUrl(path)) {
+      // cache-bust so friends / own avatar refresh after upsert
+      const bust = path.includes("?") ? path : `${path}?t=${Date.now()}`;
+      setSkinPreview(bust);
+      return;
+    }
+    try {
+      const data = await invoke<string | null>("read_skin_data_url", {
+        path,
+      });
+      setSkinPreview(data);
+    } catch {
+      setSkinPreview(null);
+    }
+  }
+
+  useEffect(() => {
+    if (!installing) return;
+    let unlisten: (() => void) | undefined;
+    void listen<ProgressEvent>("remined-progress", (ev) => {
+      setInstallPhase(ev.payload.phase);
+      setInstallPercent((prev) => Math.max(prev, ev.payload.percent));
+      setInstallMessage(ev.payload.message);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => unlisten?.();
+  }, [installing]);
+
+  async function syncCloudProfile(nextSession: Session) {
+    try {
+      const cloud = await ensureCloudProfile(nextSession.user.id);
+      setReminedId(cloud.remined_id);
+
+      const local = normalizeProfile(await invoke<Profile>("get_profile"));
+      // Local profile.json is shared across accounts — always overwrite
+      // account-bound fields from Supabase (null skin = default Steve).
+      const next: Profile = {
+        ...local,
+        username: cloud.username || local.username || "Player",
+        skin_path: cloud.skin_path ?? null,
+      };
+
+      await persist(next);
+      await applySkinPreview(cloud.skin_path);
+      setUsernameDraft(null);
+    } catch (err) {
+      console.warn("cloud profile", err);
+      setSkinPreview(null);
+    }
+  }
+
+  const usernameCommitted = profile.username.trim() || "Player";
+  const usernameEditing = usernameDraft !== null;
+  const usernameDirty =
+    usernameEditing && usernameDraft.trim() !== usernameCommitted;
+
+  async function commitUsername() {
+    if (!session?.user?.id || !usernameDirty || usernameBusy) return;
+    setUsernameBusy(true);
+    try {
+      const saved = await updateCloudUsername(session.user.id, usernameDraft!);
+      await persist({ ...profile, username: saved });
+      setUsernameDraft(null);
+      setToast("Username updated");
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : String(err));
+    } finally {
+      setUsernameBusy(false);
+    }
+  }
+
+  function resetUsernameDraft() {
+    setUsernameDraft(null);
+  }
+
   async function resolveGate(nextSession: Session | null) {
     setSession(nextSession);
     if (!nextSession) {
+      setReminedId(null);
+      setSkinPreview(null);
+      setUsernameDraft(null);
+      // Drop account-bound skin so the next login doesn't flash the previous one
+      try {
+        const local = normalizeProfile(await invoke<Profile>("get_profile"));
+        if (local.skin_path) {
+          await invoke("save_profile", {
+            profile: { ...local, skin_path: null },
+          });
+          setProfile({ ...local, skin_path: null });
+        }
+      } catch {
+        /* ignore */
+      }
       setGate("auth");
       return;
     }
+    // Switching accounts: reset avatar until cloud profile loads
+    setSkinPreview(null);
+    setUsernameDraft(null);
     try {
       const runtime = await invoke<RuntimeStatus>("get_runtime_status");
       if (!runtime.onboarding.completed) {
@@ -179,10 +367,48 @@ export default function App() {
         return;
       }
       await bootstrapLauncher();
+      await syncCloudProfile(nextSession);
       setGate("app");
     } catch {
       setGate("onboarding");
     }
+  }
+
+  async function copyReminedId() {
+    if (!reminedId) return;
+    try {
+      await navigator.clipboard.writeText(reminedId);
+      setToast("Copied Remined id");
+    } catch {
+      setToast("Couldn’t copy");
+    }
+  }
+
+  function profileChip() {
+    return (
+      <div className="topnav-profile">
+        <SkinModel
+          skinUrl={skinPreview}
+          variant="bust"
+          className="avatar-3d"
+        />
+        <div className="topnav-identity">
+          <strong className="topnav-nick">
+            {profile.username.trim() || "Player"}
+          </strong>
+          {reminedId ? (
+            <button
+              type="button"
+              className="topnav-id"
+              title="Copy Remined id"
+              onClick={() => void copyReminedId()}
+            >
+              #{reminedId}
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
   }
 
   useEffect(() => {
@@ -211,6 +437,47 @@ export default function App() {
     [packs, profile.selected_pack],
   );
 
+  useEffect(() => {
+    if (!session?.user?.id || gate !== "app") return;
+    const userId = session.user.id;
+    const packId = selectedPack?.id ?? profile.selected_pack ?? null;
+
+    const push = () => {
+      const playing = phase === "running" || phase === "launching";
+      void setPresence({
+        userId,
+        status: playing ? "in_game" : "online",
+        packId: playing ? packId : null,
+      });
+    };
+    push();
+    const heartbeat = window.setInterval(push, 40_000);
+
+    const goOffline = () => {
+      void setPresence({ userId, status: "offline", packId: null });
+    };
+    window.addEventListener("pagehide", goOffline);
+
+    return () => {
+      window.clearInterval(heartbeat);
+      window.removeEventListener("pagehide", goOffline);
+    };
+  }, [
+    session?.user?.id,
+    gate,
+    phase,
+    selectedPack?.id,
+    profile.selected_pack,
+  ]);
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    const userId = session.user.id;
+    return () => {
+      void setPresence({ userId, status: "offline", packId: null });
+    };
+  }, [session?.user?.id]);
+
   const packContent = useMemo(() => {
     if (!selectedPack) return undefined;
     return catalog.find((c) => c.id === selectedPack.id);
@@ -218,7 +485,12 @@ export default function App() {
 
   async function persist(next: Profile) {
     setProfile(next);
+    applyTheme(next.theme);
     await invoke("save_profile", { profile: next });
+  }
+
+  async function setTheme(theme: ThemeId) {
+    await persist({ ...profile, theme });
   }
 
   async function pickSkin() {
@@ -227,18 +499,80 @@ export default function App() {
       filters: [{ name: "PNG", extensions: ["png"] }],
     });
     if (!selected || Array.isArray(selected)) return;
-    const next = { ...profile, skin_path: selected };
-    await persist(next);
+    if (!session?.user?.id) {
+      setToast("Sign in to save a skin");
+      return;
+    }
+
+    // Local preview while uploading
     const data = await invoke<string | null>("read_skin_data_url", {
       path: selected,
     });
     setSkinPreview(data);
+
+    try {
+      let id = reminedId;
+      if (!id) {
+        const cloud = await ensureCloudProfile(session.user.id);
+        id = cloud.remined_id;
+        setReminedId(id);
+      }
+      const url = await publishAccountSkin(id, selected, session.user.id);
+      const next = { ...profile, skin_path: url };
+      await persist(next);
+      await applySkinPreview(url);
+      setToast("Skin saved");
+    } catch (err) {
+      setSkinPreview(profile.skin_path && isSkinUrl(profile.skin_path) ? profile.skin_path : null);
+      setToast(err instanceof Error ? err.message : String(err));
+    }
   }
 
   async function clearSkin() {
     const next = { ...profile, skin_path: null };
     await persist(next);
     setSkinPreview(null);
+    if (session?.user?.id && reminedId) {
+      try {
+        await clearAccountSkin(reminedId, session.user.id);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  async function deleteInstalledPack(packId: string) {
+    if (
+      !window.confirm(
+        `Delete installation “${packId}”? Saves in that folder will be removed.`,
+      )
+    ) {
+      return;
+    }
+    setStatus("Deleting pack…");
+    setStatusKind("idle");
+    try {
+      await invoke("delete_pack", { packId });
+      setInstalledIds((prev) => {
+        const next = new Set(prev);
+        next.delete(packId);
+        return next;
+      });
+      if (profile.selected_pack === packId) {
+        const fallback =
+          packs.find((p) => p.id !== packId)?.id ??
+          catalog.find((c) => c.id !== packId)?.id ??
+          "";
+        await persist({ ...profile, selected_pack: fallback });
+      }
+      await bootstrapLauncher();
+      setStatus("Pack deleted");
+      setStatusKind("ok");
+      setToast("Installation removed");
+    } catch (err) {
+      setStatus(String(err));
+      setStatusKind("error");
+    }
   }
 
   async function pickJava() {
@@ -375,6 +709,40 @@ export default function App() {
       </div>
 
       <div className="settings-block">
+        <h3 className="settings-heading">Theme</h3>
+        <p className="field-hint theme-hint">
+          Pick a surface and accent. Applies instantly.
+        </p>
+        <div className="theme-grid" role="listbox" aria-label="Theme presets">
+          {THEME_PRESETS.map((preset) => {
+            const active = profile.theme === preset.id;
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                role="option"
+                aria-selected={active}
+                className={`theme-card ${active ? "is-active" : ""}`}
+                onClick={() => void setTheme(preset.id)}
+              >
+                <span
+                  className="theme-swatch"
+                  style={{
+                    background: `linear-gradient(135deg, ${preset.surface} 0 55%, ${preset.accent} 55%)`,
+                  }}
+                  aria-hidden
+                />
+                <span className="theme-card-copy">
+                  <strong>{preset.label}</strong>
+                  <em>{preset.mode}</em>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="settings-block">
         <h3 className="settings-heading">Launcher</h3>
         <div className="settings-row">
           <span>Version</span>
@@ -389,35 +757,69 @@ export default function App() {
           >
             {updateBusy ? "Checking…" : "Check for updates"}
           </button>
-          <button
-            type="button"
-            className="btn-mc dim"
-            onClick={() => void supabase.auth.signOut()}
-          >
-            Sign out
-            {session?.user?.email ? ` (${session.user.email})` : ""}
-          </button>
         </div>
+      </div>
+
+      <div className="settings-block settings-account">
+        <h3 className="settings-heading">Account</h3>
+        {session?.user?.email ? (
+          <p className="settings-account-email">{session.user.email}</p>
+        ) : null}
+        {reminedId ? (
+          <p className="settings-account-id">
+            Remined id{" "}
+            <button
+              type="button"
+              className="topnav-id"
+              onClick={() => void copyReminedId()}
+            >
+              #{reminedId}
+            </button>
+          </p>
+        ) : null}
+        <button
+          type="button"
+          className="btn-signout"
+          onClick={() => {
+            const uid = session?.user?.id;
+            void (async () => {
+              if (uid) {
+                await setPresence({
+                  userId: uid,
+                  status: "offline",
+                  packId: null,
+                });
+              }
+              await supabase.auth.signOut();
+            })();
+          }}
+        >
+          Sign out
+        </button>
       </div>
     </section>
   );
 
   async function syncPack() {
+    const packId = profile.selected_pack || selectedPack?.id;
+    if (!packId) return;
     setPackBusy(true);
-    setStatus("Updating pack…");
+    setInstalling(true);
+    setInstallPercent(0);
+    setInstallMessage("Updating pack…");
+    setStatus("");
     setStatusKind("idle");
     try {
-      const packId = profile.selected_pack || selectedPack?.id;
-      if (!packId) throw new Error("No pack selected");
-      await invoke("sync_selected_pack", { packId });
+      await invoke("ensure_pack", { packId });
       await bootstrapLauncher();
-      setStatus("Pack up to date");
+      setStatus("Pack ready");
       setStatusKind("ok");
     } catch (err) {
       setStatus(String(err));
       setStatusKind("error");
     } finally {
       setPackBusy(false);
+      setInstalling(false);
     }
   }
 
@@ -444,26 +846,105 @@ export default function App() {
     }
   }
 
-  const playLabel =
-    phase === "launching"
-      ? "Launching"
+  const packReady = Boolean(
+    selectedPack && installedIds.has(selectedPack.id),
+  );
+
+  const playKind = installing
+    ? "installing"
+    : phase === "launching"
+      ? "launching"
       : phase === "running"
-        ? "Running"
-        : "Play";
-  const playBusy = phase !== "idle";
+        ? "running"
+        : packReady
+          ? "play"
+          : "download";
+  const playLabel =
+    playKind === "installing"
+      ? "Installing"
+      : playKind === "launching"
+        ? "Launching"
+        : playKind === "running"
+          ? "Running"
+          : playKind === "download"
+            ? "Download"
+            : "Play";
+  const playBusy = phase !== "idle" || installing;
+
+  async function downloadPack() {
+    if (!selectedPack || playBusy) return;
+    setInstalling(true);
+    setInstallPercent(0);
+    setInstallPhase("pack");
+    setInstallMessage("Preparing…");
+    setStatus("");
+    setStatusKind("idle");
+    try {
+      await invoke("ensure_pack", { packId: selectedPack.id });
+      setInstalledIds((prev) => new Set(prev).add(selectedPack.id));
+      await bootstrapLauncher();
+      setStatus("Ready to play");
+      setStatusKind("ok");
+    } catch (err) {
+      setStatus(String(err));
+      setStatusKind("error");
+    } finally {
+      setInstalling(false);
+    }
+  }
+
+  async function ensurePackUpToDate(): Promise<boolean> {
+    if (!selectedPack) return false;
+    setStatus("Checking pack update…");
+    setStatusKind("idle");
+    try {
+      const [remote, local] = await Promise.all([
+        invoke<PackRelease>("fetch_pack_release", { packId: selectedPack.id }),
+        invoke<PackStatus>("get_pack_status", { packId: selectedPack.id }),
+      ]);
+      if (local.installed && local.local_version === remote.version) {
+        return true;
+      }
+      setStatus(
+        local.installed
+          ? `Updating to ${remote.version}…`
+          : `Downloading ${remote.version}…`,
+      );
+      await downloadPack();
+      const again = await invoke<PackStatus>("get_pack_status", {
+        packId: selectedPack.id,
+      });
+      return again.installed;
+    } catch (err) {
+      setStatus(String(err));
+      setStatusKind("error");
+      return false;
+    }
+  }
 
   async function launch() {
     if (!selectedPack || playBusy) return;
+    if (!packReady) {
+      await downloadPack();
+      return;
+    }
     const name = profile.username.trim() || "Player";
     if (name.length < 3 || name.length > 16) {
       setStatus("3–16 characters");
       setStatusKind("error");
       return;
     }
+
+    const ready = await ensurePackUpToDate();
+    if (!ready) return;
+
     setPhase("launching");
     setStatus("");
     setStatusKind("idle");
     try {
+      if (session) {
+        await syncCloudProfile(session);
+      }
       const result = await invoke<LaunchResult>("launch_pack", {
         packId: selectedPack.id,
         username: name,
@@ -506,6 +987,202 @@ export default function App() {
     );
   }
 
+  const homeLanding = (
+    <>
+      <header className="hero home">
+        <img className="home-brand-logo" src={brandLogo} alt="" />
+        <p className="hero-kicker">For our servers</p>
+        <h1 className="hero-title">Remined</h1>
+      </header>
+      <section className="section home-body">
+        <p className="home-blurb">
+          Small launcher for our Minecraft pack. It keeps Java and the build in
+          one place so you don’t fight with a pile of folders every time
+          someone updates the pack. Download once, play with friends, done.
+        </p>
+      </section>
+    </>
+  );
+
+  const installationsPanel = (
+    <section className="section">
+      <h2 className="page-title">Installations</h2>
+      <ul className="install-list">
+        {packs.map((pack) => {
+          const active = selectedPack?.id === pack.id;
+          const installed = installedIds.has(pack.id);
+          return (
+            <li key={pack.id} className="install-item">
+              <button
+                type="button"
+                className={`install-row ${active ? "active" : ""}`}
+                onClick={() =>
+                  void persist({
+                    ...profile,
+                    selected_pack: pack.id,
+                  })
+                }
+              >
+                {catalog.find((c) => c.id === pack.id)?.logo_url ? (
+                  <img
+                    className="install-icon"
+                    src={catalog.find((c) => c.id === pack.id)!.logo_url!}
+                    alt=""
+                  />
+                ) : (
+                  <span className="install-icon" aria-hidden />
+                )}
+                <span className="install-copy">
+                  <strong>{pack.name}</strong>
+                  <span>{installed ? pack.version : "Not installed"}</span>
+                </span>
+                {active ? <span className="install-badge">Selected</span> : null}
+              </button>
+              {installed ? (
+                <button
+                  type="button"
+                  className="btn-mc dim install-delete"
+                  onClick={() => void deleteInstalledPack(pack.id)}
+                >
+                  Delete
+                </button>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+
+  const friendsPanel =
+    topTab === "friends" && session?.user?.id ? (
+      <FriendsPanel
+        userId={session.user.id}
+        myReminedId={reminedId}
+        onToast={setToast}
+      />
+    ) : null;
+
+  const skinsPanel = (
+    <section className="section">
+      <h2 className="page-title">Skins</h2>
+      <p className="friends-lead">
+        PNG only — 64×64, 64×32 or 128×128, max 256 KB.
+      </p>
+      <div className="skin-layout">
+        <SkinModel
+          skinUrl={skinPreview}
+          variant="full"
+          className="skin-stage"
+        />
+        <div className="skin-controls">
+          <div className="field">
+            <label htmlFor="username">Username</label>
+            <div className="username-edit">
+              <input
+                id="username"
+                maxLength={16}
+                spellCheck={false}
+                value={usernameEditing ? usernameDraft! : usernameCommitted}
+                onChange={(e) => setUsernameDraft(e.target.value)}
+                onFocus={() => {
+                  if (!usernameEditing) {
+                    setUsernameDraft(usernameCommitted);
+                  }
+                }}
+              />
+              {usernameDirty ? (
+                <div className="username-draft-actions">
+                  <button
+                    type="button"
+                    className="btn-pixel-check"
+                    title="Save username"
+                    disabled={usernameBusy}
+                    onClick={() => void commitUsername()}
+                  >
+                    <svg
+                      className="btn-pixel-icon"
+                      viewBox="0 0 11 9"
+                      aria-hidden
+                    >
+                      <rect x="0" y="4" width="1" height="1" fill="#fff" />
+                      <rect x="1" y="5" width="1" height="1" fill="#fff" />
+                      <rect x="2" y="6" width="1" height="1" fill="#fff" />
+                      <rect x="3" y="7" width="1" height="1" fill="#fff" />
+                      <rect x="4" y="6" width="1" height="1" fill="#fff" />
+                      <rect x="5" y="5" width="1" height="1" fill="#fff" />
+                      <rect x="6" y="4" width="1" height="1" fill="#fff" />
+                      <rect x="7" y="3" width="1" height="1" fill="#fff" />
+                      <rect x="8" y="2" width="1" height="1" fill="#fff" />
+                      <rect x="9" y="1" width="1" height="1" fill="#fff" />
+                      <rect x="10" y="0" width="1" height="1" fill="#fff" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-pixel-reset"
+                    title="Discard"
+                    disabled={usernameBusy}
+                    onClick={resetUsernameDraft}
+                  >
+                    <svg
+                      className="btn-pixel-icon"
+                      viewBox="0 0 7 7"
+                      aria-hidden
+                    >
+                      <rect x="0" y="0" width="1" height="1" fill="#1a1a1a" />
+                      <rect x="1" y="1" width="1" height="1" fill="#1a1a1a" />
+                      <rect x="2" y="2" width="1" height="1" fill="#1a1a1a" />
+                      <rect x="3" y="3" width="1" height="1" fill="#1a1a1a" />
+                      <rect x="4" y="4" width="1" height="1" fill="#1a1a1a" />
+                      <rect x="5" y="5" width="1" height="1" fill="#1a1a1a" />
+                      <rect x="6" y="6" width="1" height="1" fill="#1a1a1a" />
+                      <rect x="6" y="0" width="1" height="1" fill="#1a1a1a" />
+                      <rect x="5" y="1" width="1" height="1" fill="#1a1a1a" />
+                      <rect x="4" y="2" width="1" height="1" fill="#1a1a1a" />
+                      <rect x="2" y="4" width="1" height="1" fill="#1a1a1a" />
+                      <rect x="1" y="5" width="1" height="1" fill="#1a1a1a" />
+                      <rect x="0" y="6" width="1" height="1" fill="#1a1a1a" />
+                    </svg>
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <div className="btn-row">
+            <button
+              type="button"
+              className="btn-mc"
+              onClick={() => void pickSkin()}
+            >
+              Choose skin
+            </button>
+            {profile.skin_path ? (
+              <button
+                type="button"
+                className="btn-mc dim"
+                onClick={() => void clearSkin()}
+              >
+                Remove
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+
+  const sharedTabBody =
+    topTab === "installations"
+      ? installationsPanel
+      : topTab === "friends"
+        ? friendsPanel
+        : topTab === "skins"
+          ? skinsPanel
+          : topTab === "settings"
+            ? settingsForm
+            : null;
+
   return (
     <div className="shell">
       <aside className="rail">
@@ -513,11 +1190,12 @@ export default function App() {
           type="button"
           className={`rail-home ${rail === "home" ? "active" : ""}`}
           title="Home"
-          onClick={() => setRail("home")}
+          onClick={() => {
+            setRail("home");
+            setTopTab("home");
+          }}
         >
-          <svg viewBox="0 0 24 24" aria-hidden>
-            <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
-          </svg>
+          <img className="rail-brand-logo" src={brandLogo} alt="Remined" />
         </button>
 
         <button
@@ -555,18 +1233,19 @@ export default function App() {
       </aside>
 
       <div className="stage">
-        {rail === "java" ? (
+        {rail === "settings" ? (
+          <>
+            <nav className="topnav">
+              <div className="topnav-tabs" />
+              {profileChip()}
+            </nav>
+            <div className="content">{settingsForm}</div>
+          </>
+        ) : (
           <>
             <nav className="topnav">
               <div className="topnav-tabs">
-                {(
-                  [
-                    ["play", "Play"],
-                    ["installations", "Installations"],
-                    ["skins", "Skins"],
-                    ["settings", "Settings"],
-                  ] as const
-                ).map(([id, label]) => (
+                {(rail === "java" ? PACK_TABS : HOME_TABS).map(([id, label]) => (
                   <button
                     key={id}
                     type="button"
@@ -577,32 +1256,23 @@ export default function App() {
                   </button>
                 ))}
               </div>
-              <div className="topnav-profile">
-                <SkinModel
-                  skinUrl={skinPreview}
-                  variant="bust"
-                  className="avatar-3d"
-                />
-                <strong className="topnav-nick">
-                  {profile.username.trim() || "Player"}
-                </strong>
-              </div>
+              {profileChip()}
             </nav>
 
             <div className="content">
-              {topTab === "play" && (
+              {rail === "home" && (topTab === "home" || topTab === "play")
+                ? homeLanding
+                : null}
+
+              {rail === "java" && topTab === "play" ? (
                 <>
                   <header
-                    className="hero"
+                    className={`hero${packContent?.wallpaper_url ? " has-art" : ""}`}
                     style={
                       packContent?.wallpaper_url
-                        ? {
-                            backgroundImage: [
-                              "linear-gradient(180deg, transparent 22%, rgba(30, 30, 30, 0.55) 70%, var(--bg) 100%)",
-                              "linear-gradient(90deg, rgba(10, 10, 12, 0.78) 0%, rgba(10, 10, 12, 0.35) 42%, rgba(10, 10, 12, 0.15) 100%)",
-                              `url("${packContent.wallpaper_url}")`,
-                            ].join(", "),
-                          }
+                        ? ({
+                            ["--hero-image"]: `url("${packContent.wallpaper_url}")`,
+                          } as CSSProperties)
                         : undefined
                     }
                   >
@@ -664,168 +1334,47 @@ export default function App() {
                     </section>
                   ) : null}
                 </>
-              )}
+              ) : null}
 
-              {topTab === "installations" && (
-                <section className="section">
-                  <h2 className="page-title">Installations</h2>
-                  <ul className="install-list">
-                    {packs.map((pack) => {
-                      const active = selectedPack?.id === pack.id;
-                      return (
-                        <li key={pack.id}>
-                          <button
-                            type="button"
-                            className={`install-row ${active ? "active" : ""}`}
-                            onClick={() =>
-                              void persist({
-                                ...profile,
-                                selected_pack: pack.id,
-                              })
-                            }
-                          >
-                            {catalog.find((c) => c.id === pack.id)?.logo_url ? (
-                              <img
-                                className="install-icon"
-                                src={
-                                  catalog.find((c) => c.id === pack.id)!
-                                    .logo_url!
-                                }
-                                alt=""
-                              />
-                            ) : (
-                              <span className="install-icon" aria-hidden />
-                            )}
-                            <span className="install-copy">
-                              <strong>{pack.name}</strong>
-                              <span>{pack.version}</span>
-                            </span>
-                            {active ? (
-                              <span className="install-badge">Selected</span>
-                            ) : null}
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </section>
-              )}
-
-              {topTab === "skins" && (
-                <section className="section">
-                  <h2 className="page-title">Skins</h2>
-                  <div className="skin-layout">
-                    <SkinModel
-                      skinUrl={skinPreview}
-                      variant="full"
-                      className="skin-stage"
-                    />
-                    <div className="skin-controls">
-                      <div className="field">
-                        <label htmlFor="username">Username</label>
-                        <input
-                          id="username"
-                          maxLength={16}
-                          value={profile.username}
-                          onChange={(e) =>
-                            setProfile({
-                              ...profile,
-                              username: e.target.value,
-                            })
-                          }
-                          onBlur={() => void persist(profile)}
-                        />
-                      </div>
-                      <div className="btn-row">
-                        <button
-                          type="button"
-                          className="btn-mc"
-                          onClick={() => void pickSkin()}
-                        >
-                          Choose skin
-                        </button>
-                        {profile.skin_path ? (
-                          <button
-                            type="button"
-                            className="btn-mc dim"
-                            onClick={() => void clearSkin()}
-                          >
-                            Remove
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                </section>
-              )}
-
-              {topTab === "settings" && settingsForm}
+              {sharedTabBody}
             </div>
-          </>
-        ) : rail === "home" ? (
-          <>
-            <nav className="topnav">
-              <div className="topnav-tabs" />
-              <div className="topnav-profile">
-                <SkinModel
-                  skinUrl={skinPreview}
-                  variant="bust"
-                  className="avatar-3d"
-                />
-                <strong className="topnav-nick">
-                  {profile.username.trim() || "Player"}
-                </strong>
-              </div>
-            </nav>
-            <div className="content">
-              <header className="hero home">
-                <h1 className="hero-title">Remined</h1>
-              </header>
-            </div>
-          </>
-        ) : (
-          <>
-            <nav className="topnav">
-              <div className="topnav-tabs" />
-              <div className="topnav-profile">
-                <SkinModel
-                  skinUrl={skinPreview}
-                  variant="bust"
-                  className="avatar-3d"
-                />
-                <strong className="topnav-nick">
-                  {profile.username.trim() || "Player"}
-                </strong>
-              </div>
-            </nav>
-            <div className="content">{settingsForm}</div>
           </>
         )}
 
-        <footer className="playbar">
+        <footer className={`playbar ${installing ? "is-installing" : ""}`}>
           <PackSelect
             packs={packs}
             value={selectedPack?.id ?? ""}
             onChange={(id) => void persist({ ...profile, selected_pack: id })}
+            disabled={installing}
           />
 
-          <div
-            className={`status ${statusKind === "error" ? "error" : ""}`}
-            aria-live="polite"
-          >
-            {status}
-          </div>
+          {installing ? (
+            <div className="playbar-progress">
+              <PixelProgress
+                value={installPercent}
+                phase={PROGRESS_PHASE[installPhase] ?? installPhase}
+                label={installMessage}
+              />
+            </div>
+          ) : (
+            <div
+              className={`status ${statusKind === "error" ? "error" : ""}`}
+              aria-live="polite"
+            >
+              {status}
+            </div>
+          )}
 
-          <button
-            type="button"
-            className={`play-btn ${phase !== "idle" ? `is-${phase}` : ""}`}
+          <PlayButton
+            kind={playKind}
+            label={playLabel}
             disabled={playBusy || !selectedPack || rail !== "java"}
             onClick={() => void launch()}
-          >
-            {playLabel}
-          </button>
+          />
         </footer>
       </div>
+      <Toast message={toast} onDone={() => setToast(null)} />
     </div>
   );
 }

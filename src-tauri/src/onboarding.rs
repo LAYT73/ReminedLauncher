@@ -12,11 +12,7 @@ use tauri::AppHandle;
 pub struct OnboardingState {
     pub completed: bool,
     pub java_ok: bool,
-    pub pack_ok: bool,
-    pub runtime_ok: bool,
     pub java_path: Option<String>,
-    pub pack_id: Option<String>,
-    pub pack_version: Option<String>,
 }
 
 impl Default for OnboardingState {
@@ -24,11 +20,7 @@ impl Default for OnboardingState {
         Self {
             completed: false,
             java_ok: false,
-            pack_ok: false,
-            runtime_ok: false,
             java_path: None,
-            pack_id: None,
-            pack_version: None,
         }
     }
 }
@@ -37,14 +29,29 @@ impl Default for OnboardingState {
 pub struct RuntimeStatus {
     pub onboarding: OnboardingState,
     pub java: JavaInfo,
-    pub pack: Option<PackStatus>,
 }
 
 pub fn load_state(root: &Path) -> OnboardingState {
-    fs::read_to_string(onboarding_path(root))
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+    let raw = fs::read_to_string(onboarding_path(root)).ok();
+    if let Some(s) = raw.as_ref() {
+        if let Ok(state) = serde_json::from_str::<OnboardingState>(s) {
+            return state;
+        }
+        // Migrate older onboarding.json that required pack/runtime
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(s) {
+            let java_ok = v.get("java_ok").and_then(|x| x.as_bool()).unwrap_or(false);
+            let java_path = v
+                .get("java_path")
+                .and_then(|x| x.as_str())
+                .map(|s| s.to_string());
+            return OnboardingState {
+                completed: java_ok,
+                java_ok,
+                java_path,
+            };
+        }
+    }
+    OnboardingState::default()
 }
 
 pub fn save_state(root: &Path, state: &OnboardingState) -> Result<(), String> {
@@ -58,65 +65,41 @@ pub fn status(root: &Path) -> RuntimeStatus {
     let mut onboarding = load_state(root);
     let java = java_runtime::find_java25(root, onboarding.java_path.as_deref());
     onboarding.java_ok = java.ok;
-
-    let pack = onboarding
-        .pack_id
-        .as_ref()
-        .map(|id| pack_sync::pack_status(root, id))
-        .or_else(|| {
-            pack_sync::list_installed(root)
-                .into_iter()
-                .find(|p| p.installed)
-        });
-
-    onboarding.pack_ok = pack.as_ref().map(|p| p.installed).unwrap_or(false);
-    if let Some(p) = &pack {
-        onboarding.pack_id = Some(p.id.clone());
-        onboarding.pack_version = p.local_version.clone();
-    }
-
-    let libs = root.join(".run").join("libraries");
-    let runtime_present = libs.is_dir()
-        && fs::read_dir(&libs)
-            .map(|mut d| d.next().is_some())
-            .unwrap_or(false);
-    if runtime_present {
-        onboarding.runtime_ok = true;
-    }
-    onboarding.completed = onboarding.java_ok && onboarding.pack_ok && onboarding.runtime_ok;
+    onboarding.completed = java.ok;
     if java.ok {
         onboarding.java_path = Some(java.path.clone());
     }
     let _ = save_state(root, &onboarding);
-    RuntimeStatus {
-        onboarding,
-        java,
-        pack,
-    }
+    RuntimeStatus { onboarding, java }
 }
 
+/// First-run gate: Java 25 only.
 pub async fn run_full(app: &AppHandle, root: &Path) -> Result<OnboardingState, String> {
-    progress::emit(app, "java", 0, "Checking Java…");
+    progress::reset();
+    progress::emit(app, "java", 1, "Checking Java…");
     let java = java_runtime::ensure_java25(app, root).await?;
-
-    progress::emit(app, "pack", 0, "Resolving pack catalog…");
-    let pack_id = pack_sync::default_pack_id().await?;
-    let pack = pack_sync::sync_pack(app, root, &pack_id).await?;
-
-    let instance = pack_dir(root, &pack_id);
-    progress::emit(app, "fabric", 0, "Preparing game runtime…");
-    runtime::prepare_runtime(app, root, &instance).await?;
 
     let state = OnboardingState {
         completed: true,
         java_ok: true,
-        pack_ok: pack.installed,
-        runtime_ok: true,
         java_path: Some(java.path),
-        pack_id: Some(pack_id),
-        pack_version: pack.local_version,
     };
     save_state(root, &state)?;
-    progress::emit(app, "done", 100, "All set");
+    progress::emit(app, "done", 100, "Java ready");
     Ok(state)
+}
+
+/// Download/update pack zip, then Fabric libs + assets (needs pack version JSON).
+pub async fn ensure_pack(app: &AppHandle, root: &Path, pack_id: &str) -> Result<PackStatus, String> {
+    progress::reset();
+
+    progress::emit(app, "pack", 1, "Downloading pack…");
+    let pack = pack_sync::sync_pack(app, root, pack_id).await?;
+
+    let instance = pack_dir(root, pack_id);
+    progress::emit(app, "fabric", 1, "Checking Fabric runtime…");
+    runtime::prepare_runtime(app, root, &instance).await?;
+
+    progress::emit(app, "done", 100, "Ready to play");
+    Ok(pack)
 }

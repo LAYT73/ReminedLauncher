@@ -31,6 +31,10 @@ fn default_ram_mb() -> u32 {
     4096
 }
 
+fn default_theme() -> String {
+    "dark-green".into()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Profile {
     pub username: String,
@@ -42,6 +46,8 @@ pub struct Profile {
     pub java_path: Option<String>,
     #[serde(default)]
     pub jvm_args: String,
+    #[serde(default = "default_theme")]
+    pub theme: String,
 }
 
 impl Default for Profile {
@@ -53,6 +59,7 @@ impl Default for Profile {
             ram_mb: default_ram_mb(),
             java_path: None,
             jvm_args: String::new(),
+            theme: default_theme(),
         }
     }
 }
@@ -139,6 +146,23 @@ fn lock_skinshuffle_ui(instance: &Path) -> Result<(), String> {
     fs::write(path, serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
 }
 
+fn clear_skinshuffle(instance: &Path) -> Result<(), String> {
+    let presets_path = instance.join("config").join("skinshuffle").join("presets.json");
+    if let Some(parent) = presets_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let presets = serde_json::json!({
+        "chosenPreset": -1,
+        "apiPreset": -1,
+        "loadedPresets": []
+    });
+    fs::write(
+        presets_path,
+        serde_json::to_string_pretty(&presets).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())
+}
+
 fn apply_skinshuffle(instance: &Path, skin_src: &Path) -> Result<(), String> {
     if !skin_src.is_file() {
         return Err(format!("Skin file not found: {}", skin_src.display()));
@@ -159,13 +183,6 @@ fn apply_skinshuffle(instance: &Path, skin_src: &Path) -> Result<(), String> {
     fs::write(skins_dir.join(format!("{skin_name}.png")), &bytes).map_err(|e| e.to_string())?;
 
     let presets_path = instance.join("config").join("skinshuffle").join("presets.json");
-    let mut presets = if presets_path.is_file() {
-        serde_json::from_str::<serde_json::Value>(&fs::read_to_string(&presets_path).map_err(|e| e.to_string())?)
-            .unwrap_or_else(|_| serde_json::json!({}))
-    } else {
-        serde_json::json!({})
-    };
-
     let preset = serde_json::json!({
         "skin": {
             "skin_name": skin_name,
@@ -174,9 +191,11 @@ fn apply_skinshuffle(instance: &Path, skin_src: &Path) -> Result<(), String> {
         },
         "name": "Remined"
     });
-    presets["chosenPreset"] = serde_json::json!(0);
-    presets["apiPreset"] = serde_json::json!(-1);
-    presets["loadedPresets"] = serde_json::json!([preset]);
+    let presets = serde_json::json!({
+        "chosenPreset": 0,
+        "apiPreset": -1,
+        "loadedPresets": [preset]
+    });
     fs::write(
         presets_path,
         serde_json::to_string_pretty(&presets).map_err(|e| e.to_string())?,
@@ -291,6 +310,61 @@ fn read_skin_data_url(path: String) -> Result<Option<String>, String> {
     Ok(Some(format!("data:image/png;base64,{}", base64_encode(&bytes))))
 }
 
+fn is_http_url(s: &str) -> bool {
+    let t = s.trim();
+    t.starts_with("https://") || t.starts_with("http://")
+}
+
+/// If `skin` is an http(s) URL, download into `.remined/skins/active.png`.
+/// Local paths are returned unchanged.
+async fn materialize_skin(root: &Path, skin: &str) -> Result<PathBuf, String> {
+    let skin = skin.trim();
+    if skin.is_empty() {
+        return Err("Empty skin path".into());
+    }
+    if !is_http_url(skin) {
+        let p = PathBuf::from(skin);
+        if !p.is_file() {
+            return Err(format!("Skin file not found: {skin}"));
+        }
+        return Ok(p);
+    }
+
+    let client = reqwest::Client::builder()
+        .user_agent("ReminedLauncher/0.2")
+        .build()
+        .map_err(|e| e.to_string())?;
+    let bytes = client
+        .get(skin)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .error_for_status()
+        .map_err(|e| e.to_string())?
+        .bytes()
+        .await
+        .map_err(|e| e.to_string())?;
+    if bytes.len() < 24 || &bytes[0..8] != b"\x89PNG\r\n\x1a\n" {
+        return Err("Downloaded skin is not a PNG".into());
+    }
+    if bytes.len() > 256 * 1024 {
+        return Err("Downloaded skin is too large".into());
+    }
+
+    let dir = root.join(".remined").join("skins");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let dest = dir.join("active.png");
+    fs::write(&dest, &bytes).map_err(|e| e.to_string())?;
+    Ok(dest)
+}
+
+#[tauri::command]
+async fn materialize_skin_path(app: AppHandle, skin: String) -> Result<String, String> {
+    let root = paths::remined_root(&app)?;
+    let path = materialize_skin(&root, &skin).await?;
+    Ok(path.display().to_string())
+}
+
 #[tauri::command]
 fn get_game_phase(session: State<'_, Mutex<GameSession>>) -> GamePhase {
     let mut session = session.lock().expect("game session lock");
@@ -324,6 +398,28 @@ async fn fetch_pack_release(pack_id: String) -> Result<PackRelease, String> {
 async fn sync_selected_pack(app: AppHandle, pack_id: String) -> Result<PackStatus, String> {
     let root = paths::remined_root(&app)?;
     pack_sync::sync_pack(&app, &root, &pack_id).await
+}
+
+#[tauri::command]
+fn get_pack_status(app: AppHandle, pack_id: String) -> Result<PackStatus, String> {
+    let root = paths::remined_root(&app)?;
+    Ok(pack_sync::pack_status(&root, &pack_id))
+}
+
+/// Download/update pack zip, then ensure Fabric libraries + assets.
+#[tauri::command]
+async fn ensure_pack(app: AppHandle, pack_id: String) -> Result<PackStatus, String> {
+    let root = paths::remined_root(&app)?;
+    if pack_id.trim().is_empty() {
+        return Err("No pack selected".into());
+    }
+    onboarding::ensure_pack(&app, &root, pack_id.trim()).await
+}
+
+#[tauri::command]
+fn delete_pack(app: AppHandle, pack_id: String) -> Result<(), String> {
+    let root = paths::remined_root(&app)?;
+    pack_sync::delete_pack(&root, &pack_id)
 }
 
 #[tauri::command]
@@ -394,10 +490,22 @@ async fn launch_pack(
         return Err(err);
     }
     if let Some(ref skin) = skin_path {
-        if let Err(err) = apply_skinshuffle(&instance, Path::new(skin)) {
-            session.lock().expect("game session lock").phase = GamePhase::Idle;
-            return Err(err);
+        match materialize_skin(&root, skin).await {
+            Ok(local) => {
+                if let Err(err) = apply_skinshuffle(&instance, &local) {
+                    session.lock().expect("game session lock").phase = GamePhase::Idle;
+                    return Err(err);
+                }
+            }
+            Err(err) => {
+                session.lock().expect("game session lock").phase = GamePhase::Idle;
+                return Err(err);
+            }
         }
+    } else if let Err(err) = clear_skinshuffle(&instance) {
+        // No cloud skin → default Steve (don't keep previous account's SkinShuffle preset)
+        session.lock().expect("game session lock").phase = GamePhase::Idle;
+        return Err(err);
     }
 
     let java_info = java_runtime::find_java25(&root, profile.java_path.as_deref());
@@ -489,6 +597,7 @@ pub fn run() {
             save_profile,
             probe_java,
             read_skin_data_url,
+            materialize_skin_path,
             launch_pack,
             get_game_phase,
             get_app_version,
@@ -497,6 +606,9 @@ pub fn run() {
             fetch_pack_catalog,
             fetch_pack_release,
             sync_selected_pack,
+            get_pack_status,
+            ensure_pack,
+            delete_pack,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

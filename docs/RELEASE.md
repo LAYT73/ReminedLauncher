@@ -5,14 +5,18 @@
 Bump together:
 
 - `package.json` → `version`
+- `package-lock.json` → root `version`
 - `src-tauri/tauri.conf.json` → `version`
 - `src-tauri/Cargo.toml` → `version`
+- `src-tauri/Cargo.lock` → `name = "remined"` package version
+- `.github/workflows/release.yml` → `tagName` / `releaseName` / body
+- `src/App.tsx` → fallback version strings (UI before `get_app_version`)
 
 Tag and push:
 
 ```bash
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 GitHub Actions (`.github/workflows/release.yml`) builds **macOS** (arm64 + x64) and **Windows**, uploads a Release, and publishes `latest.json` for the updater.

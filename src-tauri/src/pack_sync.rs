@@ -240,12 +240,7 @@ async fn download_file(url: &str, dest: &Path, app: &AppHandle) -> Result<(), St
         downloaded += chunk.len() as u64;
         if total > 0 {
             let pct = 10 + ((downloaded as f64 / total as f64) * 70.0) as u32;
-            progress::emit(
-                app,
-                "pack",
-                pct.min(80),
-                format!("Downloading pack… {}%", pct.min(80)),
-            );
+            progress::emit(app, "pack", pct.min(80), "Downloading pack…");
         }
     }
     Ok(())
@@ -428,4 +423,38 @@ pub async fn sync_pack(app: &AppHandle, root: &Path, pack_id: &str) -> Result<Pa
         remote: Some(release),
         path: dest.display().to_string(),
     })
+}
+
+/// Remove an installed pack directory (and cached zip if present).
+pub fn delete_pack(root: &Path, pack_id: &str) -> Result<(), String> {
+    let id = pack_id.trim();
+    if id.is_empty() || id.contains('/') || id.contains('\\') || id.contains("..") {
+        return Err("Invalid pack id".into());
+    }
+    let dest = pack_dir(root, id);
+    if !dest.exists() {
+        return Err(format!("Pack `{id}` is not installed"));
+    }
+    // Only delete under packs/ or known install roots — never wipe random paths
+    let packs_root = root.join("packs");
+    let under_packs = dest.starts_with(&packs_root);
+    let under_root_named = dest.parent() == Some(root) && dest.file_name().and_then(|n| n.to_str()) == Some(id);
+    if !under_packs && !under_root_named {
+        return Err("Refusing to delete pack outside packs folder".into());
+    }
+    fs::remove_dir_all(&dest).map_err(|e| e.to_string())?;
+
+    let cache = root.join(".remined").join("cache");
+    if cache.is_dir() {
+        if let Ok(entries) = fs::read_dir(&cache) {
+            for e in entries.flatten() {
+                let name = e.file_name().to_string_lossy().to_string();
+                if name.starts_with(id) {
+                    let _ = fs::remove_file(e.path());
+                    let _ = fs::remove_dir_all(e.path());
+                }
+            }
+        }
+    }
+    Ok(())
 }
