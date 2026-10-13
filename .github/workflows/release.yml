@@ -23,6 +23,9 @@ jobs:
             args: ""
 
     runs-on: ${{ matrix.platform }}
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - uses: actions/checkout@v4
@@ -79,10 +82,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
-          releaseName: Remined ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
+          tagName: v0.2.0
+          releaseName: Remined v0.2.0
           releaseBody: |
-            Remined launcher ${{ github.ref_name }}.
+            Remined launcher v0.2.0.
             macOS (arm64 + x64) and Windows builds.
           releaseDraft: false
           prerelease: false
