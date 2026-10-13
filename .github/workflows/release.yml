@@ -82,12 +82,12 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v0.4.0
-          releaseName: Remined v0.4.0
+          tagName: v0.4.1
+          releaseName: Remined v0.4.1
           releaseBody: |
-            Remined launcher v0.4.0 — Network Play via Steam Porthole (Open to LAN Join).
+            Remined launcher v0.4.1 — Network Play via Steam Porthole (Open to LAN Join).
             macOS (arm64 + x64) and Windows builds.
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }} ${{ steps.updater.outputs.extra }}
-          uploadUpdaterJson: ${{ steps.updater.outputs.upload_updater }}
+          includeUpdaterJson: ${{ steps.updater.outputs.upload_updater }}

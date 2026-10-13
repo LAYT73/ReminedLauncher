@@ -187,7 +187,7 @@ export default function App() {
   const [topTab, setTopTab] = useState<TopTab>("home");
   const [rail, setRail] = useState<"home" | "java" | "settings">("home");
   const [javaInfo, setJavaInfo] = useState<JavaInfo | null>(null);
-  const [appVersion, setAppVersion] = useState("0.4.0");
+  const [appVersion, setAppVersion] = useState("0.4.1");
   const [updateBusy, setUpdateBusy] = useState(false);
   const [packBusy, setPackBusy] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -222,7 +222,7 @@ export default function App() {
           invoke<Pack[]>("list_packs"),
           invoke<Profile>("get_profile"),
           invoke<GamePhase>("get_game_phase"),
-          invoke<string>("get_app_version").catch(() => "0.4.0"),
+          invoke<string>("get_app_version").catch(() => "0.4.1"),
           fetchCatalogFromSupabase().catch(() => [] as CatalogPack[]),
         ]);
       const next = normalizeProfile(saved);
