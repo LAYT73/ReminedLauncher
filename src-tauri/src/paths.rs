@@ -46,8 +46,8 @@ pub fn onboarding_path(root: &Path) -> PathBuf {
     root.join(".remined").join("onboarding.json")
 }
 
-pub fn runtime_java_dir(root: &Path) -> PathBuf {
-    root.join(".remined").join("runtime").join("jdk-25")
+pub fn runtime_java_dir(root: &Path, major: u32) -> PathBuf {
+    root.join(".remined").join("runtime").join(format!("jdk-{major}"))
 }
 
 pub fn pack_dir(root: &Path, pack_id: &str) -> PathBuf {

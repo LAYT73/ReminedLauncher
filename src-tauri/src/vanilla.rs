@@ -199,6 +199,7 @@ pub async fn install_version(
 
     progress::emit(app, "pack", 25, "Downloading client…");
     download_to_file(&client, client_url, &client_jar_path).await?;
+    progress::check_cancelled()?;
     progress::emit(app, "pack", 55, "Client ready");
 
     let java_major = version

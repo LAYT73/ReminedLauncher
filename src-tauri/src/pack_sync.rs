@@ -236,6 +236,7 @@ async fn download_file(url: &str, dest: &Path, app: &AppHandle) -> Result<(), St
     let mut file = File::create(dest).map_err(|e| e.to_string())?;
     let mut downloaded: u64 = 0;
     while let Some(chunk) = resp.chunk().await.map_err(|e| e.to_string())? {
+        progress::check_cancelled()?;
         file.write_all(&chunk).map_err(|e| e.to_string())?;
         downloaded += chunk.len() as u64;
         if total > 0 {
@@ -307,8 +308,10 @@ fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
 }
 
 pub async fn sync_pack(app: &AppHandle, root: &Path, pack_id: &str) -> Result<PackStatus, String> {
+    progress::check_cancelled()?;
     progress::emit(app, "pack", 2, "Fetching pack catalog…");
     let release = fetch_release(pack_id).await?;
+    progress::check_cancelled()?;
     let dest = pack_dir(root, pack_id);
 
     if instance::is_pack_installed(&dest) {
@@ -364,6 +367,7 @@ pub async fn sync_pack(app: &AppHandle, root: &Path, pack_id: &str) -> Result<Pa
         .join(&release.artifact);
     progress::emit(app, "pack", 8, format!("Downloading {}…", release.artifact));
     download_file(&url, &zip_path, app).await?;
+    progress::check_cancelled()?;
 
     match sha256_file(&zip_path) {
         Ok(hash) if hash != release.sha256.to_lowercase() => {

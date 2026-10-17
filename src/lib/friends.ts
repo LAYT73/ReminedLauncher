@@ -2,6 +2,7 @@ import { supabase } from "./supabase";
 import type { CloudProfile } from "./cloudProfile";
 import { findProfileByReminedId, normalizeReminedId } from "./cloudProfile";
 import { isPresenceFresh } from "./presence";
+import { normalizeSkinModel } from "./skinModel";
 
 export type FriendshipStatus = "pending" | "accepted" | "blocked";
 
@@ -50,7 +51,7 @@ export async function listFriendships(userId: string): Promise<FriendRow[]> {
   );
   const { data: profiles, error: pErr } = await supabase
     .from("profiles")
-    .select("id, nick, username, skin_path")
+    .select("id, nick, username, skin_path, skin_model")
     .in("id", otherIds);
   if (pErr) throw new Error(pErr.message || "Could not load profiles");
 
@@ -111,6 +112,7 @@ export async function listFriendships(userId: string): Promise<FriendRow[]> {
         remined_id,
         username: rawUser || `user${remined_id || String(p.id).slice(0, 7)}`,
         skin_path: (p.skin_path as string | null) ?? null,
+        skin_model: normalizeSkinModel(p.skin_model as string | null),
       };
       return [profile.id, profile] as const;
     }),

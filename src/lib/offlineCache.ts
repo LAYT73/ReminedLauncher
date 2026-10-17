@@ -1,4 +1,5 @@
 import type { CatalogPack } from "./packsCatalog";
+import { normalizeSkinModel, type SkinModelKind } from "./skinModel";
 
 const KEY = "remined.offline.v1";
 
@@ -8,6 +9,7 @@ export type OfflineAccount = {
   remined_id: string | null;
   username: string;
   skin_path: string | null;
+  skin_model?: SkinModelKind;
   /** Local data-URL fallback when CDN is unreachable. */
   skin_data_url: string | null;
 };
@@ -73,7 +75,12 @@ export function cacheCatalog(catalog: CatalogPack[]): void {
 }
 
 export function cacheAccount(account: OfflineAccount): void {
-  patchOfflineCache({ account });
+  patchOfflineCache({
+    account: {
+      ...account,
+      skin_model: normalizeSkinModel(account.skin_model),
+    },
+  });
 }
 
 export function cacheOnboardingCompleted(done: boolean): void {

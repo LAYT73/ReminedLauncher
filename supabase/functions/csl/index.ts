@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
   // Case-insensitive username match (profiles.username)
   const { data: rows, error } = await supabase
     .from("profiles")
-    .select("nick, username, skin_path")
+    .select("nick, username, skin_path, skin_model")
     .ilike("username", rawName.replace(/[%_]/g, ""))
     .limit(5);
 
@@ -113,14 +113,14 @@ Deno.serve(async (req) => {
 
   const nick = (row.nick as string).toLowerCase();
   const username = (row.username as string).trim();
+  // Only expose the chosen model so friends see slim vs wide correctly on LAN.
+  const model = row.skin_model === "slim" ? "slim" : "default";
 
-  // CustomSkinAPI: textures.default / textures.slim + shorthand skin=
+  // CustomSkinAPI: skins/textures.default = classic, .slim = Alex arms
   return json({
     username,
     skin: nick,
-    textures: {
-      default: nick,
-      slim: nick,
-    },
+    skins: { [model]: nick },
+    textures: { [model]: nick },
   });
 });

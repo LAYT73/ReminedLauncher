@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   openPortholeOnSteam,
   openPortholeStore,
+  openSteamClient,
   portholeSelftest,
   portholeStatus,
   type PortholeCheckResult,
@@ -59,6 +60,21 @@ export function NetworkPlayPanel({
     }
   }
 
+  async function launchSteamApp() {
+    if (busy || checking) return;
+    setBusy(true);
+    setError("");
+    try {
+      const msg = await openSteamClient();
+      onToast(msg || "Opening Steam…");
+      window.setTimeout(() => void refresh(), 4000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function runCheck() {
     if (busy || checking) return;
     setChecking(true);
@@ -67,7 +83,18 @@ export function NetworkPlayPanel({
       const result = await portholeSelftest();
       setCheck(result);
       await refresh();
-      onToast(result.ok ? "Porthole check passed" : "Porthole check failed");
+      if (result.ok) {
+        onToast("Porthole check passed");
+      } else if (!result.steam_ok) {
+        onToast("Steam closed — opening Steam…");
+        try {
+          await openSteamClient();
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      } else {
+        onToast("Porthole check failed");
+      }
     } catch (err) {
       setCheck(null);
       setError(err instanceof Error ? err.message : String(err));
@@ -135,6 +162,16 @@ export function NetworkPlayPanel({
               >
                 {checking ? "Checking…" : "Check"}
               </button>
+              {check && !check.ok && !check.steam_ok ? (
+                <button
+                  type="button"
+                  className="btn-mc"
+                  disabled={busy || checking}
+                  onClick={() => void launchSteamApp()}
+                >
+                  Open Steam
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="btn-mc dim"

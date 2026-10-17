@@ -58,7 +58,7 @@ export async function resolveMediaFromDisk(urls: string[]): Promise<void> {
   }
 }
 
-/** Online: download missing into `.remined/cache/media/`, return data-URLs. */
+/** Online: refresh from network into `.remined/cache/media/` (disk = fallback). */
 export async function warmMediaCache(urls: string[]): Promise<void> {
   const list = [...new Set(urls.map((u) => u.trim()).filter(isHttp))];
   if (list.length === 0) return;

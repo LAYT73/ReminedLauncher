@@ -74,16 +74,18 @@ fn read_path_data_url(path: &Path) -> Result<String, String> {
     Ok(bytes_to_data_url(&bytes, ext))
 }
 
+/// Online path: always fetch from network and overwrite disk.
+/// Callers fall back to [`find_cached`] only when this returns an error.
 async fn download_to_cache(root: &Path, url: &str) -> Result<PathBuf, String> {
-    if let Some(existing) = find_cached(root, url) {
-        return Ok(existing);
-    }
     let client = reqwest::Client::builder()
         .user_agent("ReminedLauncher/0.4")
         .build()
         .map_err(|e| e.to_string())?;
     let resp = client
         .get(url.trim())
+        // Bust intermediary caches when the remote asset is replaced in-place
+        // (same URL, new bytes — e.g. pack logo.png on GitHub raw).
+        .header(reqwest::header::CACHE_CONTROL, "no-cache")
         .send()
         .await
         .map_err(|e| e.to_string())?
@@ -104,7 +106,16 @@ async fn download_to_cache(root: &Path, url: &str) -> Result<PathBuf, String> {
     let ext = ext_for(url, ctype.as_deref());
     let dir = media_dir(root);
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let dest = dir.join(format!("{}.{ext}", url_key(url)));
+    let key = url_key(url);
+    // Drop stale siblings if content-type/ext changed
+    for old in ["png", "jpg", "webp", "gif", "bin"] {
+        if old == ext {
+            continue;
+        }
+        let p = dir.join(format!("{key}.{old}"));
+        let _ = fs::remove_file(p);
+    }
+    let dest = dir.join(format!("{key}.{ext}"));
     fs::write(&dest, &bytes).map_err(|e| e.to_string())?;
     Ok(dest)
 }
@@ -126,7 +137,7 @@ pub fn resolve_many(root: &Path, urls: &[String]) -> HashMap<String, String> {
     out
 }
 
-/// Download missing assets, then return data-URLs for everything available.
+/// Online: prefer network, refresh disk cache; fall back to disk if fetch fails.
 pub async fn ensure_many(root: &Path, urls: &[String]) -> HashMap<String, String> {
     let mut out = HashMap::new();
     for url in urls {
@@ -141,8 +152,8 @@ pub async fn ensure_many(root: &Path, urls: &[String]) -> HashMap<String, String
                 }
             }
             Err(err) => {
-                eprintln!("[remined] media cache miss {u}: {err}");
-                // Still try stale cache if download failed
+                eprintln!("[remined] media refresh failed {u}: {err}");
+                // Offline/network error: serve last good cache
                 if let Some(path) = find_cached(root, u) {
                     if let Ok(data) = read_path_data_url(&path) {
                         out.insert(u.to_string(), data);

@@ -43,11 +43,22 @@ fn parse_java_major(text: &str) -> Option<u32> {
         let idx = line.find(marker)?;
         let rest = &line[idx + marker.len()..];
         let ver = rest.split('"').next()?;
-        ver.split('.').next()?.parse().ok()
+        // "1.8.0_xxx" → 8; "17.0.x" / "25.0.x" → 17 / 25
+        let first = ver.split('.').next()?.parse::<u32>().ok()?;
+        if first == 1 {
+            ver.split('.').nth(1)?.parse().ok()
+        } else {
+            Some(first)
+        }
     })
 }
 
+#[allow(dead_code)]
 pub fn probe_java_bin(java: &Path) -> Option<JavaInfo> {
+    probe_java_bin_for(java, None)
+}
+
+fn probe_java_bin_for(java: &Path, want_major: Option<u32>) -> Option<JavaInfo> {
     if !java.is_file() {
         return None;
     }
@@ -64,15 +75,40 @@ pub fn probe_java_bin(java: &Path) -> Option<JavaInfo> {
     };
     let first = text.lines().next().unwrap_or("unknown").to_string();
     let major = parse_java_major(&text);
+    let ok = match (want_major, major) {
+        (Some(want), Some(have)) => have == want,
+        (None, Some(25)) => true,
+        (None, _) => false,
+        _ => false,
+    };
     Some(JavaInfo {
         path: java.display().to_string(),
         version: first,
         major,
-        ok: major == Some(25),
+        ok,
     })
 }
 
-pub fn find_java25(root: &Path, preferred: Option<&str>) -> JavaInfo {
+fn java_exe_name() -> &'static str {
+    if cfg!(windows) {
+        "java.exe"
+    } else {
+        "java"
+    }
+}
+
+fn homebrew_java_candidates(major: u32) -> Vec<PathBuf> {
+    vec![
+        PathBuf::from(format!("/opt/homebrew/opt/openjdk@{major}/bin/java")),
+        PathBuf::from(format!("/usr/local/opt/openjdk@{major}/bin/java")),
+        PathBuf::from("/opt/homebrew/opt/openjdk/bin/java"),
+        PathBuf::from("/usr/local/opt/openjdk/bin/java"),
+        PathBuf::from("/usr/bin/java"),
+    ]
+}
+
+/// Find a Java binary matching `major` (17 / 21 / 25…).
+pub fn find_java(root: &Path, major: u32, preferred: Option<&str>) -> JavaInfo {
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Some(p) = preferred.map(str::trim).filter(|s| !s.is_empty()) {
         let pb = PathBuf::from(p);
@@ -82,9 +118,8 @@ pub fn find_java25(root: &Path, preferred: Option<&str>) -> JavaInfo {
             candidates.push(pb);
         }
     }
-    let runtime = runtime_java_dir(root);
+    let runtime = runtime_java_dir(root, major);
     candidates.push(runtime.join("bin").join(java_exe_name()));
-    // nested extract (jdk-25+xx.jdk/Contents/Home on mac)
     if let Ok(entries) = fs::read_dir(&runtime) {
         for e in entries.flatten() {
             let p = e.path();
@@ -92,40 +127,31 @@ pub fn find_java25(root: &Path, preferred: Option<&str>) -> JavaInfo {
             candidates.push(p.join("Contents/Home/bin").join(java_exe_name()));
         }
     }
-    candidates.push(PathBuf::from("/opt/homebrew/opt/openjdk@25/bin/java"));
-    candidates.push(PathBuf::from("/opt/homebrew/opt/openjdk/bin/java"));
-    candidates.push(PathBuf::from("/usr/bin/java"));
+    candidates.extend(homebrew_java_candidates(major));
 
-    for java in candidates {
-        if let Some(info) = probe_java_bin(&java) {
+    for java in &candidates {
+        if let Some(info) = probe_java_bin_for(java, Some(major)) {
             if info.ok {
                 return info;
             }
         }
     }
-    // return best effort non-ok
-    for java in [
-        PathBuf::from("/usr/bin/java"),
-        runtime_java_dir(root).join("bin").join(java_exe_name()),
-    ] {
-        if let Some(info) = probe_java_bin(&java) {
+    // Best-effort: return whatever we found (ok=false) so UI can show the version.
+    for java in &candidates {
+        if let Some(info) = probe_java_bin_for(java, Some(major)) {
             return info;
         }
     }
     JavaInfo {
         path: String::new(),
-        version: "Java 25 not found".into(),
+        version: format!("Java {major} not found"),
         major: None,
         ok: false,
     }
 }
 
-fn java_exe_name() -> &'static str {
-    if cfg!(windows) {
-        "java.exe"
-    } else {
-        "java"
-    }
+pub fn find_java25(root: &Path, preferred: Option<&str>) -> JavaInfo {
+    find_java(root, 25, preferred)
 }
 
 fn find_extracted_java(dir: &Path) -> Option<PathBuf> {
@@ -208,7 +234,6 @@ fn extract_archive(archive: &Path, dest: &Path) -> Result<(), String> {
             }
         }
     } else {
-        // .tar.gz
         let file = File::open(archive).map_err(|e| e.to_string())?;
         let gz = GzDecoder::new(file);
         let mut archive = Archive::new(gz);
@@ -217,37 +242,46 @@ fn extract_archive(archive: &Path, dest: &Path) -> Result<(), String> {
     Ok(())
 }
 
-pub async fn ensure_java25(app: &AppHandle, root: &Path) -> Result<JavaInfo, String> {
-    let existing = find_java25(root, None);
+/// Ensure a managed JDK for `major` exists (downloads from Adoptium if needed).
+pub async fn ensure_java(app: &AppHandle, root: &Path, major: u32) -> Result<JavaInfo, String> {
+    let existing = find_java(root, major, None);
     if existing.ok {
-        progress::emit(app, "java", 100, "Java 25 ready");
+        progress::emit(app, "java", 100, format!("Java {major} ready"));
         return Ok(existing);
     }
 
-    progress::emit(app, "java", 2, "Downloading OpenJDK 25…");
+    progress::emit(app, "java", 2, format!("Downloading OpenJDK {major}…"));
     let (os, arch) = os_arch()?;
     let url = format!(
-        "https://api.adoptium.net/v3/binary/latest/25/ga/{os}/{arch}/jdk/hotspot/normal/eclipse?project=jdk"
+        "https://api.adoptium.net/v3/binary/latest/{major}/ga/{os}/{arch}/jdk/hotspot/normal/eclipse?project=jdk"
     );
-    let runtime = runtime_java_dir(root);
+    let runtime = runtime_java_dir(root, major);
     let _ = fs::remove_dir_all(&runtime);
     fs::create_dir_all(&runtime).map_err(|e| e.to_string())?;
     let ext = if cfg!(windows) { "zip" } else { "tar.gz" };
     let archive = root
         .join(".remined")
         .join("runtime")
-        .join(format!("jdk-25-download.{ext}"));
+        .join(format!("jdk-{major}-download.{ext}"));
     download_to_file(&url, &archive, app, "java").await?;
-    progress::emit(app, "java", 92, "Extracting Java…");
+    progress::emit(app, "java", 92, format!("Extracting Java {major}…"));
     extract_archive(&archive, &runtime)?;
     let _ = fs::remove_file(&archive);
 
-    let java = find_extracted_java(&runtime).ok_or_else(|| "Java binary missing after extract".to_string())?;
-    // Normalize layout: if nested, leave as-is — find_java25 searches
-    let info = probe_java_bin(&java).ok_or_else(|| "Failed to probe installed Java".to_string())?;
+    let java = find_extracted_java(&runtime)
+        .ok_or_else(|| format!("Java {major} binary missing after extract"))?;
+    let info = probe_java_bin_for(&java, Some(major))
+        .ok_or_else(|| "Failed to probe installed Java".to_string())?;
     if !info.ok {
-        return Err(format!("Installed Java is not 25: {}", info.version));
+        return Err(format!(
+            "Installed Java is not {major}: {}",
+            info.version
+        ));
     }
-    progress::emit(app, "java", 100, "Java 25 installed");
+    progress::emit(app, "java", 100, format!("Java {major} installed"));
     Ok(info)
+}
+
+pub async fn ensure_java25(app: &AppHandle, root: &Path) -> Result<JavaInfo, String> {
+    ensure_java(app, root, 25).await
 }

@@ -1,10 +1,15 @@
 import { supabase } from "./supabase";
+import {
+  normalizeSkinModel,
+  type SkinModelKind,
+} from "./skinModel";
 
 export type CloudProfile = {
   id: string;
   remined_id: string;
   username: string;
   skin_path: string | null;
+  skin_model: SkinModelKind;
 };
 
 const ID_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
@@ -59,6 +64,7 @@ type ProfileRow = {
   nick: string | null;
   username: string | null;
   skin_path: string | null;
+  skin_model?: string | null;
 };
 
 function asCloud(row: ProfileRow): CloudProfile {
@@ -72,10 +78,11 @@ function asCloud(row: ProfileRow): CloudProfile {
       id: row.id,
     }),
     skin_path: row.skin_path,
+    skin_model: normalizeSkinModel(row.skin_model),
   };
 }
 
-const SELECT = "id, nick, username, skin_path";
+const SELECT = "id, nick, username, skin_path, skin_model";
 
 async function allocateReminedId(userId: string, row: ProfileRow | null): Promise<ProfileRow> {
   for (let attempt = 0; attempt < 8; attempt++) {
@@ -244,4 +251,22 @@ export async function updateCloudSkinUrl(
     })
     .eq("id", userId);
   if (error) throw new Error(error.message);
+}
+
+export async function updateCloudSkinModel(
+  userId: string,
+  model: SkinModelKind,
+): Promise<SkinModelKind> {
+  const skin_model = normalizeSkinModel(model);
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({
+      skin_model,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", userId)
+    .select(SELECT)
+    .single();
+  if (error) throw new Error(error.message);
+  return asCloud(data as ProfileRow).skin_model;
 }

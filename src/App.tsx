@@ -7,7 +7,7 @@ import {
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-dialog";
+import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import type { Session } from "@supabase/supabase-js";
@@ -20,13 +20,19 @@ import { PackSelect } from "./components/PackSelect";
 import { PixelProgress } from "./components/PixelProgress";
 import { PlayButton } from "./components/PlayButton";
 import { EnchantParticles } from "./components/EnchantParticles";
+import { PageMotion } from "./components/PageMotion";
 import { SkinHead } from "./components/SkinHead";
 import { SkinModel } from "./components/SkinModel";
-import { Toast } from "./components/Toast";
+import { Toast, type ToastTone } from "./components/Toast";
 import {
   ensureCloudProfile,
+  updateCloudSkinModel,
   updateCloudUsername,
 } from "./lib/cloudProfile";
+import {
+  normalizeSkinModel,
+  type SkinModelKind,
+} from "./lib/skinModel";
 import {
   CatalogPack,
   fetchCatalogFromSupabase,
@@ -39,6 +45,7 @@ import {
   clearOfflineAccount,
   readOfflineCache,
 } from "./lib/offlineCache";
+import { readLastPlayed, writeLastPlayed } from "./lib/lastPlayed";
 import {
   collectCatalogMediaUrls,
   localizeCatalog,
@@ -50,12 +57,16 @@ import {
   isBrowserOnline,
   probeOnline,
   subscribeConnectivity,
+  withTimeout,
 } from "./lib/network";
 import { clearAccountSkin, publishAccountSkin } from "./lib/skinsCloud";
 import { supabase } from "./lib/supabase";
 import brandLogo from "./assets/logo.png";
 import vanillaLogo from "./assets/vanilla.png";
+import reminedVanillaLogo from "./assets/remined-vanilla-logo.png";
 import vanillaWallpaper from "./assets/vanilla-wallpaper.jpg";
+import homeWallpaperVideo from "./assets/home-wallpaper.mp4";
+import homeMcLogo from "./assets/home-mc-logo.png";
 import { setPresence } from "./lib/presence";
 import type { FriendRow } from "./lib/friends";
 import { canJoinFriend } from "./lib/friends";
@@ -93,6 +104,7 @@ type Pack = {
 type Profile = {
   username: string;
   skin_path: string | null;
+  skin_model: SkinModelKind;
   selected_pack: string;
   ram_mb: number;
   java_path: string | null;
@@ -112,6 +124,7 @@ const RAM_OPTIONS_GB = [2, 4, 6, 8, 10, 12, 16] as const;
 const DEFAULT_PROFILE: Profile = {
   username: "Player",
   skin_path: null,
+  skin_model: "default",
   selected_pack: "",
   ram_mb: 4096,
   java_path: null,
@@ -123,6 +136,7 @@ function normalizeProfile(raw: Partial<Profile> | null | undefined): Profile {
   return {
     ...DEFAULT_PROFILE,
     ...raw,
+    skin_model: normalizeSkinModel(raw?.skin_model),
     ram_mb: Math.max(1024, Number(raw?.ram_mb) || DEFAULT_PROFILE.ram_mb),
     java_path: raw?.java_path ?? null,
     jvm_args: raw?.jvm_args ?? "",
@@ -200,6 +214,7 @@ type ProgressEvent = {
 type Gate = "loading" | "auth" | "onboarding" | "app";
 
 const PROGRESS_PHASE: Record<string, string> = {
+  java: "Java",
   pack: "Pack",
   fabric: "Libraries",
   assets: "Assets",
@@ -211,6 +226,10 @@ function isVanillaPackId(packId: string | null | undefined): boolean {
   return Boolean(packId?.startsWith("vanilla-"));
 }
 
+function isReminedVanillaPackId(packId: string | null | undefined): boolean {
+  return Boolean(packId?.startsWith("remined-vanilla-"));
+}
+
 export default function App() {
   const [gate, setGate] = useState<Gate>("loading");
   const [bootLeaving, setBootLeaving] = useState(false);
@@ -220,6 +239,7 @@ export default function App() {
   const [mediaTick, setMediaTick] = useState(0);
   const themeReadyRef = useRef(false);
   const offlineModeRef = useRef(false);
+  const reconnectingRef = useRef(false);
   const [packs, setPacks] = useState<Pack[]>([]);
   const [catalog, setCatalog] = useState<CatalogPack[]>([]);
   const [installedIds, setInstalledIds] = useState<Set<string>>(new Set());
@@ -230,10 +250,16 @@ export default function App() {
   const [phase, setPhase] = useState<GamePhase>("idle");
   const [topTab, setTopTab] = useState<TopTab>("home");
   const [rail, setRail] = useState<
-    "home" | "java" | "vanilla" | "installations" | "settings" | "profile"
+    | "home"
+    | "java"
+    | "vanilla"
+    | "remined-vanilla"
+    | "installations"
+    | "settings"
+    | "profile"
   >("home");
   const [javaInfo, setJavaInfo] = useState<JavaInfo | null>(null);
-  const [appVersion, setAppVersion] = useState("0.4.2");
+  const [appVersion, setAppVersion] = useState("0.5.0");
   const [updateBusy, setUpdateBusy] = useState(false);
   const [packBusy, setPackBusy] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -243,13 +269,27 @@ export default function App() {
   const [vanillaVersions, setVanillaVersions] = useState<VanillaVersionRow[]>(
     [],
   );
-  const [vanillaPick, setVanillaPick] = useState("");
+  const [vanillaPick, setVanillaPick] = useState(
+    () => readLastPlayed().vanilla ?? "",
+  );
   const [vanillaBusy, setVanillaBusy] = useState(false);
   const [vanillaLoaded, setVanillaLoaded] = useState(false);
+  const [rvVersions, setRvVersions] = useState<VanillaVersionRow[]>([]);
+  const [rvPick, setRvPick] = useState(
+    () => readLastPlayed()["remined-vanilla"] ?? "",
+  );
+  const [rvBusy, setRvBusy] = useState(false);
+  const [rvLoaded, setRvLoaded] = useState(false);
   /** Pack actually launched this session (vanilla or remine) — for LAN/presence. */
   const [runningPackId, setRunningPackId] = useState<string | null>(null);
   const [reminedId, setReminedId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastTone, setToastTone] = useState<ToastTone>("default");
+
+  function showToast(message: string, tone: ToastTone = "default") {
+    setToastTone(tone);
+    setToast(message);
+  }
   const [usernameDraft, setUsernameDraft] = useState<string | null>(null);
   const [usernameBusy, setUsernameBusy] = useState(false);
   const [hostingLan, setHostingLan] = useState<HostingLan | null>(null);
@@ -257,6 +297,10 @@ export default function App() {
   const hostingBusyRef = useRef(false);
   const lastHostPortRef = useRef<number | null>(null);
   const hostFailRef = useRef<{ port: number; at: number } | null>(null);
+  /** Keep home wallpaper <video> mounted so return visits don't re-decode. */
+  const homeVideoRef = useRef<HTMLVideoElement | null>(null);
+  const [homeVideoKept, setHomeVideoKept] = useState(false);
+  const [homeVideoReady, setHomeVideoReady] = useState(false);
 
   async function refreshJava(path?: string | null) {
     try {
@@ -271,35 +315,45 @@ export default function App() {
 
   async function bootstrapLauncher() {
     try {
+      // Offline / flaky net: never wait on Supabase/GitHub catalog forever.
+      const catalogPromise = offlineModeRef.current
+        ? Promise.resolve(readOfflineCache().catalog)
+        : withTimeout(fetchCatalogFromSupabase(), 5000, () => {
+            const cached = readOfflineCache().catalog;
+            return cached.length > 0 ? cached : ([] as CatalogPack[]);
+          });
+
       const [packList, saved, gamePhase, version, remoteCatalog] =
         await Promise.all([
           invoke<Pack[]>("list_packs"),
           invoke<Profile>("get_profile"),
           invoke<GamePhase>("get_game_phase"),
-          invoke<string>("get_app_version").catch(() => "0.4.2"),
-          fetchCatalogFromSupabase().catch(() => [] as CatalogPack[]),
+          invoke<string>("get_app_version").catch(() => "0.5.0"),
+          catalogPromise,
         ]);
       const next = normalizeProfile(saved);
       setCatalog(remoteCatalog);
-      setPacks(packList);
 
-      // Prefer installed packs; fall back to catalog ids for selection UI
-      const merged: Pack[] =
-        packList.length > 0
-          ? packList.map((p) => {
-              const meta = remoteCatalog.find((c) => c.id === p.id);
-              return {
-                ...p,
-                name: meta?.name || p.name,
-                description: meta?.blurb || p.description,
-              };
-            })
-          : remoteCatalog.map((c) => ({
-              id: c.id,
-              name: c.name,
-              version: "—",
-              description: c.blurb,
-            }));
+      // Union catalog + local installs. Important for DMG: a lone vanilla
+      // install must not hide Remined packs that still need Download.
+      const byId = new Map<string, Pack>();
+      for (const c of remoteCatalog) {
+        byId.set(c.id, {
+          id: c.id,
+          name: c.name,
+          version: c.version ?? "—",
+          description: c.blurb,
+        });
+      }
+      for (const p of packList) {
+        const meta = remoteCatalog.find((c) => c.id === p.id);
+        byId.set(p.id, {
+          ...p,
+          name: meta?.name || p.name,
+          description: meta?.blurb || p.description,
+        });
+      }
+      const merged = Array.from(byId.values());
       setPacks(merged);
 
       if (!next.selected_pack || isVanillaPackId(next.selected_pack)) {
@@ -308,11 +362,27 @@ export default function App() {
             packList.find((p) => p.id === next.selected_pack)?.version ??
             next.selected_pack.replace(/^vanilla-/, "");
           setVanillaPick(ver);
+          writeLastPlayed({ vanilla: ver });
         }
+        const lastJava = readLastPlayed().java;
         const def = pickDefaultPack(remoteCatalog);
         const remineId =
-          merged.find((p) => !isVanillaPackId(p.id))?.id ?? def?.id ?? "";
-        if (def) next.selected_pack = def.id;
+          (lastJava &&
+          merged.some(
+            (p) =>
+              p.id === lastJava &&
+              !isVanillaPackId(p.id) &&
+              !isReminedVanillaPackId(p.id),
+          )
+            ? lastJava
+            : null) ??
+          merged.find(
+            (p) => !isVanillaPackId(p.id) && !isReminedVanillaPackId(p.id),
+          )?.id ??
+          def?.id ??
+          "";
+        if (lastJava && remineId === lastJava) next.selected_pack = lastJava;
+        else if (def) next.selected_pack = def.id;
         else if (remineId) next.selected_pack = remineId;
         else next.selected_pack = "";
       }
@@ -403,6 +473,7 @@ export default function App() {
     reminedId: string | null;
     username: string;
     skinPath: string | null;
+    skinModel?: SkinModelKind | null;
   }) {
     let skinData: string | null =
       readOfflineCache().account?.skin_data_url ?? null;
@@ -433,12 +504,18 @@ export default function App() {
       remined_id: opts.reminedId,
       username: opts.username,
       skin_path: opts.skinPath,
+      skin_model: normalizeSkinModel(
+        opts.skinModel ?? readOfflineCache().account?.skin_model,
+      ),
       skin_data_url: skinData,
     });
   }
 
+  const launchPreparing = phase === "launching";
+  const showPlayProgress = installing || launchPreparing;
+
   useEffect(() => {
-    if (!installing) return;
+    if (!showPlayProgress) return;
     let unlisten: (() => void) | undefined;
     void listen<ProgressEvent>("remined-progress", (ev) => {
       setInstallPhase(ev.payload.phase);
@@ -448,7 +525,7 @@ export default function App() {
       unlisten = fn;
     });
     return () => unlisten?.();
-  }, [installing]);
+  }, [showPlayProgress]);
 
   async function syncCloudProfile(nextSession: Session): Promise<Profile> {
     const local = normalizeProfile(await invoke<Profile>("get_profile"));
@@ -462,6 +539,7 @@ export default function App() {
         ...local,
         username: cloud.username.trim() || "Player",
         skin_path: cloud.skin_path ?? null,
+        skin_model: cloud.skin_model,
       };
 
       await persist(next);
@@ -473,6 +551,7 @@ export default function App() {
         reminedId: cloud.remined_id,
         username: next.username,
         skinPath: next.skin_path,
+        skinModel: next.skin_model,
       });
       return next;
     } catch (err) {
@@ -502,6 +581,7 @@ export default function App() {
       ...local,
       username: acct.username.trim() || local.username || "Player",
       skin_path: acct.skin_path ?? local.skin_path,
+      skin_model: normalizeSkinModel(acct.skin_model ?? local.skin_model),
     };
     await persist(next);
     if (acct.skin_data_url) setSkinPreview(acct.skin_data_url);
@@ -518,8 +598,45 @@ export default function App() {
       await resolveMediaFromDisk([skinUrl]);
       setMediaTick((n) => n + 1);
     }
-    if (reason) setToast(reason);
+    if (reason) showToast(reason, "err");
     return true;
+  }
+
+  /** Probe + restore session while staying in the app (no full re-login). */
+  async function tryReconnectFromOffline() {
+    if (!offlineModeRef.current || reconnectingRef.current) return;
+    reconnectingRef.current = true;
+    try {
+      const online = isBrowserOnline() && (await probeOnline());
+      if (!online) return;
+
+      offlineModeRef.current = false;
+      try {
+        const session = await withTimeout(
+          supabase.auth.getSession().then(({ data }) => data.session),
+          6000,
+        );
+        if (!session) {
+          setOfflineMode(false);
+          setSession(null);
+          setGate("auth");
+          setAuthOfflineHint(null);
+          showToast("Back online — sign in to sync", "ok");
+          return;
+        }
+        setOfflineMode(false);
+        setSession(session);
+        await withTimeout(bootstrapLauncher(), 20000);
+        await withTimeout(syncCloudProfile(session), 8000);
+        showToast("Back online", "ok");
+      } catch {
+        offlineModeRef.current = true;
+        setOfflineMode(true);
+        showToast("Still can’t reach the cloud — staying offline", "err");
+      }
+    } finally {
+      reconnectingRef.current = false;
+    }
   }
 
   const usernameCommitted = profile.username.trim() || "Player";
@@ -529,7 +646,7 @@ export default function App() {
 
   async function commitUsername() {
     if (offlineMode) {
-      setToast("Username sync needs internet");
+      showToast("Username sync needs internet");
       return;
     }
     if (!session?.user?.id || !usernameDirty || usernameBusy) return;
@@ -538,9 +655,9 @@ export default function App() {
       const saved = await updateCloudUsername(session.user.id, usernameDraft!);
       await persist({ ...profile, username: saved });
       setUsernameDraft(null);
-      setToast("Username updated");
+      showToast("Username updated");
     } catch (err) {
-      setToast(err instanceof Error ? err.message : String(err));
+      showToast(err instanceof Error ? err.message : String(err));
     } finally {
       setUsernameBusy(false);
     }
@@ -558,11 +675,11 @@ export default function App() {
   }
 
   async function resolveGate(nextSession: Session | null) {
+    // Deliberate offline session — ignore auth callbacks until user leaves it.
+    if (offlineModeRef.current) return;
+
     setSession(nextSession);
     if (!nextSession) {
-      // Stay in offline app if user deliberately continued offline
-      if (offlineModeRef.current) return;
-
       setReminedId(null);
       setSkinPreview(null);
       setUsernameDraft(null);
@@ -593,8 +710,8 @@ export default function App() {
         await leaveBoot("onboarding");
         return;
       }
-      await bootstrapLauncher();
-      await syncCloudProfile(nextSession);
+      await withTimeout(bootstrapLauncher(), 20000);
+      await withTimeout(syncCloudProfile(nextSession), 8000);
       await leaveBoot("app");
     } catch {
       // Network/cloud failure after auth — try cached offline app
@@ -610,9 +727,9 @@ export default function App() {
     if (!reminedId) return;
     try {
       await navigator.clipboard.writeText(reminedId);
-      setToast("Copied Remined id");
+      showToast("Copied Remined id");
     } catch {
-      setToast("Couldn’t copy");
+      showToast("Couldn’t copy");
     }
   }
 
@@ -645,6 +762,67 @@ export default function App() {
       <div
         className={`topnav-profile ${rail === "profile" ? "is-active" : ""}`}
       >
+        {offlineMode ? (
+          <button
+            type="button"
+            className="topnav-offline-btn"
+            title="Offline — click to check connection"
+            aria-label="Offline mode — check connection"
+            onClick={() => {
+              showToast(
+                "You’re offline — cached account & packs only. Friends, skins, and updates need internet.",
+                "err",
+              );
+              void tryReconnectFromOffline();
+            }}
+          >
+            <svg
+              className="topnav-offline-icon"
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              aria-hidden
+            >
+              <path
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.25"
+                strokeLinecap="square"
+                d="M2 8.5c3.2-3 7-4.5 10-4.5s6.8 1.5 10 4.5"
+              />
+              <path
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.25"
+                strokeLinecap="square"
+                d="M5.5 12.2c2.2-2 5-3 6.5-3s4.3 1 6.5 3"
+              />
+              <path
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.25"
+                strokeLinecap="square"
+                d="M9 15.8c.9-.8 2-1.2 3-1.2s2.1.4 3 1.2"
+              />
+              <circle cx="12" cy="19" r="1.4" fill="currentColor" />
+              {/* Outline in button fill so the slash cuts cleanly through the wifi */}
+              <path
+                className="topnav-offline-slash-outline"
+                fill="none"
+                strokeWidth="7.5"
+                strokeLinecap="square"
+                d="M4 20 L20 4"
+              />
+              <path
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="square"
+                d="M4 20 L20 4"
+              />
+            </svg>
+          </button>
+        ) : null}
         <button
           type="button"
           className="topnav-avatar-btn"
@@ -714,8 +892,11 @@ export default function App() {
 
       setAuthOfflineHint(null);
       try {
-        const { data } = await supabase.auth.getSession();
-        await resolveGate(data.session);
+        const session = await withTimeout(
+          supabase.auth.getSession().then(({ data }) => data.session),
+          6000,
+        );
+        await resolveGate(session);
       } catch {
         if (await enterOfflineMode("Cloud unreachable — offline mode")) {
           await leaveBoot("app");
@@ -725,8 +906,10 @@ export default function App() {
         await leaveBoot("auth");
       }
     })();
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
-      if (offlineModeRef.current && !next) return;
+    const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
+      // Boot already handles getSession; INITIAL_SESSION would race / re-enter cloud.
+      if (event === "INITIAL_SESSION") return;
+      if (offlineModeRef.current) return;
       void resolveGate(next);
     });
     return () => sub.subscription.unsubscribe();
@@ -739,12 +922,12 @@ export default function App() {
         if (gate === "app" && !offlineModeRef.current) {
           offlineModeRef.current = true;
           setOfflineMode(true);
-          setToast("Connection lost — offline mode");
+          showToast("Connection lost — offline mode", "err");
         }
         return;
       }
       if (offlineModeRef.current && gate === "app") {
-        setToast("Back online — sign in again to sync friends & skins");
+        showToast("Back online — sign in again to sync friends & skins");
       }
     });
   }, [gate]);
@@ -764,13 +947,27 @@ export default function App() {
   );
 
   const reminePacks = useMemo(
-    () => packs.filter((p) => !isVanillaPackId(p.id)),
+    () =>
+      packs.filter(
+        (p) => !isVanillaPackId(p.id) && !isReminedVanillaPackId(p.id),
+      ),
     [packs],
   );
 
-  /** Remined pack for rail logo / pack page — never a vanilla install. */
+  const installedPacks = useMemo(
+    () => packs.filter((p) => installedIds.has(p.id)),
+    [packs, installedIds],
+  );
+
+  /** Remined catalog pack for rail logo / pack page — never vanilla rails. */
   const activeReminePack = useMemo(() => {
-    if (selectedPack && !isVanillaPackId(selectedPack.id)) return selectedPack;
+    if (
+      selectedPack &&
+      !isVanillaPackId(selectedPack.id) &&
+      !isReminedVanillaPackId(selectedPack.id)
+    ) {
+      return selectedPack;
+    }
     return reminePacks[0];
   }, [selectedPack, reminePacks]);
 
@@ -792,11 +989,31 @@ export default function App() {
       }));
   }, [vanillaVersions, packs]);
 
+  const rvSelectPacks = useMemo(() => {
+    if (rvVersions.length > 0) {
+      return rvVersions.map((v) => ({
+        id: v.id,
+        name: v.id,
+        version: v.installed ? "Installed" : "Fabric + skins",
+      }));
+    }
+    return packs
+      .filter((p) => isReminedVanillaPackId(p.id))
+      .map((p) => ({
+        id: p.version,
+        name: p.version,
+        version: "Installed",
+      }));
+  }, [rvVersions, packs]);
+
   useEffect(() => {
     if (gate === "app" && rail === "vanilla") {
       void loadVanillaVersions();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load when opening vanilla rail
+    if (gate === "app" && rail === "remined-vanilla") {
+      void loadReminedVanillaVersions();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load when opening vanilla rails
   }, [gate, rail]);
 
   useEffect(() => {
@@ -806,7 +1023,9 @@ export default function App() {
       runningPackId ??
       (rail === "vanilla" && vanillaPick
         ? `vanilla-${vanillaPick}`
-        : null);
+        : rail === "remined-vanilla" && rvPick
+          ? `remined-vanilla-${rvPick}`
+          : null);
 
     const push = () => {
       if (hostingLan) {
@@ -848,6 +1067,7 @@ export default function App() {
     phase,
     rail,
     vanillaPick,
+    rvPick,
     runningPackId,
     activeReminePack?.id,
     profile.selected_pack,
@@ -861,7 +1081,9 @@ export default function App() {
       runningPackId ??
       (rail === "vanilla" && vanillaPick
         ? `vanilla-${vanillaPick}`
-        : activeReminePack?.id ?? selectedPack?.id ?? null);
+        : rail === "remined-vanilla" && rvPick
+          ? `remined-vanilla-${rvPick}`
+          : activeReminePack?.id ?? selectedPack?.id ?? null);
 
     if (gate !== "app" || phase !== "running" || !lanPackId) {
       if (phase === "idle") {
@@ -891,7 +1113,7 @@ export default function App() {
               setHostingLan(null);
               await portholeStopHost().catch(() => undefined);
               if (!cancelled) {
-                setToast("Hosting stopped");
+                showToast("Hosting stopped");
               }
             }
             return;
@@ -921,7 +1143,7 @@ export default function App() {
               shareCode: info.share_code,
               gamePort: info.port,
             });
-            setToast("Hosting — friends can Join you now");
+            showToast("Hosting — friends can Join you now");
             setStatus("");
             setStatusKind("ok");
           } catch (err) {
@@ -953,6 +1175,7 @@ export default function App() {
     runningPackId,
     rail,
     vanillaPick,
+    rvPick,
     activeReminePack?.id,
     selectedPack?.id,
   ]);
@@ -964,6 +1187,31 @@ export default function App() {
       void setPresence({ userId, status: "offline", packId: null });
     };
   }, [session?.user?.id, offlineMode]);
+
+  const showHomeLanding =
+    rail === "home" && (topTab === "home" || topTab === "play");
+
+  useEffect(() => {
+    if (showHomeLanding) setHomeVideoKept(true);
+  }, [showHomeLanding]);
+
+  useEffect(() => {
+    const el = homeVideoRef.current;
+    if (!el) return;
+    if (showHomeLanding) {
+      // WebKit sometimes stalls at end after pause — force loop restart
+      if (el.ended || el.paused) {
+        try {
+          el.currentTime = el.ended ? 0 : el.currentTime;
+        } catch {
+          /* ignore seek errors while not ready */
+        }
+      }
+      void el.play().catch(() => {});
+    } else {
+      el.pause();
+    }
+  }, [showHomeLanding, homeVideoKept]);
 
   const viewCatalog = useMemo(
     () => localizeCatalog(catalog),
@@ -994,11 +1242,11 @@ export default function App() {
     });
     if (!selected || Array.isArray(selected)) return;
     if (offlineMode) {
-      setToast("Skins sync needs internet — go online and sign in");
+      showToast("Skins sync needs internet — go online and sign in");
       return;
     }
     if (!session?.user?.id) {
-      setToast("Sign in to save a skin");
+      showToast("Sign in to save a skin");
       return;
     }
 
@@ -1026,11 +1274,12 @@ export default function App() {
         reminedId: id,
         username: next.username,
         skinPath: url,
+        skinModel: next.skin_model,
       });
-      setToast("Skin saved");
+      showToast("Skin saved");
     } catch (err) {
       setSkinPreview(profile.skin_path && isSkinUrl(profile.skin_path) ? profile.skin_path : null);
-      setToast(err instanceof Error ? err.message : String(err));
+      showToast(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -1047,14 +1296,49 @@ export default function App() {
     }
   }
 
-  async function deleteInstalledPack(packId: string) {
-    if (
-      !window.confirm(
-        `Delete installation “${packId}”? Saves in that folder will be removed.`,
-      )
-    ) {
+  async function setSkinModel(model: SkinModelKind) {
+    const nextModel = normalizeSkinModel(model);
+    if (nextModel === profile.skin_model) return;
+    const next = { ...profile, skin_model: nextModel };
+    await persist(next);
+    if (offlineMode) {
+      const acct = readOfflineCache().account;
+      if (acct) {
+        cacheAccount({ ...acct, skin_model: nextModel });
+      }
       return;
     }
+    if (!session?.user?.id) return;
+    try {
+      const saved = await updateCloudSkinModel(session.user.id, nextModel);
+      if (saved !== nextModel) {
+        await persist({ ...next, skin_model: saved });
+      }
+      void rememberOfflineSnapshot({
+        userId: session.user.id,
+        email: session.user.email ?? null,
+        reminedId: reminedId,
+        username: next.username,
+        skinPath: next.skin_path,
+        skinModel: saved,
+      });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function deleteInstalledPack(packId: string) {
+    // window.confirm is non-blocking in Tauri/WKWebView — use plugin dialog.
+    const ok = await confirm(
+      `Delete installation “${packId}”? Saves in that folder will be removed.`,
+      {
+        title: "Delete installation",
+        kind: "warning",
+        okLabel: "Delete",
+        cancelLabel: "Cancel",
+      },
+    );
+    if (!ok) return;
     setStatus("Deleting pack…");
     setStatusKind("idle");
     try {
@@ -1066,6 +1350,12 @@ export default function App() {
       });
       if (isVanillaPackId(packId) && packId === `vanilla-${vanillaPick}`) {
         setVanillaPick("");
+      }
+      if (
+        isReminedVanillaPackId(packId) &&
+        packId === `remined-vanilla-${rvPick}`
+      ) {
+        setRvPick("");
       }
       if (profile.selected_pack === packId) {
         const fallback =
@@ -1079,7 +1369,7 @@ export default function App() {
       await bootstrapLauncher();
       setStatus("Pack deleted");
       setStatusKind("ok");
-      setToast("Installation removed");
+      showToast("Installation removed");
     } catch (err) {
       setStatus(String(err));
       setStatusKind("error");
@@ -1304,7 +1594,7 @@ export default function App() {
 
   async function syncPack() {
     if (offlineMode || !isBrowserOnline()) {
-      setToast("Pack updates need internet");
+      showToast("Pack updates need internet");
       return;
     }
     const packId = activeReminePack?.id;
@@ -1331,7 +1621,7 @@ export default function App() {
 
   async function checkForUpdate() {
     if (offlineMode || !isBrowserOnline()) {
-      setToast("Update check needs internet");
+      showToast("Update check needs internet");
       return;
     }
     setUpdateBusy(true);
@@ -1360,10 +1650,17 @@ export default function App() {
   const vanillaReady = Boolean(
     vanillaPick && installedIds.has(vanillaPackId),
   );
+  const rvPackId = rvPick ? `remined-vanilla-${rvPick}` : "";
+  const rvReady = Boolean(rvPick && installedIds.has(rvPackId));
   const packReady = Boolean(
     activeReminePack && installedIds.has(activeReminePack.id),
   );
-  const activeReady = rail === "vanilla" ? vanillaReady : packReady;
+  const activeReady =
+    rail === "vanilla"
+      ? vanillaReady
+      : rail === "remined-vanilla"
+        ? rvReady
+        : packReady;
 
   const playKind = installing
     ? "installing"
@@ -1384,7 +1681,21 @@ export default function App() {
           : playKind === "download"
             ? "Download"
             : "Play";
-  const playBusy = phase !== "idle" || installing || vanillaBusy;
+  const playBusy = phase !== "idle" || installing || vanillaBusy || rvBusy;
+
+  function isCancelledError(err: unknown): boolean {
+    const msg = err instanceof Error ? err.message : String(err);
+    return /cancelled/i.test(msg);
+  }
+
+  async function cancelCurrentInstall() {
+    if (!installing) return;
+    try {
+      await invoke("cancel_install");
+    } catch {
+      /* ignore */
+    }
+  }
 
   async function downloadPack() {
     if (!activeReminePack || playBusy) return;
@@ -1401,8 +1712,13 @@ export default function App() {
       setStatus("Ready to play");
       setStatusKind("ok");
     } catch (err) {
-      setStatus(String(err));
-      setStatusKind("error");
+      if (isCancelledError(err)) {
+        setStatus("Cancelled");
+        setStatusKind("idle");
+      } else {
+        setStatus(String(err));
+        setStatusKind("error");
+      }
     } finally {
       setInstalling(false);
     }
@@ -1457,13 +1773,22 @@ export default function App() {
       setVanillaVersions(res.versions);
       setVanillaLoaded(true);
       if (!vanillaPick) {
+        const remembered = readLastPlayed().vanilla;
+        const preferred =
+          (remembered && res.versions.some((v) => v.id === remembered)
+            ? remembered
+            : null) ??
+          res.versions.find((v) => v.installed && v.type === "release")?.id ??
+          res.latest.release;
+        setVanillaPick(preferred);
+      } else if (!res.versions.some((v) => v.id === vanillaPick)) {
         const preferred =
           res.versions.find((v) => v.installed && v.type === "release")?.id ??
           res.latest.release;
         setVanillaPick(preferred);
       }
     } catch (err) {
-      setToast(err instanceof Error ? err.message : String(err));
+      showToast(err instanceof Error ? err.message : String(err));
     } finally {
       setVanillaBusy(false);
     }
@@ -1471,12 +1796,13 @@ export default function App() {
 
   async function selectVanillaVersion(versionId: string) {
     setVanillaPick(versionId);
+    writeLastPlayed({ vanilla: versionId });
   }
 
   async function installVanillaVersion(versionId: string): Promise<boolean> {
     if (!versionId) return false;
     if (offlineMode || !isBrowserOnline()) {
-      setToast("Install needs internet");
+      showToast("Install needs internet");
       return false;
     }
     setVanillaBusy(true);
@@ -1492,6 +1818,7 @@ export default function App() {
       });
       setInstalledIds((prev) => new Set(prev).add(st.id));
       setVanillaPick(versionId);
+      writeLastPlayed({ vanilla: versionId });
       await bootstrapLauncher();
       setVanillaVersions((prev) =>
         prev.map((v) =>
@@ -1502,11 +1829,100 @@ export default function App() {
       setStatusKind("ok");
       return true;
     } catch (err) {
-      setStatus(String(err));
-      setStatusKind("error");
+      if (isCancelledError(err)) {
+        setStatus("Cancelled");
+        setStatusKind("idle");
+      } else {
+        setStatus(String(err));
+        setStatusKind("error");
+      }
       return false;
     } finally {
       setVanillaBusy(false);
+      setInstalling(false);
+    }
+  }
+
+  async function loadReminedVanillaVersions(force = false) {
+    if (rvBusy) return;
+    if (rvLoaded && !force) return;
+    if (offlineMode || !isBrowserOnline()) {
+      if (!rvPick) {
+        const local = packs.find((p) => isReminedVanillaPackId(p.id));
+        if (local) setRvPick(local.version);
+      }
+      return;
+    }
+    setRvBusy(true);
+    try {
+      const res = await invoke<{ latest: string; versions: VanillaVersionRow[] }>(
+        "list_remined_vanilla_versions",
+      );
+      setRvVersions(res.versions);
+      setRvLoaded(true);
+      if (!rvPick) {
+        const remembered = readLastPlayed()["remined-vanilla"];
+        const preferred =
+          (remembered && res.versions.some((v) => v.id === remembered)
+            ? remembered
+            : null) ??
+          res.versions.find((v) => v.installed)?.id ??
+          res.latest;
+        setRvPick(preferred);
+      } else if (!res.versions.some((v) => v.id === rvPick)) {
+        const preferred =
+          res.versions.find((v) => v.installed)?.id ?? res.latest;
+        setRvPick(preferred);
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRvBusy(false);
+    }
+  }
+
+  async function installReminedVanillaVersion(
+    versionId: string,
+  ): Promise<boolean> {
+    if (!versionId) return false;
+    if (offlineMode || !isBrowserOnline()) {
+      showToast("Install needs internet");
+      return false;
+    }
+    setRvBusy(true);
+    setInstalling(true);
+    setInstallPercent(0);
+    setInstallPhase("pack");
+    setInstallMessage(`Installing Remined Vanilla ${versionId}…`);
+    setStatus("");
+    setStatusKind("idle");
+    try {
+      const st = await invoke<PackStatus>("install_remined_vanilla_version", {
+        versionId,
+      });
+      setInstalledIds((prev) => new Set(prev).add(st.id));
+      setRvPick(versionId);
+      writeLastPlayed({ "remined-vanilla": versionId });
+      await bootstrapLauncher();
+      setRvVersions((prev) =>
+        prev.map((v) =>
+          v.id === versionId ? { ...v, installed: true } : v,
+        ),
+      );
+      setStatus("Ready to play");
+      setStatusKind("ok");
+      return true;
+    } catch (err) {
+      if (isCancelledError(err)) {
+        setStatus("Cancelled");
+        setStatusKind("idle");
+      } else {
+        setStatus(String(err));
+        setStatusKind("error");
+      }
+      return false;
+    } finally {
+      setRvBusy(false);
       setInstalling(false);
     }
   }
@@ -1521,32 +1937,47 @@ export default function App() {
       await downloadPack();
       return;
     }
-    if (!opts?.quickPlay) {
-      if (!isVanillaPackId(packId)) {
-        const ready = await ensurePackUpToDate();
-        if (!ready) return;
-      }
-    } else {
-      setStatus("Preparing pack…");
-      setStatusKind("idle");
-      try {
-        await invoke("ensure_pack", { packId });
-        setInstalledIds((prev) => new Set(prev).add(packId));
-      } catch (err) {
-        setStatus(String(err));
-        setStatusKind("error");
-        return;
-      }
-    }
 
+    // Show playbar progress for runtime prep + Java download during launch.
     setPhase("launching");
+    setInstallPercent(0);
+    setInstallPhase("");
+    setInstallMessage(
+      opts?.quickPlay ? "Joining friend…" : "Preparing to launch…",
+    );
+    setStatusKind("idle");
     if (!opts?.quickPlay) {
       setHostingLan(null);
       lastHostPortRef.current = null;
       void portholeStopAll().catch(() => undefined);
     }
+
+    try {
+      if (!opts?.quickPlay) {
+        if (isVanillaPackId(packId)) {
+          /* already installed on vanilla rail */
+        } else if (isReminedVanillaPackId(packId)) {
+          await invoke("ensure_pack", { packId });
+          setInstalledIds((prev) => new Set(prev).add(packId));
+        } else {
+          const ready = await ensurePackUpToDate();
+          if (!ready) {
+            setPhase("idle");
+            return;
+          }
+        }
+      } else {
+        await invoke("ensure_pack", { packId });
+        setInstalledIds((prev) => new Set(prev).add(packId));
+      }
+    } catch (err) {
+      setPhase("idle");
+      setStatus(String(err));
+      setStatusKind("error");
+      return;
+    }
+
     setStatus(opts?.quickPlay ? "Joining friend…" : "");
-    setStatusKind("idle");
     try {
       // Sync first, then launch with the returned profile — React state alone is stale.
       const launchProfile = session
@@ -1563,6 +1994,7 @@ export default function App() {
         packId,
         username: name,
         skinPath: launchProfile.skin_path,
+        skinModel: launchProfile.skin_model,
         quickPlay: opts?.quickPlay ?? null,
       });
       setPhase(result.phase);
@@ -1576,9 +2008,17 @@ export default function App() {
       } else {
         setRunningPackId(packId);
         if (isVanillaPackId(packId)) {
-          setVanillaPick(packId.replace(/^vanilla-/, ""));
+          const ver = packId.replace(/^vanilla-/, "");
+          setVanillaPick(ver);
+          writeLastPlayed({ vanilla: ver });
           setRail("vanilla");
+        } else if (isReminedVanillaPackId(packId)) {
+          const ver = packId.replace(/^remined-vanilla-/, "");
+          setRvPick(ver);
+          writeLastPlayed({ "remined-vanilla": ver });
+          setRail("remined-vanilla");
         } else {
+          writeLastPlayed({ java: packId });
           setRail("java");
         }
         setTopTab("play");
@@ -1609,6 +2049,16 @@ export default function App() {
       await launchWithOpts({ packId });
       return;
     }
+    if (rail === "remined-vanilla") {
+      if (!rvPick || playBusy) return;
+      const packId = `remined-vanilla-${rvPick}`;
+      if (!installedIds.has(packId)) {
+        const ok = await installReminedVanillaVersion(rvPick);
+        if (!ok) return;
+      }
+      await launchWithOpts({ packId });
+      return;
+    }
     if (!activeReminePack) return;
     await launchWithOpts({ packId: activeReminePack.id });
   }
@@ -1619,7 +2069,7 @@ export default function App() {
     const shareCode = row.sessionShareCode!.trim();
     const port = row.sessionGamePort!;
     setJoiningFriendId(row.friendshipId);
-    setToast(`Joining ${row.profile.username}…`);
+    showToast(`Joining ${row.profile.username}…`);
     setStatus("Connecting Network Play…");
     setStatusKind("idle");
     try {
@@ -1627,7 +2077,7 @@ export default function App() {
       if (!st.installed) {
         setStatus(st.message);
         setStatusKind("error");
-        setToast("Install Porthole from Network Play first");
+        showToast("Install Porthole from Network Play first");
         setTopTab("network");
         return;
       }
@@ -1653,15 +2103,20 @@ export default function App() {
         role="status"
         aria-live="polite"
       >
-        <div className="loading-aurora" aria-hidden />
         <div className="loading-panel">
           <img className="loading-logo" src={brandLogo} alt="" />
-          <p className="loading-kicker">Remined</p>
+          <p className="loading-kicker">Remined Launcher</p>
           <h1 className="loading-title">Loading</h1>
           <div className="loading-bar" aria-hidden>
-            <span className="loading-bar-fill" />
+            {Array.from({ length: 14 }, (_, i) => (
+              <span
+                key={i}
+                className="loading-bar-cell"
+                style={{ animationDelay: `${i * 0.08}s` }}
+              />
+            ))}
           </div>
-          <p className="loading-hint">Preparing your world…</p>
+          <p className="loading-hint">Building terrain…</p>
         </div>
       </div>
     );
@@ -1681,7 +2136,7 @@ export default function App() {
             if (await enterOfflineMode("Offline mode")) {
               setGate("app");
             } else {
-              setToast("No cached account for offline play");
+              showToast("No cached account for offline play");
             }
           })();
         }}
@@ -1706,87 +2161,241 @@ export default function App() {
     );
   }
 
-  const homeLanding = (
-    <>
-      <header className="hero home">
-        <img className="home-brand-logo" src={brandLogo} alt="" />
-        <p className="hero-kicker">For our servers</p>
-        <h1 className="hero-title">Remined</h1>
-      </header>
-      <section className="section home-body">
-        <p className="home-blurb">
-          Small launcher for our Minecraft pack. It keeps Java and the build in
-          one place so you don’t fight with a pile of folders every time
-          someone updates the pack. Download once, play with friends, done.
-        </p>
-      </section>
-    </>
+  async function revealPackFolder(packId: string) {
+    try {
+      await invoke("open_pack_folder", { packId });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  function renderInstallRow(pack: Pack) {
+    const vanilla = isVanillaPackId(pack.id);
+    const rv = isReminedVanillaPackId(pack.id);
+    const active = vanilla
+      ? Boolean(vanillaPick) && pack.id === `vanilla-${vanillaPick}`
+      : rv
+        ? Boolean(rvPick) && pack.id === `remined-vanilla-${rvPick}`
+        : pack.id === (activeReminePack?.id ?? "");
+    return (
+      <li key={pack.id} className="install-item">
+        <button
+          type="button"
+          className={`install-row ${active ? "active" : ""}`}
+          onClick={() => {
+            if (vanilla) {
+              setVanillaPick(pack.version);
+              writeLastPlayed({ vanilla: pack.version });
+              setRail("vanilla");
+              setTopTab("play");
+            } else if (rv) {
+              setRvPick(pack.version);
+              writeLastPlayed({ "remined-vanilla": pack.version });
+              setRail("remined-vanilla");
+              setTopTab("play");
+            } else {
+              writeLastPlayed({ java: pack.id });
+              void persist({
+                ...profile,
+                selected_pack: pack.id,
+              });
+              setRail("java");
+              setTopTab("play");
+            }
+          }}
+        >
+          {vanilla ? (
+            <img className="install-icon is-bare" src={vanillaLogo} alt="" />
+          ) : rv ? (
+            <img
+              className="install-icon is-bare"
+              src={reminedVanillaLogo}
+              alt=""
+            />
+          ) : viewCatalog.find((c) => c.id === pack.id)?.logo_url ? (
+            <img
+              className="install-icon is-bare"
+              src={viewCatalog.find((c) => c.id === pack.id)!.logo_url!}
+              alt=""
+            />
+          ) : (
+            <span className="install-icon" aria-hidden />
+          )}
+          <span className="install-copy">
+            <strong>{pack.name}</strong>
+            <span>{pack.version}</span>
+          </span>
+          {active ? <span className="install-badge">Selected</span> : null}
+        </button>
+        <div className="install-actions">
+          <button
+            type="button"
+            className="btn-mc dim install-folder"
+            title="Open folder"
+            aria-label="Open folder"
+            onClick={() => void revealPackFolder(pack.id)}
+          >
+            <svg viewBox="0 0 20 16" aria-hidden>
+              <path d="M0 2h7l2 2h11v12H0V2z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="btn-mc dim install-delete"
+            onClick={() => void deleteInstalledPack(pack.id)}
+          >
+            Delete
+          </button>
+        </div>
+      </li>
+    );
+  }
+
+  const installedRemine = installedPacks.filter(
+    (p) => !isVanillaPackId(p.id) && !isReminedVanillaPackId(p.id),
   );
+  const installedVanilla = installedPacks.filter((p) => isVanillaPackId(p.id));
+  const installedRv = installedPacks.filter((p) =>
+    isReminedVanillaPackId(p.id),
+  );
+
+  const homeFeaturePack = activeReminePack ?? reminePacks[0] ?? null;
+  const homeFeatureContent = homeFeaturePack
+    ? viewCatalog.find((c) => c.id === homeFeaturePack.id)
+    : viewCatalog.find((c) => !isVanillaPackId(c.id));
+  const homePackReady = Boolean(
+    homeFeaturePack && installedIds.has(homeFeaturePack.id),
+  );
+
+  /** One persistent <video> — survives rail changes (settings/java/etc.). */
+  const homeVideoLayer =
+    showHomeLanding || homeVideoKept ? (
+      <video
+        ref={homeVideoRef}
+        className={`home-video${showHomeLanding ? " is-live" : " is-parked"}${
+          homeVideoReady ? " is-ready" : ""
+        }`}
+        src={homeWallpaperVideo}
+        autoPlay={showHomeLanding}
+        muted
+        loop
+        playsInline
+        preload="auto"
+        onCanPlay={() => setHomeVideoReady(true)}
+        onEnded={(e) => {
+          // Fallback if native `loop` stalls (common after park/pause on WebKit)
+          const v = e.currentTarget;
+          v.currentTime = 0;
+          if (showHomeLanding) void v.play().catch(() => {});
+        }}
+        aria-hidden
+      />
+    ) : null;
+
+  const homeLanding = showHomeLanding ? (
+    <div
+      className={`home-stage has-video${homeVideoReady ? " is-video-ready" : ""}`}
+    >
+      <div className="home-video-scrim" aria-hidden />
+      <EnchantParticles className="pack-enchant" count={26} />
+      <div className="home-splash">
+        <img
+          className="home-mc-logo"
+          src={homeMcLogo}
+          alt="Remined Launcher — Java Edition"
+          draggable={false}
+        />
+      </div>
+      <div className="home-body-row">
+        <div className="home-main">
+          <div className="home-bottom">
+            {homeFeaturePack ? (
+              <button
+                type="button"
+                className="home-feature"
+                onClick={() => {
+                  void persist({
+                    ...profile,
+                    selected_pack: homeFeaturePack.id,
+                  });
+                  setRail("java");
+                  setTopTab("play");
+                }}
+              >
+                {homeFeatureContent?.logo_url ? (
+                  <img
+                    className="home-feature-logo"
+                    src={homeFeatureContent.logo_url}
+                    alt=""
+                  />
+                ) : (
+                  <span className="home-feature-logo is-fallback" aria-hidden>
+                    {(homeFeaturePack.name || "?").slice(0, 2).toUpperCase()}
+                  </span>
+                )}
+                <span className="home-feature-copy">
+                  <strong>{homeFeaturePack.name}</strong>
+                  <span>
+                    {homeFeatureContent?.tagline?.trim() ||
+                      homeFeaturePack.version ||
+                      (homePackReady ? "Installed" : "Not installed")}
+                  </span>
+                </span>
+                <span className="home-feature-cta">
+                  {homePackReady ? "Open" : "View"}
+                </span>
+              </button>
+            ) : null}
+            <p className="home-foot">v{appVersion}</p>
+          </div>
+        </div>
+
+        <div className="home-player">
+          <SkinModel
+            preset="home"
+            skinUrl={skinPreview}
+            skinModel={profile.skin_model}
+            variant="full"
+            transparent
+            nameTag={profile.username.trim() || "Player"}
+            className="home-player-skin"
+          />
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   const installationsPanel = (
     <section className="section">
       <h2 className="page-title">Installations</h2>
-      <ul className="install-list">
-        {packs.map((pack) => {
-          const vanilla = isVanillaPackId(pack.id);
-          const active = vanilla
-            ? Boolean(vanillaPick) && pack.id === `vanilla-${vanillaPick}`
-            : pack.id === (activeReminePack?.id ?? "");
-          const installed = installedIds.has(pack.id);
-          return (
-            <li key={pack.id} className="install-item">
-              <button
-                type="button"
-                className={`install-row ${active ? "active" : ""}`}
-                onClick={() => {
-                  if (vanilla) {
-                    setVanillaPick(pack.version);
-                    setRail("vanilla");
-                    setTopTab("play");
-                  } else {
-                    void persist({
-                      ...profile,
-                      selected_pack: pack.id,
-                    });
-                    setRail("java");
-                    setTopTab("play");
-                  }
-                }}
-              >
-                {vanilla ? (
-                  <img
-                    className="install-icon is-bare"
-                    src={vanillaLogo}
-                    alt=""
-                  />
-                ) : viewCatalog.find((c) => c.id === pack.id)?.logo_url ? (
-                  <img
-                    className="install-icon"
-                    src={viewCatalog.find((c) => c.id === pack.id)!.logo_url!}
-                    alt=""
-                  />
-                ) : (
-                  <span className="install-icon" aria-hidden />
-                )}
-                <span className="install-copy">
-                  <strong>{pack.name}</strong>
-                  <span>{installed ? pack.version : "Not installed"}</span>
-                </span>
-                {active ? <span className="install-badge">Selected</span> : null}
-              </button>
-              {installed ? (
-                <button
-                  type="button"
-                  className="btn-mc dim install-delete"
-                  onClick={() => void deleteInstalledPack(pack.id)}
-                >
-                  Delete
-                </button>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
+      {installedPacks.length === 0 ? (
+        <p className="friends-lead">Nothing installed yet.</p>
+      ) : (
+        <div className="install-groups">
+          {installedRemine.length > 0 ? (
+            <ul className="install-list">
+              {installedRemine.map(renderInstallRow)}
+            </ul>
+          ) : null}
+          {installedRemine.length > 0 &&
+          (installedRv.length > 0 || installedVanilla.length > 0) ? (
+            <hr className="install-divider" />
+          ) : null}
+          {installedRv.length > 0 ? (
+            <ul className="install-list">
+              {installedRv.map(renderInstallRow)}
+            </ul>
+          ) : null}
+          {installedRv.length > 0 && installedVanilla.length > 0 ? (
+            <hr className="install-divider" />
+          ) : null}
+          {installedVanilla.length > 0 ? (
+            <ul className="install-list">
+              {installedVanilla.map(renderInstallRow)}
+            </ul>
+          ) : null}
+        </div>
+      )}
     </section>
   );
 
@@ -1805,13 +2414,13 @@ export default function App() {
         <FriendsPanel
           userId={session.user.id}
           myReminedId={reminedId}
-          onToast={setToast}
+          onToast={showToast}
           joiningFriendId={joiningFriendId}
           hostingSelf={Boolean(hostingLan)}
           onOpenNetworkPlay={() => setTopTab("network")}
           onInstallPorthole={() => {
             void openPortholeOnSteam().then(() =>
-              setToast("Opening Steam — install Porthole, then Refresh"),
+              showToast("Opening Steam — install Porthole, then Refresh"),
             );
           }}
           onJoinFriend={(row) => void joinFriendSession(row)}
@@ -1833,7 +2442,7 @@ export default function App() {
         <NetworkPlayPanel
           hostingSelf={Boolean(hostingLan)}
           hostingPort={hostingLan?.gamePort ?? null}
-          onToast={setToast}
+          onToast={showToast}
         />
       )
     ) : null;
@@ -1868,10 +2477,42 @@ export default function App() {
       <div className="skin-layout">
         <SkinModel
           skinUrl={skinPreview}
+          skinModel={profile.skin_model}
           variant="full"
           className="skin-stage"
         />
         <div className="skin-controls">
+          <div className="field">
+            <span className="field-label" id="skin-model-label">
+              Arms
+            </span>
+            <div
+              className="skin-model-toggle"
+              role="group"
+              aria-labelledby="skin-model-label"
+            >
+              <button
+                type="button"
+                className={`skin-model-btn${
+                  profile.skin_model === "default" ? " is-active" : ""
+                }`}
+                aria-pressed={profile.skin_model === "default"}
+                onClick={() => void setSkinModel("default")}
+              >
+                Wide
+              </button>
+              <button
+                type="button"
+                className={`skin-model-btn${
+                  profile.skin_model === "slim" ? " is-active" : ""
+                }`}
+                aria-pressed={profile.skin_model === "slim"}
+                onClick={() => void setSkinModel("slim")}
+              >
+                Slim
+              </button>
+            </div>
+          </div>
           <div className="field">
             <label htmlFor="username">Username</label>
             <div className="username-edit">
@@ -2011,7 +2652,9 @@ export default function App() {
 
         <button
           type="button"
-          className={`rail-game ${rail === "java" ? "active" : ""}`}
+          className={`rail-game${packContent?.logo_url ? " is-bare-logo" : ""}${
+            rail === "java" ? " active" : ""
+          }`}
           title={activeReminePack?.name ?? "Pack"}
           onClick={() => {
             setRail("java");
@@ -2038,19 +2681,31 @@ export default function App() {
           )}
         </button>
 
+        <div className="rail-spacer" />
+
         <button
           type="button"
-          className={`rail-game rail-vanilla ${rail === "vanilla" ? "active" : ""}`}
+          className={`rail-vanilla ${rail === "vanilla" ? "active" : ""}`}
           title="Vanilla Minecraft"
           onClick={() => {
             setRail("vanilla");
             setTopTab("play");
           }}
         >
-          <img className="rail-pack-logo" src={vanillaLogo} alt="" />
+          <img className="rail-vanilla-logo" src={vanillaLogo} alt="" />
         </button>
 
-        <div className="rail-spacer" />
+        <button
+          type="button"
+          className={`rail-vanilla ${rail === "remined-vanilla" ? "active" : ""}`}
+          title="Remined Vanilla"
+          onClick={() => {
+            setRail("remined-vanilla");
+            setTopTab("play");
+          }}
+        >
+          <img className="rail-vanilla-logo" src={reminedVanillaLogo} alt="" />
+        </button>
 
         <button
           type="button"
@@ -2082,6 +2737,7 @@ export default function App() {
       </aside>
 
       <div className="stage">
+        {homeVideoLayer}
         {rail === "settings" ||
         rail === "installations" ||
         rail === "profile" ? (
@@ -2091,23 +2747,22 @@ export default function App() {
               {profileChip()}
             </nav>
             <div className="content">
-              {offlineMode ? (
-                <p className="offline-banner" role="status">
-                  Offline mode — cached account &amp; packs. Cloud features paused.
-                </p>
-              ) : null}
-              {rail === "settings"
-                ? settingsForm
-                : rail === "installations"
-                  ? installationsPanel
-                  : profilePanel}
+              <PageMotion viewKey={`${rail}:${topTab}`}>
+                {rail === "settings"
+                  ? settingsForm
+                  : rail === "installations"
+                    ? installationsPanel
+                    : profilePanel}
+              </PageMotion>
             </div>
           </>
         ) : (
           <>
             <nav className="topnav">
               <div className="topnav-tabs">
-                {(rail === "java" || rail === "vanilla"
+                {(rail === "java" ||
+                rail === "vanilla" ||
+                rail === "remined-vanilla"
                   ? PACK_TABS
                   : HOME_TABS
                 ).map(([id, label]) => (
@@ -2125,15 +2780,8 @@ export default function App() {
             </nav>
 
             <div className="content">
-              {offlineMode ? (
-                <p className="offline-banner" role="status">
-                  Offline mode — play installed packs. Friends, skins sync, and
-                  updates need internet.
-                </p>
-              ) : null}
-              {rail === "home" && (topTab === "home" || topTab === "play")
-                ? homeLanding
-                : null}
+              {/* Home / heroes stay outside motion — banners & scrims don't animate */}
+              {homeLanding}
 
               {rail === "vanilla" && topTab === "play" ? (
                 <div className="pack-stage">
@@ -2149,31 +2797,90 @@ export default function App() {
                     <p className="hero-kicker">Java Edition</p>
                     <h1 className="hero-title">Vanilla</h1>
                   </header>
-                  <section className="pack-about">
-                    <div className="pack-about-head">
-                      <div className="pack-logo is-bare" aria-hidden>
-                        <img src={vanillaLogo} alt="" />
+                  <PageMotion viewKey={`${rail}:${topTab}`}>
+                    <section className="pack-about">
+                      <div className="pack-about-head">
+                        <div className="pack-logo is-bare" aria-hidden>
+                          <img src={vanillaLogo} alt="" />
+                        </div>
+                        <div className="pack-about-titles">
+                          <h2 className="pack-about-title">
+                            Minecraft {vanillaPick || "—"}
+                          </h2>
+                          <p className="pack-about-version">
+                            {vanillaReady
+                              ? vanillaPick
+                              : vanillaPick
+                                ? "Not installed"
+                                : "—"}
+                          </p>
+                          <p
+                            className="vanilla-skin-badge"
+                            title="Your Remined skin is applied locally via a resource pack. Other players won’t see it in multiplayer."
+                          >
+                            Local skin only · friends won’t see it online
+                          </p>
+                        </div>
                       </div>
-                      <div className="pack-about-titles">
-                        <h2 className="pack-about-title">
-                          Minecraft {vanillaPick || "—"}
-                        </h2>
-                        <p className="pack-about-version">
-                          {vanillaReady
-                            ? vanillaPick
-                            : vanillaPick
-                              ? "Not installed"
-                              : "—"}
-                        </p>
+                      <p className="pack-about-blurb">
+                        Minecraft is an open world of blocks where you dig,
+                        craft, and build whatever you want. Survive the night,
+                        explore caves and biomes, or settle down and shape the
+                        land — alone or with friends on the same world.
+                      </p>
+                    </section>
+                  </PageMotion>
+                </div>
+              ) : null}
+
+              {rail === "remined-vanilla" && topTab === "play" ? (
+                <div className="pack-stage">
+                  <EnchantParticles className="pack-enchant" count={18} />
+                  <header
+                    className="hero has-art"
+                    style={
+                      {
+                        ["--hero-image"]: `url("${vanillaWallpaper}")`,
+                      } as CSSProperties
+                    }
+                  >
+                    <p className="hero-kicker">Fabric · Skins</p>
+                    <h1 className="hero-title">Remined Vanilla</h1>
+                  </header>
+                  <PageMotion viewKey={`${rail}:${topTab}`}>
+                    <section className="pack-about">
+                      <div className="pack-about-head">
+                        <div className="pack-logo is-bare" aria-hidden>
+                          <img src={reminedVanillaLogo} alt="" />
+                        </div>
+                        <div className="pack-about-titles">
+                          <h2 className="pack-about-title">
+                            Minecraft {rvPick || "—"}
+                          </h2>
+                          <p className="pack-about-version">
+                            {rvReady
+                              ? rvPick
+                              : rvPick
+                                ? "Not installed"
+                                : "—"}
+                          </p>
+                          <p
+                            className="vanilla-skin-badge is-ok"
+                            title="Installs Fabric with SkinShuffle + CustomSkinLoader so your Remined skin works for you and friends, plus Sodium/Iris and other performance mods when available for that version."
+                          >
+                            Skins + Sodium/Iris · friends can see your skin
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <p className="pack-about-blurb">
-                      Minecraft is an open world of blocks where you dig, craft,
-                      and build whatever you want. Survive the night, explore
-                      caves and biomes, or settle down and shape the land —
-                      alone or with friends on the same world.
-                    </p>
-                  </section>
+                      <p className="pack-about-blurb">
+                        Clean Minecraft on Fabric, limited to versions where
+                        Remined skins work. Download installs skins, LAN helper,
+                        and the Remined opti stack for that branch (1.20-style or
+                        26.x-style: Sodium/Iris, Lithium, Culling, C2ME, and more)
+                        plus Resourcify when Modrinth has a build.
+                      </p>
+                    </section>
+                  </PageMotion>
                 </div>
               ) : null}
 
@@ -2195,115 +2902,192 @@ export default function App() {
                   </header>
 
                   {activeReminePack ? (
-                    <section className="pack-about">
-                      <div className="pack-about-head">
-                        <div
-                          className={`pack-logo ${packContent?.logo_url ? "has-art" : "is-placeholder"}`}
-                          aria-hidden={!packContent?.logo_url}
-                        >
-                          {packContent?.logo_url ? (
-                            <img src={packContent.logo_url} alt="" />
-                          ) : (
-                            <span className="pack-logo-fallback">
-                              {activeReminePack.name.slice(0, 2).toUpperCase()}
-                            </span>
-                          )}
-                        </div>
-                        <div className="pack-about-titles">
-                          <h2 className="pack-about-title">
-                            {activeReminePack.name}
-                          </h2>
-                          {packContent?.tagline ? (
-                            <p className="pack-about-tagline">
-                              {packContent.tagline}
+                    <PageMotion viewKey={`${rail}:${topTab}`}>
+                      <section className="pack-about">
+                        <div className="pack-about-head">
+                          <div
+                            className={`pack-logo ${
+                              packContent?.logo_url
+                                ? "is-bare"
+                                : "is-placeholder"
+                            }`}
+                            aria-hidden={!packContent?.logo_url}
+                          >
+                            {packContent?.logo_url ? (
+                              <img src={packContent.logo_url} alt="" />
+                            ) : (
+                              <span className="pack-logo-fallback">
+                                {activeReminePack.name
+                                  .slice(0, 2)
+                                  .toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+                          <div className="pack-about-titles">
+                            <h2 className="pack-about-title">
+                              {activeReminePack.name}
+                            </h2>
+                            {packContent?.tagline ? (
+                              <p className="pack-about-tagline">
+                                {packContent.tagline}
+                              </p>
+                            ) : null}
+                            <p className="pack-about-version">
+                              {activeReminePack.version}
                             </p>
-                          ) : null}
-                          <p className="pack-about-version">
-                            {activeReminePack.version}
-                          </p>
+                          </div>
                         </div>
-                      </div>
 
-                      {packContent?.blurb ? (
-                        <p className="pack-about-blurb">{packContent.blurb}</p>
-                      ) : null}
+                        {packContent?.blurb ? (
+                          <p className="pack-about-blurb">
+                            {packContent.blurb}
+                          </p>
+                        ) : null}
 
-                      {packContent?.highlights?.length ? (
-                        <ul className="pack-highlights">
-                          {packContent.highlights.map((item) => (
-                            <li key={item}>{item}</li>
-                          ))}
-                        </ul>
-                      ) : null}
+                        {packContent?.highlights?.length ? (
+                          <ul className="pack-highlights">
+                            {packContent.highlights.map((item) => (
+                              <li key={item}>{item}</li>
+                            ))}
+                          </ul>
+                        ) : null}
 
-                      {packContent?.gallery?.length ? (
-                        <>
-                          <h3 className="pack-gallery-heading">Screenshots</h3>
-                          <PackGallery
-                            images={packContent.gallery}
-                            altPrefix={activeReminePack.name}
-                          />
-                        </>
-                      ) : null}
-                    </section>
+                        {packContent?.gallery?.length ? (
+                          <>
+                            <h3 className="pack-gallery-heading">
+                              Screenshots
+                            </h3>
+                            <PackGallery
+                              images={packContent.gallery}
+                              altPrefix={activeReminePack.name}
+                            />
+                          </>
+                        ) : null}
+                      </section>
+                    </PageMotion>
                   ) : null}
                 </div>
               ) : null}
 
-              {sharedTabBody}
+              {sharedTabBody ? (
+                <PageMotion viewKey={`${rail}:${topTab}`}>
+                  {sharedTabBody}
+                </PageMotion>
+              ) : null}
             </div>
           </>
         )}
 
-        <footer className={`playbar ${installing ? "is-installing" : ""}`}>
-          {rail === "vanilla" ? (
-            <PackSelect
-              label="Version"
-              packs={vanillaSelectPacks}
-              value={vanillaPick}
-              onChange={(id) => void selectVanillaVersion(id)}
-              disabled={installing || vanillaBusy}
-            />
-          ) : (
-            <PackSelect
-              packs={reminePacks}
-              value={activeReminePack?.id ?? ""}
-              onChange={(id) => void persist({ ...profile, selected_pack: id })}
-              disabled={installing}
-            />
-          )}
+        {rail === "java" || rail === "vanilla" || rail === "remined-vanilla" ? (
+          <footer
+            className={`playbar ${showPlayProgress ? "is-installing" : ""}`}
+          >
+            {rail === "vanilla" ? (
+              <PackSelect
+                label="Version"
+                packs={vanillaSelectPacks}
+                value={vanillaPick}
+                onChange={(id) => void selectVanillaVersion(id)}
+                disabled={showPlayProgress || vanillaBusy}
+              />
+            ) : rail === "remined-vanilla" ? (
+              <PackSelect
+                label="Version"
+                packs={rvSelectPacks}
+                value={rvPick}
+                onChange={(id) => {
+                  setRvPick(id);
+                  writeLastPlayed({ "remined-vanilla": id });
+                }}
+                disabled={showPlayProgress || rvBusy}
+              />
+            ) : (
+              <PackSelect
+                packs={reminePacks}
+                value={activeReminePack?.id ?? ""}
+                onChange={(id) => {
+                  writeLastPlayed({ java: id });
+                  void persist({ ...profile, selected_pack: id });
+                }}
+                disabled={showPlayProgress}
+              />
+            )}
 
-          {installing ? (
-            <div className="playbar-progress">
-              <PixelProgress
-                value={installPercent}
-                phase={PROGRESS_PHASE[installPhase] ?? installPhase}
-                label={installMessage}
+            {showPlayProgress ? (
+              <div className="playbar-progress">
+                <PixelProgress
+                  value={installPercent}
+                  phase={
+                    PROGRESS_PHASE[installPhase] ??
+                    (installPhase || (launchPreparing ? "Launch" : ""))
+                  }
+                  label={installMessage || status}
+                />
+              </div>
+            ) : (
+              <div
+                className={`status ${statusKind === "error" ? "error" : ""}`}
+                aria-live="polite"
+              >
+                {status}
+              </div>
+            )}
+
+            <div className="playbar-actions">
+              {installing ? (
+                <button
+                  type="button"
+                  className="play-cancel"
+                  title="Cancel"
+                  aria-label="Cancel install"
+                  onClick={() => void cancelCurrentInstall()}
+                >
+                  <svg
+                    className="btn-pixel-icon"
+                    viewBox="0 0 7 7"
+                    aria-hidden
+                  >
+                    <rect x="0" y="0" width="1" height="1" fill="#fff" />
+                    <rect x="1" y="1" width="1" height="1" fill="#fff" />
+                    <rect x="2" y="2" width="1" height="1" fill="#fff" />
+                    <rect x="3" y="3" width="1" height="1" fill="#fff" />
+                    <rect x="4" y="4" width="1" height="1" fill="#fff" />
+                    <rect x="5" y="5" width="1" height="1" fill="#fff" />
+                    <rect x="6" y="6" width="1" height="1" fill="#fff" />
+                    <rect x="6" y="0" width="1" height="1" fill="#fff" />
+                    <rect x="5" y="1" width="1" height="1" fill="#fff" />
+                    <rect x="4" y="2" width="1" height="1" fill="#fff" />
+                    <rect x="2" y="4" width="1" height="1" fill="#fff" />
+                    <rect x="1" y="5" width="1" height="1" fill="#fff" />
+                    <rect x="0" y="6" width="1" height="1" fill="#fff" />
+                  </svg>
+                </button>
+              ) : null}
+              <PlayButton
+                kind={playKind}
+                label={playLabel}
+                disabled={
+                  playBusy ||
+                  (rail === "vanilla"
+                    ? !vanillaPick
+                    : rail === "remined-vanilla"
+                      ? !rvPick
+                      : !activeReminePack || rail !== "java")
+                }
+                onClick={() => void launch()}
               />
             </div>
-          ) : (
-            <div
-              className={`status ${statusKind === "error" ? "error" : ""}`}
-              aria-live="polite"
-            >
-              {status}
-            </div>
-          )}
-
-          <PlayButton
-            kind={playKind}
-            label={playLabel}
-            disabled={
-              playBusy ||
-              (rail === "vanilla"
-                ? !vanillaPick
-                : !activeReminePack || rail !== "java")
-            }
-            onClick={() => void launch()}
-          />
-        </footer>
+          </footer>
+        ) : null}
       </div>
-      <Toast message={toast} onDone={() => setToast(null)} />
+      <Toast
+        message={toast}
+        tone={toastTone}
+        onDone={() => {
+          setToast(null);
+          setToastTone("default");
+        }}
+      />
     </div>
   );
 }

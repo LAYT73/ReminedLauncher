@@ -1,13 +1,17 @@
 {
   "name": "remined-launcher",
   "private": true,
-  "version": "0.4.2",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:offline": "VITE_FORCE_OFFLINE=1 vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:dev:offline": "VITE_FORCE_OFFLINE=1 tauri dev",
+    "second-client": "cargo run --manifest-path src-tauri/Cargo.toml --bin remined-cli -- second-client"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",

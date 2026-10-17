@@ -17,12 +17,12 @@ export type ThemePreset = {
 
 export const THEME_PRESETS: ThemePreset[] = [
   {
-    id: "dark-green",
-    label: "Dark · Green",
+    id: "dark-pink",
+    label: "Dark · Pink",
     mode: "dark",
-    accent: "#3c8527",
-    accentMid: "#4a9c31",
-    surface: "#1e1e1e",
+    accent: "#d9488a",
+    accentMid: "#e85a9c",
+    surface: "#1c1418",
   },
   {
     id: "dark-purple",
@@ -33,20 +33,12 @@ export const THEME_PRESETS: ThemePreset[] = [
     surface: "#1a1624",
   },
   {
-    id: "dark-pink",
-    label: "Dark · Pink",
+    id: "dark-green",
+    label: "Dark · Green",
     mode: "dark",
-    accent: "#d9488a",
-    accentMid: "#e85a9c",
-    surface: "#1c1418",
-  },
-  {
-    id: "light-green",
-    label: "Light · Green",
-    mode: "light",
     accent: "#3c8527",
     accentMid: "#4a9c31",
-    surface: "#f3f3f0",
+    surface: "#1e1e1e",
   },
   {
     id: "light-pink",
@@ -64,9 +56,17 @@ export const THEME_PRESETS: ThemePreset[] = [
     accentMid: "#9458f0",
     surface: "#f6f2ff",
   },
+  {
+    id: "light-green",
+    label: "Light · Green",
+    mode: "light",
+    accent: "#3c8527",
+    accentMid: "#4a9c31",
+    surface: "#f3f3f0",
+  },
 ];
 
-export const DEFAULT_THEME: ThemeId = "dark-green";
+export const DEFAULT_THEME: ThemeId = "dark-pink";
 
 export function normalizeThemeId(raw: unknown): ThemeId {
   const id = String(raw ?? "");

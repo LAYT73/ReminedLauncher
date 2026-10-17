@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { cacheCatalog, readOfflineCache } from "./offlineCache";
 import { supabase, supabaseConfigured } from "./supabase";
 
@@ -32,6 +33,18 @@ type DbPack = {
   java_major: number;
 };
 
+type GithubPackRelease = {
+  id: string;
+  name: string;
+  version: string;
+  java_major?: number | null;
+  is_default?: boolean;
+};
+
+type GithubPackCatalog = {
+  packs: GithubPackRelease[];
+};
+
 function asStringArray(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.filter((x): x is string => typeof x === "string");
@@ -39,37 +52,80 @@ function asStringArray(value: unknown): string[] {
   return [];
 }
 
-export async function fetchCatalogFromSupabase(): Promise<CatalogPack[]> {
-  if (!supabaseConfigured) {
-    return readOfflineCache().catalog;
-  }
+function mapDbPack(row: DbPack): CatalogPack {
+  return {
+    id: row.id,
+    name: row.name,
+    tagline: row.tagline ?? "",
+    blurb: row.blurb ?? "",
+    highlights: asStringArray(row.highlights),
+    gallery: asStringArray(row.gallery),
+    logo_url: row.logo_url,
+    wallpaper_url: row.wallpaper_url,
+    is_default: row.is_default,
+    sort_order: row.sort_order,
+    java_major: row.java_major,
+  };
+}
+
+/** Minimal marketing row from GitHub release catalog (no art/copy). */
+function mapGithubPack(pack: GithubPackRelease, index: number): CatalogPack {
+  return {
+    id: pack.id,
+    name: pack.name || pack.id,
+    tagline: "",
+    blurb: "",
+    highlights: [],
+    gallery: [],
+    logo_url: null,
+    wallpaper_url: null,
+    is_default: Boolean(pack.is_default),
+    sort_order: index,
+    java_major: pack.java_major ?? 21,
+    version: pack.version,
+  };
+}
+
+async function fetchCatalogFromGithub(): Promise<CatalogPack[]> {
   try {
-    const { data, error } = await supabase
-      .from("packs")
-      .select(
-        "id,name,tagline,blurb,highlights,gallery,logo_url,wallpaper_url,is_default,sort_order,java_major",
-      )
-      .eq("enabled", true)
-      .order("sort_order", { ascending: true });
-    if (error) throw error;
-    const packs = ((data as DbPack[]) ?? []).map((row) => ({
-      id: row.id,
-      name: row.name,
-      tagline: row.tagline ?? "",
-      blurb: row.blurb ?? "",
-      highlights: asStringArray(row.highlights),
-      gallery: asStringArray(row.gallery),
-      logo_url: row.logo_url,
-      wallpaper_url: row.wallpaper_url,
-      is_default: row.is_default,
-      sort_order: row.sort_order,
-      java_major: row.java_major,
-    }));
-    cacheCatalog(packs);
-    return packs;
+    const cat = await invoke<GithubPackCatalog>("fetch_pack_catalog");
+    return (cat.packs ?? []).map(mapGithubPack);
   } catch {
-    return readOfflineCache().catalog;
+    return [];
   }
+}
+
+/**
+ * UI catalog: Supabase (art + copy) → offline cache → GitHub releases.
+ * Fresh DMG installs often have an empty cache; GitHub keeps Download usable.
+ */
+export async function fetchCatalogFromSupabase(): Promise<CatalogPack[]> {
+  if (supabaseConfigured) {
+    try {
+      const { data, error } = await supabase
+        .from("packs")
+        .select(
+          "id,name,tagline,blurb,highlights,gallery,logo_url,wallpaper_url,is_default,sort_order,java_major",
+        )
+        .eq("enabled", true)
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      const packs = ((data as DbPack[]) ?? []).map(mapDbPack);
+      if (packs.length > 0) {
+        cacheCatalog(packs);
+        return packs;
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+
+  const cached = readOfflineCache().catalog;
+  if (cached.length > 0) return cached;
+
+  const github = await fetchCatalogFromGithub();
+  if (github.length > 0) cacheCatalog(github);
+  return github;
 }
 
 export function pickDefaultPack(packs: CatalogPack[]): CatalogPack | undefined {

@@ -11,12 +11,28 @@ export function PixelProgress({ value, label, phase }: Props) {
   const filled = Math.round((pct / 100) * cells);
 
   return (
-    <div className="pixel-progress" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+    <div
+      className="pixel-progress"
+      role="progressbar"
+      aria-valuenow={pct}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
       {label || phase ? (
         <div className="pixel-progress-meta">
-          {phase ? <span className="pixel-progress-phase">{phase}</span> : null}
-          {label ? <span className="pixel-progress-label">{label}</span> : null}
-          <span className="pixel-progress-pct">{pct}%</span>
+          <div className="pixel-progress-top">
+            {phase ? (
+              <span className="pixel-progress-phase">{phase}</span>
+            ) : (
+              <span />
+            )}
+            <span className="pixel-progress-pct">{pct}%</span>
+          </div>
+          {label ? (
+            <span className="pixel-progress-label" title={label}>
+              {label}
+            </span>
+          ) : null}
         </div>
       ) : null}
       <div className="pixel-progress-track" aria-hidden>

@@ -8,6 +8,23 @@
   font-display: swap;
 }
 
+/* Mojangles (in-game UI / nametag) — from skinview3d / South-Paw typeface-minecraft */
+@font-face {
+  font-family: "Minecraft";
+  src: url("./assets/fonts/minecraft.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Minecrafter";
+  src: url("./assets/fonts/Minecrafter.Reg.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 @font-face {
   font-family: "Noto Sans";
   src: url("./assets/fonts/NotoSans-Regular.woff2") format("woff2");
@@ -439,6 +456,49 @@ ul {
   display: block;
 }
 
+/* Isometric pack cube — same bare treatment as vanilla grass block */
+.rail-game.is-bare-logo {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+  box-shadow: none;
+  display: grid;
+  place-items: center;
+  filter: none;
+  transition: transform 0.12s ease;
+}
+
+.rail-game.is-bare-logo .rail-pack-logo {
+  position: static;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: auto;
+  pointer-events: none;
+  transition: transform 0.12s ease;
+}
+
+.rail-game.is-bare-logo:hover,
+.rail-game.is-bare-logo.active {
+  border: none;
+  box-shadow: none;
+  filter: none;
+  transform: none;
+}
+
+.rail-game.is-bare-logo:hover .rail-pack-logo {
+  transform: scale(1.08);
+}
+
+.rail-game.is-bare-logo:active .rail-pack-logo {
+  transform: scale(0.9);
+}
+
+.rail-game.is-bare-logo.active::before {
+  content: none;
+}
+
 .rail-game.active::before {
   content: "";
   position: absolute;
@@ -454,6 +514,57 @@ ul {
 
 .rail-spacer {
   flex: 1;
+}
+
+/* Bare grass-block cube — no rounded frame */
+.rail-vanilla {
+  --rail-slot: 44px;
+  box-sizing: border-box;
+  width: var(--rail-slot);
+  height: var(--rail-slot);
+  margin-bottom: 6px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  position: relative;
+  overflow: visible;
+  box-shadow: none;
+  filter: none;
+  transition: transform 0.12s ease;
+}
+
+.rail-vanilla-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  display: block;
+  image-rendering: auto;
+  pointer-events: none;
+  transition: transform 0.12s ease;
+}
+
+.rail-vanilla:hover .rail-vanilla-logo {
+  transform: scale(1.08);
+}
+
+.rail-vanilla:active .rail-vanilla-logo {
+  transform: scale(0.9);
+}
+
+.rail-vanilla:hover,
+.rail-vanilla.active {
+  transform: none;
+  filter: none;
+  border: none;
+  box-shadow: none;
+}
+
+.rail-vanilla.active::before {
+  content: none;
 }
 
 .rail-settings {
@@ -479,12 +590,29 @@ ul {
 
 /* Stage */
 .stage {
+  position: relative;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: var(--topnav-h) minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
   height: 100%;
   overflow: hidden;
+}
+
+.stage > .topnav {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.stage > .content {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.stage > .playbar {
+  grid-column: 1;
+  grid-row: 3;
 }
 
 .topnav {
@@ -511,6 +639,57 @@ ul {
   flex-shrink: 0;
   margin-left: auto;
   padding-left: 8px;
+}
+
+/* Square offline chip — same face footprint as SkinHead 36 + 2px border */
+.topnav-offline-btn {
+  box-sizing: border-box;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: var(--mc-stone);
+  color: var(--text-on-stone);
+  border: 2px solid #000;
+  box-shadow: var(--bevel-panel);
+  cursor: pointer;
+  image-rendering: pixelated;
+  transition:
+    background 0.12s ease,
+    filter 0.12s ease,
+    transform 0.1s ease,
+    box-shadow 0.12s ease;
+}
+
+.topnav-offline-btn:hover {
+  background: var(--mc-stone-mid);
+  filter: brightness(1.06);
+}
+
+.topnav-offline-btn:active {
+  transform: translateY(1px);
+  box-shadow: var(--bevel-btn-press);
+}
+
+.topnav-offline-icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.topnav-offline-slash-outline {
+  stroke: var(--mc-stone);
+}
+
+.topnav-offline-btn:hover .topnav-offline-slash-outline {
+  stroke: var(--mc-stone-mid);
+}
+
+.topnav-offline-btn:active .topnav-offline-slash-outline {
+  stroke: var(--mc-stone-mid);
 }
 
 .topnav-avatar-btn {
@@ -627,6 +806,41 @@ ul {
   color: var(--text);
 }
 
+/*
+ * Page enter — only UI copy blocks (never heroes / wallpapers / scrims).
+ * Translate only: no opacity, scale, or clip-path (those glitch bitmaps).
+ * Shell is content-sized (not flex-fill) + overflow:hidden so translateY
+ * cannot grow .content scroll height, without trapping tall pages.
+ */
+.page-motion-shell {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.page-motion {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  animation: page-enter-mc 0.62s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes page-enter-mc {
+  from {
+    transform: translate3d(0, 16px, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-motion {
+    animation: none;
+  }
+}
+
 [data-theme^="light"] {
   color-scheme: light;
 }
@@ -699,25 +913,311 @@ ul {
   --hero-meta: var(--text-muted);
 }
 
-.home-body {
-  padding-top: 8px;
+/* Splash home — video wallpaper + brand */
+.home-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 36px 36px 28px;
+  overflow: hidden;
+  box-sizing: border-box;
+  background: var(--bg-deep);
 }
 
-.home-blurb {
-  margin: 0;
-  max-width: 34rem;
-  color: var(--text-secondary);
-  font-size: 15px;
-  line-height: 1.5;
-  font-weight: 400;
+/* Persistent wallpaper — lives on .stage so rail changes don't remount it */
+.home-video {
+  grid-column: 1;
+  grid-row: 2;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
 }
 
-.home-brand-logo {
-  width: 88px;
-  height: 88px;
+/* First load only — don't size-tween on return visits */
+.home-video.is-live:not(.is-ready) {
+  transition: opacity 0.35s ease;
+}
+
+.home-video.is-live.is-ready {
+  opacity: 1;
+  visibility: visible;
+}
+
+.home-video.is-parked {
+  /* Same geometry as live — resizing to a few px made WebKit flash a tiny frame */
+  opacity: 0;
+  visibility: hidden;
+}
+
+.home-stage.has-video {
+  background: transparent;
+}
+
+.home-stage.has-video:not(.is-video-ready) {
+  background: var(--bg-deep);
+}
+
+.stage > .topnav,
+.stage > .content,
+.stage > .playbar {
+  position: relative;
+  z-index: 1;
+}
+
+.content:has(.home-stage) {
+  background: transparent;
+}
+
+.home-video-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* No top darken — only a soft bottom fade for UI legibility */
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    transparent 55%,
+    rgba(0, 0, 0, 0.45) 82%,
+    rgba(0, 0, 0, 0.72) 100%
+  );
+}
+
+/* Minecraft title-screen wordmark — centered like the in-game menu */
+.home-splash {
+  position: absolute;
+  z-index: 2;
+  top: 8%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(92vw, 630px);
+  pointer-events: none;
+}
+
+.home-mc-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.home-stage > .pack-enchant {
+  z-index: 1;
+}
+
+.home-body-row {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  display: block;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.home-main {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 24px;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding-right: 220px;
+  box-sizing: border-box;
+}
+
+.home-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(560px, 100%);
+}
+
+/* Absolute slot — never taller than the stage, so legs aren't clipped */
+.home-player {
+  position: absolute;
+  top: 8px;
+  right: 0;
+  bottom: 8px;
+  width: 200px;
+  z-index: 2;
+  pointer-events: auto;
+}
+
+.home-player-skin {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.home-player-skin canvas {
+  width: 100% !important;
+  height: 100% !important;
+  background: transparent !important;
+}
+
+.home-feature {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 12px 14px;
+  text-align: left;
+  background: color-mix(in srgb, var(--mc-stone) 88%, #000 12%);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel);
+  image-rendering: pixelated;
+  transition:
+    background 0.15s ease,
+    transform 0.1s ease,
+    filter 0.15s ease;
+}
+
+.home-feature:hover {
+  background: var(--accent-deep);
+  filter: brightness(1.04);
+}
+
+.home-feature:active {
+  transform: translateY(2px);
+  box-shadow: var(--bevel-btn-press);
+}
+
+.home-feature-logo {
+  width: 64px;
+  height: 64px;
   object-fit: contain;
-  margin-bottom: 4px;
-  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.45));
+  object-position: center;
+  display: block;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.home-feature-logo.is-fallback {
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--text-on-stone);
+  border: 2px solid #000;
+  background: var(--mc-stone-mid);
+  box-shadow: inset 0 0 0 1px #3a3a3a;
+}
+
+.home-feature-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.home-feature-copy strong {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  color: var(--text-on-stone);
+  text-shadow: 1px 1px 0 var(--shadow-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-feature-copy span {
+  color: var(--text-on-stone-muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-feature-cta {
+  flex-shrink: 0;
+  min-width: 72px;
+  height: 36px;
+  padding: 0 12px;
+  display: grid;
+  place-items: center;
+  background: var(--mc-green);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-btn);
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.45);
+}
+
+.home-foot {
+  margin: 0;
+  color: color-mix(in srgb, #fff 70%, transparent);
+  font-size: 12px;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.65);
+}
+
+[data-theme^="light"] .home-foot {
+  color: var(--text-muted);
+  text-shadow: none;
+}
+
+@media (max-width: 860px) {
+  .home-main {
+    padding-right: 0;
+    padding-bottom: 220px;
+  }
+
+  .home-player {
+    top: auto;
+    right: 50%;
+    bottom: 0;
+    width: 180px;
+    height: 200px;
+    transform: translateX(50%);
+  }
+}
+
+@media (max-width: 720px) {
+  .home-stage {
+    padding: 24px 16px 20px;
+  }
+
+  .home-splash {
+    top: 5%;
+    width: min(94vw, 780px);
+  }
+
+  .home-feature {
+    grid-template-columns: 52px 1fr;
+  }
+
+  .home-feature-cta {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
 }
 
 .hero-kicker {
@@ -947,6 +1447,34 @@ ul {
   color: var(--accent-text);
 }
 
+.vanilla-skin-badge {
+  display: inline-block;
+  margin: 10px 0 0;
+  padding: 5px 9px;
+  max-width: 100%;
+  background: var(--mc-stone);
+  border: 2px solid #000;
+  box-shadow: var(--bevel-panel);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-on-stone);
+  text-shadow: 1px 1px 0 var(--shadow-soft);
+  line-height: 1.35;
+  image-rendering: pixelated;
+}
+
+.vanilla-skin-badge.is-ok {
+  background: #3c8527;
+  color: #fff;
+  text-shadow: 1px 1px 0 #1a4a12;
+  box-shadow:
+    inset 1px 1px 0 #6cc349,
+    inset -1px -1px 0 #2a5c1a;
+}
+
 .pack-about-blurb {
   margin: 0 0 16px;
   max-width: 46rem;
@@ -1124,6 +1652,13 @@ ul {
 }
 
 /* Installations */
+.install-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 720px;
+}
+
 .install-list {
   display: flex;
   flex-direction: column;
@@ -1131,11 +1666,45 @@ ul {
   max-width: 720px;
 }
 
+.install-divider {
+  width: 100%;
+  height: 0;
+  margin: 2px 0;
+  border: none;
+  border-top: 3px solid #000;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+
 .install-item {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 8px;
   align-items: stretch;
+}
+
+.install-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-mc.install-folder {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.btn-mc.install-folder svg {
+  width: 16px;
+  height: 13px;
+  display: block;
+  fill: currentColor;
+  flex-shrink: 0;
 }
 
 .install-delete {
@@ -1296,12 +1865,50 @@ img.install-icon.is-bare {
   margin-bottom: 14px;
 }
 
-.field label {
+.field label,
+.field-label {
   font-size: 11px;
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.skin-model-toggle {
+  display: flex;
+  gap: 0;
+  border: 3px solid #000;
+  box-shadow: var(--bevel-raised);
+  background: var(--bg-deep);
+}
+
+.skin-model-btn {
+  flex: 1;
+  height: 40px;
+  margin: 0;
+  border: 0;
+  border-right: 3px solid #000;
+  background: var(--bg-input);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  image-rendering: pixelated;
+}
+
+.skin-model-btn:last-child {
+  border-right: 0;
+}
+
+.skin-model-btn.is-active {
+  background: var(--mc-green);
+  color: #fff;
+  text-shadow: 1px 1px 0 #1a4d12;
+}
+
+.skin-model-btn:hover:not(.is-active) {
+  background: var(--bg-hover, var(--bg-input));
+  color: var(--text);
 }
 
 .field input,
@@ -1575,6 +2182,58 @@ img.install-icon.is-bare {
 
 .playbar .play-btn {
   justify-self: end;
+}
+
+.playbar-actions {
+  display: flex;
+  align-items: stretch;
+  justify-self: end;
+  gap: 10px;
+}
+
+.play-cancel {
+  box-sizing: border-box;
+  width: 54px;
+  height: 54px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: var(--mc-red);
+  color: #fff;
+  border: 3px solid #000;
+  box-shadow:
+    inset 0 3px 0 0 rgba(255, 255, 255, 0.22),
+    inset 0 -4px 0 0 rgba(0, 0, 0, 0.35),
+    inset 3px 0 0 0 rgba(255, 255, 255, 0.1),
+    inset -3px 0 0 0 rgba(0, 0, 0, 0.22),
+    0 4px 0 #000;
+  image-rendering: pixelated;
+  transition:
+    background 0.15s ease,
+    transform 0.1s ease,
+    filter 0.15s ease;
+}
+
+.play-cancel:hover {
+  background: var(--mc-red-mid);
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.play-cancel:active {
+  transform: translateY(3px);
+  box-shadow:
+    inset 0 2px 0 0 rgba(255, 255, 255, 0.14),
+    inset 0 -2px 0 0 rgba(0, 0, 0, 0.4),
+    inset 2px 0 0 0 rgba(255, 255, 255, 0.08),
+    inset -2px 0 0 0 rgba(0, 0, 0, 0.22),
+    0 1px 0 #000;
+}
+
+.play-cancel .btn-pixel-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .playbar.is-installing {
@@ -1997,32 +2656,27 @@ img.install-icon.is-bare {
   }
 }
 
-/* Auth / onboarding gates */
+/* Auth / onboarding / boot gates */
 .gate-screen {
   height: 100%;
   display: grid;
   place-items: center;
   padding: 32px;
-  background:
-    linear-gradient(180deg, rgba(20, 20, 20, 0.55), rgba(10, 10, 10, 0.92)),
-    linear-gradient(135deg, #1a2a16 0%, #121512 45%, #0c1014 100%);
+  background: #121212;
 }
 
 /*
- * Boot splash — fixed neutral palette (no theme CSS vars).
- * Theme apply mid-boot must not recolor this screen.
+ * Boot splash — stone panel on flat dark (no dirt / grass field).
+ * Fixed ink so theme apply mid-boot cannot recolor it.
  */
 .loading-screen {
-  --boot-ink: #f2f3f5;
-  --boot-muted: rgba(210, 214, 220, 0.55);
-  --boot-line: rgba(255, 255, 255, 0.1);
-  --boot-glow: rgba(180, 190, 210, 0.28);
-  --boot-glow-soft: rgba(160, 175, 200, 0.14);
+  --boot-ink: #f0f0f0;
+  --boot-muted: #a0a0a0;
   position: relative;
   overflow: hidden;
-  background: linear-gradient(165deg, #12141a 0%, #0a0b0f 52%, #07080a 100%);
+  background: #121212;
   opacity: 1;
-  transition: opacity 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.4s steps(6, end);
 }
 
 .loading-screen.is-leaving {
@@ -2030,141 +2684,129 @@ img.install-icon.is-bare {
   pointer-events: none;
 }
 
-.loading-aurora {
-  position: absolute;
-  inset: -25%;
-  background:
-    radial-gradient(circle at 28% 36%, var(--boot-glow-soft), transparent 44%),
-    radial-gradient(circle at 74% 62%, rgba(120, 140, 180, 0.16), transparent 48%),
-    radial-gradient(circle at 50% 80%, rgba(255, 255, 255, 0.04), transparent 40%);
-  filter: blur(36px);
-  opacity: 0.9;
-  animation: loading-aurora-drift 12s ease-in-out infinite alternate;
-  pointer-events: none;
-  will-change: transform;
-}
-
-@keyframes loading-aurora-drift {
-  0% {
-    transform: translate3d(-1.5%, -1%, 0) scale(1);
-  }
-  100% {
-    transform: translate3d(2.5%, 1.5%, 0) scale(1.05);
-  }
-}
-
 .loading-panel {
   position: relative;
   z-index: 1;
-  width: min(340px, 100%);
-  padding: 34px 30px 28px;
+  width: min(360px, 100%);
+  padding: 28px 26px 22px;
   text-align: center;
-  background: rgba(16, 18, 24, 0.72);
-  border: 1px solid var(--boot-line);
-  border-radius: 16px;
+  background: #2c2c2c;
+  border: 3px solid #000;
+  border-radius: 0;
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.5),
-    0 28px 56px rgba(0, 0, 0, 0.5),
-    0 0 48px var(--boot-glow-soft);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  animation: loading-panel-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+    inset 0 0 0 2px #4a4a4a,
+    0 8px 0 rgba(0, 0, 0, 0.55);
+  animation: loading-panel-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes loading-panel-in {
   from {
-    opacity: 0;
-    transform: translateY(10px) scale(0.985);
+    transform: translateY(12px);
   }
   to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
 }
 
 .loading-logo {
-  width: 68px;
-  height: 68px;
+  width: 72px;
+  height: 72px;
   object-fit: contain;
-  margin: 0 auto 16px;
+  margin: 0 auto 14px;
   display: block;
-  border-radius: 14px;
-  filter: drop-shadow(0 0 18px var(--boot-glow));
-  animation: loading-logo-breathe 3.4s ease-in-out infinite;
-}
-
-@keyframes loading-logo-breathe {
-  0%,
-  100% {
-    transform: scale(1);
-    filter: drop-shadow(0 0 14px var(--boot-glow-soft));
-  }
-  50% {
-    transform: scale(1.025);
-    filter: drop-shadow(0 0 26px var(--boot-glow));
-  }
+  border: 3px solid #000;
+  border-radius: 0;
+  background: #1a1a1a;
+  box-shadow: inset 0 0 0 1px #3a3a3a;
+  image-rendering: auto;
 }
 
 .loading-kicker {
-  margin: 0 0 6px;
+  margin: 0 0 4px;
   font-family: var(--font-display);
-  font-size: 11px;
-  letter-spacing: 0.2em;
+  font-size: 12px;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--boot-muted);
+  color: #6cc349;
+  text-shadow: 1px 1px 0 #1a1a1a;
 }
 
 .loading-title {
-  margin: 0 0 24px;
+  margin: 0 0 20px;
   font-family: var(--font-display);
-  font-size: 26px;
-  letter-spacing: 0.1em;
+  font-size: 28px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--boot-ink);
+  text-shadow: 2px 2px 0 #000;
 }
 
+/* Chunk progress — same language as PixelProgress / MC bars */
 .loading-bar {
-  height: 3px;
-  margin: 0 auto 16px;
-  max-width: 200px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 999px;
+  display: grid;
+  grid-template-columns: repeat(14, 1fr);
+  gap: 2px;
+  height: 22px;
+  margin: 0 auto 14px;
+  max-width: 240px;
+  padding: 3px;
+  box-sizing: border-box;
+  background: #111;
+  border: 3px solid #000;
+  border-radius: 0;
+  box-shadow: inset 1px 1px 0 #3a3a3a;
   overflow: hidden;
 }
 
-.loading-bar-fill {
+.loading-bar-cell {
   display: block;
-  height: 100%;
-  width: 38%;
-  border-radius: inherit;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(230, 235, 245, 0.35) 28%,
-    rgba(245, 247, 252, 0.95) 50%,
-    rgba(230, 235, 245, 0.35) 72%,
-    transparent 100%
-  );
-  box-shadow: 0 0 14px rgba(220, 228, 245, 0.45);
-  animation: loading-slide 2.2s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+  min-width: 0;
+  background: #1e1e1e;
+  box-shadow: inset 0 0 0 1px #0a0a0a;
+  animation: loading-cell 1.4s steps(1, end) infinite;
 }
 
-@keyframes loading-slide {
-  0% {
-    transform: translateX(-130%);
-  }
+@keyframes loading-cell {
+  0%,
   100% {
-    transform: translateX(320%);
+    background: #1e1e1e;
+    box-shadow: inset 0 0 0 1px #0a0a0a;
+  }
+  35%,
+  65% {
+    background: #5a9c32;
+    box-shadow:
+      inset 1px 1px 0 #8fd15a,
+      inset -1px -1px 0 #3d6e1c;
   }
 }
 
 .loading-hint {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 11px;
-  letter-spacing: 0.1em;
+  font-size: 12px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--boot-muted);
+  text-shadow: 1px 1px 0 #000;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-bar-cell {
+    animation: none;
+    background: #5a9c32;
+    box-shadow:
+      inset 1px 1px 0 #8fd15a,
+      inset -1px -1px 0 #3d6e1c;
+  }
+
+  .loading-panel {
+    animation: none;
+  }
+
+  .loading-screen {
+    transition: none;
+  }
 }
 
 .gate-panel {
@@ -2231,21 +2873,6 @@ img.install-icon.is-bare {
   width: 100%;
   margin-top: 10px;
   min-height: 40px;
-}
-
-.offline-banner {
-  margin: 0 0 14px;
-  padding: 10px 14px;
-  max-width: 720px;
-  background: var(--accent-deep);
-  border: 3px solid #000;
-  box-shadow: var(--bevel-panel);
-  color: var(--text);
-  font-family: var(--font-display);
-  font-size: 12px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  line-height: 1.45;
 }
 
 .gate-form {
@@ -2355,11 +2982,19 @@ img.install-icon.is-bare {
 }
 
 .pixel-progress-meta {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 10px;
-  align-items: baseline;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
   font-size: 12px;
+}
+
+.pixel-progress-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
 }
 
 .pixel-progress-phase {
@@ -2367,6 +3002,7 @@ img.install-icon.is-bare {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--accent-text);
+  flex-shrink: 0;
 }
 
 .pixel-progress-label {
@@ -2374,11 +3010,13 @@ img.install-icon.is-bare {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
 .pixel-progress-pct {
   font-family: var(--font-display);
   color: var(--text);
+  flex-shrink: 0;
 }
 
 .pixel-progress-track {
@@ -2419,7 +3057,7 @@ img.install-icon.is-bare {
 
 .theme-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   max-width: 520px;
 }
@@ -2876,13 +3514,13 @@ img.install-icon.is-bare {
   }
 }
 
-/* Toast */
+/* Toast — fixed, out of document flow; enter + exit keyframes */
 .toast {
   position: fixed;
   left: 50%;
   bottom: calc(var(--playbar-h) + 18px);
-  transform: translateX(-50%);
   z-index: 40;
+  max-width: min(420px, calc(100vw - 32px));
   padding: 12px 18px;
   background: var(--mc-stone);
   color: var(--text-on-stone);
@@ -2896,9 +3534,40 @@ img.install-icon.is-bare {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   text-shadow: 1px 1px 0 var(--shadow-soft);
-  animation: toast-in 0.18s ease-out;
+  text-align: center;
+  line-height: 1.35;
   pointer-events: none;
   image-rendering: pixelated;
+}
+
+/* Success reconnect — fixed MC green (not theme accent) */
+.toast.is-ok {
+  background: #3c8527;
+  color: #fff;
+  text-shadow: 1px 1px 0 #1a4a12;
+  box-shadow:
+    inset 2px 2px 0 #6cc349,
+    inset -2px -2px 0 #2a5c1a,
+    0 8px 0 rgba(0, 0, 0, 0.45);
+}
+
+/* Offline / error — fixed MC red */
+.toast.is-err {
+  background: #8b1e1e;
+  color: #fff;
+  text-shadow: 1px 1px 0 #3d0c0c;
+  box-shadow:
+    inset 2px 2px 0 #c94a4a,
+    inset -2px -2px 0 #5c1212,
+    0 8px 0 rgba(0, 0, 0, 0.45);
+}
+
+.toast.is-in {
+  animation: toast-in 0.18s ease-out both;
+}
+
+.toast.is-out {
+  animation: toast-out 0.26s ease-in both;
 }
 
 @keyframes toast-in {
@@ -2909,5 +3578,27 @@ img.install-icon.is-bare {
   to {
     opacity: 1;
     transform: translate(-50%, 0);
+  }
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast.is-in,
+  .toast.is-out {
+    animation: none;
+  }
+
+  .toast.is-out {
+    opacity: 0;
   }
 }

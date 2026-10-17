@@ -1,22 +1,60 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
+
+export type ToastTone = "default" | "ok" | "err";
 
 type Props = {
   message: string | null;
+  tone?: ToastTone;
   onDone: () => void;
 };
 
-export function Toast({ message, onDone }: Props) {
+const HOLD_MS = 2200;
+const FADE_MS = 260;
+
+export function Toast({ message, tone = "default", onDone }: Props) {
+  const [text, setText] = useState<string | null>(null);
+  const [activeTone, setActiveTone] = useState<ToastTone>("default");
+  const [phase, setPhase] = useState<"in" | "out">("in");
+  const onDoneRef = useRef(onDone);
+  const seqRef = useRef(0);
+  onDoneRef.current = onDone;
+
   useEffect(() => {
     if (!message) return;
-    const t = window.setTimeout(onDone, 2200);
-    return () => window.clearTimeout(t);
-  }, [message, onDone]);
+    const seq = ++seqRef.current;
+    setText(message);
+    setActiveTone(tone);
+    setPhase("in");
 
-  if (!message) return null;
+    const hold = window.setTimeout(() => {
+      if (seqRef.current !== seq) return;
+      setPhase("out");
+    }, HOLD_MS);
+
+    const done = window.setTimeout(() => {
+      if (seqRef.current !== seq) return;
+      setText(null);
+      onDoneRef.current();
+    }, HOLD_MS + FADE_MS);
+
+    return () => {
+      window.clearTimeout(hold);
+      window.clearTimeout(done);
+    };
+  }, [message, tone]);
+
+  if (!text) return null;
+
+  const toneClass =
+    activeTone === "ok" ? " is-ok" : activeTone === "err" ? " is-err" : "";
 
   return (
-    <div className="toast" role="status" aria-live="polite">
-      {message}
+    <div
+      className={`toast is-${phase}${toneClass}`}
+      role="status"
+      aria-live="polite"
+    >
+      {text}
     </div>
   );
 }

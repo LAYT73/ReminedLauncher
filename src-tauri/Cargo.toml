@@ -1,13 +1,18 @@
 [package]
 name = "remined"
-version = "0.4.2"
+version = "0.5.0"
 description = "Remined Minecraft Launcher"
 authors = ["Remined"]
 edition = "2021"
+default-run = "remined"
 
 [lib]
 name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "remined-cli"
+path = "src/bin/remined_cli.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -28,6 +33,7 @@ tauri-plugin-process = "2.4.0"
 uuid = { version = "1.28.0", features = ["v3", "std"] }
 futures = "0.3.34"
 tokio = { version = "1.53.2", features = ["time", "rt", "macros"] }
+libc = "0.2"
 
 [profile.release]
 codegen-units = 1

@@ -6,13 +6,14 @@ use crate::progress;
 use futures::stream::{FuturesUnordered, StreamExt};
 use serde_json::Value;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tauri::AppHandle;
 use uuid::Uuid;
+use zip::ZipArchive;
 
 fn current_os() -> &'static str {
     if cfg!(target_os = "macos") {
@@ -140,6 +141,7 @@ async fn download_file(client: &reqwest::Client, url: &str, dest: &Path) -> Resu
                     let mut file = File::create(&tmp).map_err(|e| e.to_string())?;
                     let mut empty = true;
                     while let Some(chunk) = ok.chunk().await.map_err(|e| e.to_string())? {
+                        crate::progress::check_cancelled()?;
                         if !chunk.is_empty() {
                             empty = false;
                         }
@@ -228,6 +230,8 @@ pub struct LaunchOpts {
     pub jvm_args: String,
     /// Auto-join multiplayer (`host:port`) via --quickPlayMultiplayer / --server.
     pub quick_play: Option<String>,
+    /// Extra launchctl label segment so a second client does not boot out the first.
+    pub launch_label_suffix: Option<String>,
 }
 
 /// Ensure libraries + assets for the pack version JSON. Emits progress events.
@@ -415,7 +419,9 @@ async fn ensure_assets(app: &AppHandle, root: &Path, version: &Value) -> Result<
         let assets_dir = assets_dir.clone();
         let done = Arc::clone(&done);
         let app = app.clone();
+        crate::progress::check_cancelled()?;
         tasks.push(async move {
+            crate::progress::check_cancelled()?;
             let dest = assets_dir.join("objects").join(&hash[..2]).join(&hash);
             let url = format!("https://resources.download.minecraft.net/{}/{hash}", &hash[..2]);
             let res = download_file(&client, &url, &dest).await;
@@ -533,6 +539,106 @@ fn build_jvm_args(
     Ok(args)
 }
 
+/// Cursor/`tauri dev` often sets TMPDIR under the project on Desktop. JNA/LWJGL then
+/// extract natives there and macOS aborts on `dlopen` (SIGABRT in Native.open).
+/// Prefer a short `/tmp/...` path — JNA 5.12 asserts if LOAD_ERROR messages truncate.
+fn game_temp_dir(instance: &Path) -> Result<PathBuf, String> {
+    let base = if cfg!(target_os = "macos") {
+        PathBuf::from("/tmp/remined-game")
+    } else {
+        std::env::temp_dir().join("remined-game")
+    };
+    let dir = base.join(
+        instance
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("instance"),
+    );
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+/// macOS GLFW/LWJGL require the JVM to start on thread 0.
+fn ensure_macos_start_on_first_thread(jvm: &mut Vec<String>) {
+    if !cfg!(target_os = "macos") {
+        return;
+    }
+    if jvm.iter().any(|a| a == "-XstartOnFirstThread") {
+        return;
+    }
+    jvm.insert(0, "-XstartOnFirstThread".into());
+}
+
+/// Extract + ad-hoc codesign `libjnidispatch` so Java's hardened runtime can `dlopen` it
+/// when Remined is launched from Cursor / an unsigned `tauri dev` binary.
+fn prepare_jna_boot_library(jars: &[PathBuf], dest_dir: &Path) -> Result<Option<PathBuf>, String> {
+    if !cfg!(target_os = "macos") {
+        return Ok(None);
+    }
+    let jna_jar = jars.iter().rev().find(|p| {
+        let name = p
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        name.starts_with("jna-") && !name.contains("platform") && name.ends_with(".jar")
+    });
+    let Some(jar_path) = jna_jar else {
+        return Ok(None);
+    };
+
+    let resource = if cfg!(target_arch = "aarch64") {
+        "com/sun/jna/darwin-aarch64/libjnidispatch.jnilib"
+    } else {
+        "com/sun/jna/darwin-x86-64/libjnidispatch.jnilib"
+    };
+
+    fs::create_dir_all(dest_dir).map_err(|e| e.to_string())?;
+    let out = dest_dir.join("libjnidispatch.jnilib");
+    let need_extract = match (out.metadata(), jar_path.metadata()) {
+        (Ok(out_m), Ok(jar_m)) => {
+            out_m.len() == 0
+                || out_m
+                    .modified()
+                    .ok()
+                    .zip(jar_m.modified().ok())
+                    .map(|(o, j)| o < j)
+                    .unwrap_or(true)
+        }
+        _ => true,
+    };
+    if need_extract {
+        let file = File::open(jar_path).map_err(|e| format!("open JNA jar: {e}"))?;
+        let mut zip = ZipArchive::new(file).map_err(|e| format!("JNA jar zip: {e}"))?;
+        let mut entry = zip
+            .by_name(resource)
+            .map_err(|e| format!("JNA native missing ({resource}): {e}"))?;
+        let mut bytes = Vec::new();
+        entry
+            .read_to_end(&mut bytes)
+            .map_err(|e| format!("read JNA native: {e}"))?;
+        fs::write(&out, bytes).map_err(|e| format!("write JNA native: {e}"))?;
+    }
+
+    // Ad-hoc sign so hardened-runtime Java accepts the dylib.
+    let _ = Command::new("codesign")
+        .args(["--force", "--sign", "-", "--timestamp=none"])
+        .arg(&out)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+
+    Ok(Some(dest_dir.to_path_buf()))
+}
+
+/// Same offline UUID Mojang clients use for `OfflinePlayer:{name}`.
+pub fn offline_player_uuid(username: &str) -> Uuid {
+    Uuid::new_v3(
+        &Uuid::NAMESPACE_DNS,
+        format!("OfflinePlayer:{username}").as_bytes(),
+    )
+}
+
 fn build_game_args(
     version: &Value,
     instance: &Path,
@@ -540,10 +646,7 @@ fn build_game_args(
     assets_index: &str,
     username: &str,
 ) -> Result<Vec<String>, String> {
-    let player_uuid = Uuid::new_v3(
-        &Uuid::NAMESPACE_DNS,
-        format!("OfflinePlayer:{username}").as_bytes(),
-    );
+    let player_uuid = offline_player_uuid(username);
     let version_name = version
         .get("id")
         .and_then(|i| i.as_str())
@@ -563,6 +666,7 @@ fn build_game_args(
         ("${auth_access_token}", "0".into()),
         ("${clientid}", "0".into()),
         ("${auth_xuid}", "0".into()),
+        ("${user_type}", "legacy".into()),
         ("${version_type}", version_type.to_string()),
         ("${resolution_width}", "1280".into()),
         ("${resolution_height}", "720".into()),
@@ -592,10 +696,239 @@ fn build_game_args(
     Ok(args)
 }
 
-/// Prepare (if needed) then spawn the game process.
-pub async fn launch_game(app: &AppHandle, opts: LaunchOpts) -> Result<Child, String> {
-    prepare_runtime(app, &opts.root, &opts.instance).await?;
+/// Handle for a running (or just-spawned) game process.
+pub enum LaunchedGame {
+    #[allow(dead_code)] // used on Windows/Linux; macOS uses Detached
+    Child(Child),
+    /// macOS: Java started via launchctl GUI domain (not a child of Remined/Cursor).
+    #[cfg(target_os = "macos")]
+    Detached { pid: u32, log_path: PathBuf },
+}
 
+impl LaunchedGame {
+    pub fn try_wait(&mut self) -> std::io::Result<Option<std::process::ExitStatus>> {
+        match self {
+            Self::Child(child) => child.try_wait(),
+            #[cfg(target_os = "macos")]
+            Self::Detached { pid, .. } => {
+                if unsafe { libc::kill(*pid as i32, 0) == 0 } {
+                    Ok(None)
+                } else {
+                    use std::os::unix::process::ExitStatusExt;
+                    Ok(Some(std::process::ExitStatus::from_raw(1)))
+                }
+            }
+        }
+    }
+
+    pub fn error_tail(&mut self) -> String {
+        match self {
+            Self::Child(child) => {
+                let mut err = String::new();
+                if let Some(mut stderr) = child.stderr.take() {
+                    let _ = stderr.read_to_string(&mut err);
+                }
+                err.chars().take(200).collect()
+            }
+            #[cfg(target_os = "macos")]
+            Self::Detached { log_path, .. } => {
+                let text = fs::read_to_string(log_path).unwrap_or_default();
+                let start = text.len().saturating_sub(200);
+                text[start..].to_string()
+            }
+        }
+    }
+}
+
+/// Drop version-json tmp/extract props so Desktop `natives/` cannot win over `/tmp/remined-game`.
+fn scrub_native_tmpdir_props(jvm: &mut Vec<String>) {
+    jvm.retain(|a| {
+        !(a.starts_with("-Djna.tmpdir=")
+            || a.starts_with("-Djava.io.tmpdir=")
+            || a.starts_with("-Djna.boot.library.path=")
+            || a.starts_with("-Dorg.lwjgl.system.SharedLibraryExtractPath=")
+            || a.starts_with("-Dorg.lwjgl.system.SharedLibraryExtractDirectory="))
+    });
+}
+
+/// Launch via a tiny `.app` + LaunchServices (`open`).
+///
+/// - Not a child of Remined/Cursor (avoids JNA `Native.open` SIGABRT).
+/// - Proper Aqua activation policy so GLFW gets mouse/keyboard focus
+///   (launchctl agents often leave the window "focused" but dead to input).
+#[cfg(target_os = "macos")]
+fn spawn_detached_macos(
+    java: &Path,
+    java_home: &Path,
+    jvm: &[String],
+    main_class: &str,
+    game: &[String],
+    instance: &Path,
+    game_tmp: &Path,
+    label_suffix: Option<&str>,
+) -> Result<LaunchedGame, String> {
+    let _ = label_suffix; // reserved for unique bundle ids if needed later
+    let launch_dir = game_tmp.join("launch-app");
+    let app = launch_dir.join("ReminedGame.app");
+    let contents = app.join("Contents");
+    let macos = contents.join("MacOS");
+    fs::create_dir_all(&macos).map_err(|e| e.to_string())?;
+
+    let pid_path = game_tmp.join("game.pid");
+    let log_path = game_tmp.join("game-stdout.log");
+    let _ = fs::remove_file(&pid_path);
+    let _ = fs::remove_file(&log_path);
+
+    let mut argv = String::new();
+    for arg in jvm
+        .iter()
+        .cloned()
+        .chain(std::iter::once(main_class.to_string()))
+        .chain(game.iter().cloned())
+    {
+        argv.push(' ');
+        argv.push_str(&shell_single_quote(&arg));
+    }
+
+    // Not LSUIElement — must be a real app so Cocoa/GLFW receive input focus.
+    let plist = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleExecutable</key>
+	<string>remined-launch</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.remined.launcher.game</string>
+	<key>CFBundleName</key>
+	<string>Remined Game</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>11.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+</dict>
+</plist>
+"#;
+    fs::write(contents.join("Info.plist"), plist).map_err(|e| e.to_string())?;
+
+    let exe = macos.join("remined-launch");
+    let script = format!(
+        r#"#!/bin/zsh
+cd {instance}
+export JAVA_HOME={java_home}
+export TMPDIR={game_tmp}
+export TEMP={game_tmp}
+export TMP={game_tmp}
+export PATH={java_bin}":$PATH"
+print -r -- $$ > {pid}
+exec {java}{argv} >{log} 2>&1
+"#,
+        instance = shell_single_quote(&instance.display().to_string()),
+        java_home = shell_single_quote(&java_home.display().to_string()),
+        game_tmp = shell_single_quote(&game_tmp.display().to_string()),
+        java_bin = shell_single_quote(
+            &java
+                .parent()
+                .unwrap_or(java)
+                .display()
+                .to_string()
+        ),
+        pid = shell_single_quote(&pid_path.display().to_string()),
+        java = shell_single_quote(&java.display().to_string()),
+        argv = argv,
+        log = shell_single_quote(&log_path.display().to_string()),
+    );
+    fs::write(&exe, script).map_err(|e| e.to_string())?;
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&exe).map_err(|e| e.to_string())?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&exe, perms).map_err(|e| e.to_string())?;
+    }
+    let _ = Command::new("/usr/bin/xattr")
+        .args(["-cr"])
+        .arg(&app)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    let _ = Command::new("/usr/bin/codesign")
+        .args(["--force", "--deep", "--sign", "-", "--timestamp=none"])
+        .arg(&app)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+
+    // Bring to front (-g would hide activation and break mouse for a while).
+    let open_out = Command::new("/usr/bin/open")
+        .args(["-n"])
+        .arg(&app)
+        .output()
+        .map_err(|e| format!("open LaunchServices: {e}"))?;
+    if !open_out.status.success() {
+        let err = String::from_utf8_lossy(&open_out.stderr);
+        return Err(format!(
+            "open failed with {}: {}",
+            open_out.status,
+            err.trim()
+        ));
+    }
+
+    let mut pid = None;
+    for _ in 0..50 {
+        if let Ok(s) = fs::read_to_string(&pid_path) {
+            if let Ok(p) = s.trim().parse::<u32>() {
+                pid = Some(p);
+                break;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    let pid = pid.ok_or_else(|| {
+        let tail = fs::read_to_string(&log_path).unwrap_or_default();
+        if tail.is_empty() {
+            "Game did not start (no pid)".into()
+        } else {
+            format!(
+                "Game did not start: {}",
+                tail.chars().take(200).collect::<String>()
+            )
+        }
+    })?;
+
+    // Nudge focus after the JVM window exists (best-effort; ignores Accessibility denials).
+    let _ = Command::new("/usr/bin/osascript")
+        .args([
+            "-e",
+            &format!(
+                "delay 1.2\n\
+                 tell application \"System Events\"\n\
+                   try\n\
+                     set frontmost of (first process whose unix id is {pid}) to true\n\
+                   end try\n\
+                 end tell"
+            ),
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
+
+    Ok(LaunchedGame::Detached { pid, log_path })
+}
+
+#[cfg(target_os = "macos")]
+fn shell_single_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
+}
+
+/// Prepare (if needed) then spawn the game process.
+pub async fn launch_game(app: &AppHandle, opts: LaunchOpts) -> Result<LaunchedGame, String> {
+    prepare_runtime(app, &opts.root, &opts.instance).await?;
+    spawn_game(opts).await
+}
+
+/// Spawn using libraries/assets already on disk (no Tauri UI / no downloads).
+pub async fn spawn_game(opts: LaunchOpts) -> Result<LaunchedGame, String> {
     let meta = instance::read_meta(&opts.instance);
     let version_path = instance::find_version_json(
         &opts.instance,
@@ -628,12 +961,15 @@ pub async fn launch_game(app: &AppHandle, opts: LaunchOpts) -> Result<Child, Str
     for sub in ["java", "jna", "lwjgl", "netty"] {
         fs::create_dir_all(natives.join(sub)).map_err(|e| e.to_string())?;
     }
+    let game_tmp = game_temp_dir(&opts.instance)?;
+    let jna_tmp = game_tmp.join("jna");
+    fs::create_dir_all(&jna_tmp).map_err(|e| e.to_string())?;
 
     let log_config = ensure_log_config(&opts.root, &version).await?;
     let log_owned = log_config.clone();
     let log_ref = log_owned.as_deref();
 
-    let jvm = build_jvm_args(
+    let mut jvm = build_jvm_args(
         &version,
         &classpath,
         &natives,
@@ -641,6 +977,24 @@ pub async fn launch_game(app: &AppHandle, opts: LaunchOpts) -> Result<Child, Str
         opts.ram_mb.clamp(1024, 32768),
         &opts.jvm_args,
     )?;
+    ensure_macos_start_on_first_thread(&mut jvm);
+    // Version JSON often sets jna.tmpdir / LWJGL extract to instance `natives/` (Desktop path).
+    scrub_native_tmpdir_props(&mut jvm);
+
+    // Force JNA/LWJGL onto a short /tmp path (JNA 5.12 aborts if LOAD_ERROR truncates).
+    jvm.push(format!("-Djna.tmpdir={}", jna_tmp.display()));
+    jvm.push(format!("-Djava.io.tmpdir={}", game_tmp.display()));
+    jvm.push(format!(
+        "-Dorg.lwjgl.system.SharedLibraryExtractDirectory={}",
+        game_tmp.join("lwjgl").display()
+    ));
+    fs::create_dir_all(game_tmp.join("lwjgl")).map_err(|e| e.to_string())?;
+
+    let jna_boot = game_tmp.join("jna-boot");
+    if let Some(boot) = prepare_jna_boot_library(&jars, &jna_boot)? {
+        jvm.push(format!("-Djna.boot.library.path={}", boot.display()));
+    }
+
     let mut game = build_game_args(
         &version,
         &opts.instance,
@@ -673,6 +1027,32 @@ pub async fn launch_game(app: &AppHandle, opts: LaunchOpts) -> Result<Child, Str
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| opts.java.clone());
 
+    // Put -XstartOnFirstThread first if present (GLFW on macOS is picky about order).
+    if let Some(idx) = jvm.iter().position(|a| a == "-XstartOnFirstThread") {
+        if idx != 0 {
+            let flag = jvm.remove(idx);
+            jvm.insert(0, flag);
+        }
+    }
+
+    // CLI second-client needs a detached process so it does not share Remined's session lock /
+    // launchctl label. Normal Play: spawn as a child so GLFW gets real input focus on macOS.
+    #[cfg(target_os = "macos")]
+    if opts.launch_label_suffix.is_some() {
+        return spawn_detached_macos(
+            &opts.java,
+            &java_home,
+            &jvm,
+            main_class,
+            &game,
+            &opts.instance,
+            &game_tmp,
+            opts.launch_label_suffix.as_deref(),
+        );
+    }
+
+    // Match pre-0.4.2 spawn: plain child of Remined (no process_group).
+    // `process_group(0)` broke GLFW mouse/keyboard focus on macOS.
     let mut cmd = Command::new(&opts.java);
     cmd.args(&jvm)
         .arg(main_class)
@@ -680,7 +1060,11 @@ pub async fn launch_game(app: &AppHandle, opts: LaunchOpts) -> Result<Child, Str
         .current_dir(&opts.instance)
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
-        .env("JAVA_HOME", &java_home);
+        .env("JAVA_HOME", &java_home)
+        // Keep short tmp for JNA/LWJGL; does not affect Cocoa focus.
+        .env("TMPDIR", &game_tmp)
+        .env("TEMP", &game_tmp)
+        .env("TMP", &game_tmp);
 
     let path_sep = if cfg!(windows) { ";" } else { ":" };
     if let Some(bin) = opts.java.parent() {
@@ -695,7 +1079,9 @@ pub async fn launch_game(app: &AppHandle, opts: LaunchOpts) -> Result<Child, Str
         );
     }
 
-    cmd.spawn().map_err(|e| format!("Failed to start Java: {e}"))
+    cmd.spawn()
+        .map(LaunchedGame::Child)
+        .map_err(|e| format!("Failed to start Java: {e}"))
 }
 
 fn collect_classpath_paths(

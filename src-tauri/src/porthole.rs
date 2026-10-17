@@ -454,6 +454,140 @@ fn extract_share_code(line: &str) -> Option<String> {
     None
 }
 
+/// Standard Steam client install locations (macOS / Windows / Linux).
+fn steam_client_candidates() -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    if let Ok(custom) = std::env::var("REMINED_STEAM_PATH") {
+        let p = PathBuf::from(custom.trim());
+        if !p.as_os_str().is_empty() {
+            out.push(p);
+        }
+    }
+
+    if cfg!(target_os = "macos") {
+        out.push(PathBuf::from("/Applications/Steam.app"));
+        if let Some(home) = home_dir() {
+            out.push(home.join("Applications/Steam.app"));
+        }
+    } else if cfg!(target_os = "windows") {
+        for key in ["ProgramFiles(x86)", "ProgramFiles"] {
+            if let Ok(pf) = std::env::var(key) {
+                out.push(PathBuf::from(pf).join(r"Steam\Steam.exe"));
+            }
+        }
+        if let Some(home) = home_dir() {
+            out.push(home.join(r"Steam\Steam.exe"));
+            out.push(home.join(r"AppData\Local\Programs\Steam\Steam.exe"));
+        }
+        // Common alternate drive installs
+        for drive in ["D:", "E:", "F:"] {
+            out.push(PathBuf::from(format!(r"{drive}\Steam\Steam.exe")));
+            out.push(PathBuf::from(format!(r"{drive}\Program Files (x86)\Steam\Steam.exe")));
+            out.push(PathBuf::from(format!(r"{drive}\Program Files\Steam\Steam.exe")));
+        }
+    } else {
+        if let Some(home) = home_dir() {
+            out.push(home.join(".steam/steam/steam.sh"));
+            out.push(home.join(".local/share/Steam/steam.sh"));
+            out.push(home.join(".steam/debian-installation/steam.sh"));
+        }
+        out.push(PathBuf::from("/usr/bin/steam"));
+        out.push(PathBuf::from("/usr/games/steam"));
+        out.push(PathBuf::from("/snap/bin/steam"));
+    }
+
+    out
+}
+
+pub fn find_steam_client() -> Option<PathBuf> {
+    steam_client_candidates().into_iter().find(|p| p.exists())
+}
+
+/// Launch the Steam client (or fall back to `steam://open/main`).
+pub fn open_steam_client() -> Result<String, String> {
+    if let Some(path) = find_steam_client() {
+        #[cfg(target_os = "macos")]
+        {
+            Command::new("open")
+                .arg(&path)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .map_err(|e| format!("Could not open Steam: {e}"))?;
+            return Ok(format!("Opening {}", path.display()));
+        }
+        #[cfg(target_os = "windows")]
+        {
+            Command::new(&path)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .map_err(|e| format!("Could not open Steam: {e}"))?;
+            return Ok(format!("Opening {}", path.display()));
+        }
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            Command::new(&path)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .map_err(|e| format!("Could not open Steam: {e}"))?;
+            return Ok(format!("Opening {}", path.display()));
+        }
+    }
+
+    // Protocol handler (works if Steam registered itself)
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg("steam://open/main")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| {
+                format!(
+                    "Steam app not found in Applications, and steam:// failed: {e}"
+                )
+            })?;
+        return Ok("Opening Steam via steam://…".into());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("cmd")
+            .args(["/C", "start", "", "steam://open/main"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| {
+                format!(
+                    "Steam.exe not found in standard paths, and steam:// failed: {e}"
+                )
+            })?;
+        return Ok("Opening Steam via steam://…".into());
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        Command::new("xdg-open")
+            .arg("steam://open/main")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| {
+                format!("Steam not found in standard paths, and steam:// failed: {e}")
+            })?;
+        return Ok("Opening Steam via steam://…".into());
+    }
+
+    #[allow(unreachable_code)]
+    Err("Could not locate Steam".into())
+}
+
 fn spawn_porthole(args: &[&str]) -> Result<Child, String> {
     let bin = find_binary().ok_or_else(|| {
         "Porthole not found — install it from Steam (free), then reopen Remined".to_string()

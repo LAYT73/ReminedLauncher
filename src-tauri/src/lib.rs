@@ -1,4 +1,5 @@
 mod asset_cache;
+pub mod cli;
 mod config;
 mod instance;
 mod java_runtime;
@@ -7,8 +8,11 @@ mod pack_sync;
 mod paths;
 mod porthole;
 mod progress;
+mod remined_vanilla;
 mod runtime;
+mod skinshuffle_patch;
 mod vanilla;
+mod vanilla_skin_pack;
 
 use java_runtime::JavaInfo;
 use onboarding::{OnboardingState, RuntimeStatus};
@@ -16,10 +20,9 @@ use pack_sync::{PackCatalog, PackRelease, PackStatus};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::Child;
 use std::sync::Mutex;
+use runtime::LaunchedGame;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, State};
 
@@ -36,13 +39,28 @@ fn default_ram_mb() -> u32 {
 }
 
 fn default_theme() -> String {
-    "dark-green".into()
+    "dark-pink".into()
+}
+
+fn default_skin_model() -> String {
+    "default".into()
+}
+
+fn normalize_skin_model(raw: &str) -> &'static str {
+    if raw.trim().eq_ignore_ascii_case("slim") {
+        "slim"
+    } else {
+        "default"
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Profile {
     pub username: String,
     pub skin_path: Option<String>,
+    /// `"default"` (classic/wide) or `"slim"`.
+    #[serde(default = "default_skin_model")]
+    pub skin_model: String,
     pub selected_pack: String,
     #[serde(default = "default_ram_mb")]
     pub ram_mb: u32,
@@ -59,6 +77,7 @@ impl Default for Profile {
         Self {
             username: "Player".into(),
             skin_path: None,
+            skin_model: default_skin_model(),
             selected_pack: String::new(),
             ram_mb: default_ram_mb(),
             java_path: None,
@@ -85,7 +104,7 @@ pub enum GamePhase {
 
 struct GameSession {
     phase: GamePhase,
-    child: Option<Child>,
+    child: Option<LaunchedGame>,
 }
 
 impl Default for GameSession {
@@ -144,6 +163,8 @@ fn lock_skinshuffle_ui(instance: &Path) -> Result<(), String> {
     };
     cfg["displayInTitleScreen"] = serde_json::json!(true);
     cfg["displayInPauseMenu"] = serde_json::json!(false);
+    // Remined is offline — hide SkinShuffle's "not authenticated" toast (newer mod versions).
+    cfg["disableOfflineToast"] = serde_json::json!(true);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -172,7 +193,7 @@ fn default_steve_png() -> &'static [u8] {
     include_bytes!("../assets/steve.png")
 }
 
-fn apply_default_steve_skin(instance: &Path) -> Result<(), String> {
+fn apply_default_steve_skin(instance: &Path, skin_model: &str) -> Result<(), String> {
     let dir = instance
         .join("config")
         .join("skinshuffle")
@@ -180,7 +201,7 @@ fn apply_default_steve_skin(instance: &Path) -> Result<(), String> {
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let dest = dir.join("remined_default.png");
     fs::write(&dest, default_steve_png()).map_err(|e| e.to_string())?;
-    apply_skinshuffle(instance, &dest)
+    apply_skinshuffle(instance, &dest, skin_model)
 }
 
 /// Point CustomSkinLoader at Remined Supabase CustomSkinAPI (friends see each other's skins).
@@ -233,7 +254,7 @@ fn apply_customskinloader_config(instance: &Path) -> Result<(), String> {
     .map_err(|e| e.to_string())
 }
 
-fn apply_skinshuffle(instance: &Path, skin_src: &Path) -> Result<(), String> {
+fn apply_skinshuffle(instance: &Path, skin_src: &Path, skin_model: &str) -> Result<(), String> {
     if !skin_src.is_file() {
         return Err(format!("Skin file not found: {}", skin_src.display()));
     }
@@ -247,6 +268,7 @@ fn apply_skinshuffle(instance: &Path, skin_src: &Path) -> Result<(), String> {
         .map(|d| d.as_millis())
         .unwrap_or(0);
     let skin_name = format!("remined{stamp}");
+    let model = normalize_skin_model(skin_model);
 
     let skins_dir = instance.join("config").join("skinshuffle").join("skins");
     fs::create_dir_all(&skins_dir).map_err(|e| e.to_string())?;
@@ -256,7 +278,7 @@ fn apply_skinshuffle(instance: &Path, skin_src: &Path) -> Result<(), String> {
     let preset = serde_json::json!({
         "skin": {
             "skin_name": skin_name,
-            "model": "default",
+            "model": model,
             "type": "skinshuffle:config"
         },
         "name": "Remined"
@@ -507,6 +529,11 @@ async fn ensure_pack(app: AppHandle, pack_id: String) -> Result<PackStatus, Stri
 }
 
 #[tauri::command]
+fn cancel_install() {
+    progress::request_cancel();
+}
+
+#[tauri::command]
 async fn list_vanilla_versions(
     app: AppHandle,
 ) -> Result<vanilla::VanillaListResponse, String> {
@@ -525,9 +552,57 @@ async fn install_vanilla_version(
 }
 
 #[tauri::command]
+async fn list_remined_vanilla_versions(
+    app: AppHandle,
+) -> Result<remined_vanilla::ReminedVanillaListResponse, String> {
+    let root = paths::remined_root(&app)?;
+    remined_vanilla::list_versions(&root).await
+}
+
+#[tauri::command]
+async fn install_remined_vanilla_version(
+    app: AppHandle,
+    version_id: String,
+) -> Result<PackStatus, String> {
+    let root = paths::remined_root(&app)?;
+    remined_vanilla::install_version(&app, &root, version_id.trim()).await
+}
+
+#[tauri::command]
 fn delete_pack(app: AppHandle, pack_id: String) -> Result<(), String> {
     let root = paths::remined_root(&app)?;
     pack_sync::delete_pack(&root, &pack_id)
+}
+
+#[tauri::command]
+fn open_pack_folder(app: AppHandle, pack_id: String) -> Result<(), String> {
+    let root = paths::remined_root(&app)?;
+    let dir = paths::pack_dir(&root, pack_id.trim());
+    if !dir.is_dir() {
+        return Err("Pack folder not found".into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&dir)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(&dir)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&dir)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -546,6 +621,13 @@ async fn porthole_selftest() -> porthole::PortholeCheckResult {
             message: format!("Check failed: {e}"),
             detail: String::new(),
         })
+}
+
+#[tauri::command]
+async fn open_steam_client() -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(porthole::open_steam_client)
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -612,6 +694,7 @@ async fn launch_pack(
     pack_id: String,
     username: String,
     skin_path: Option<String>,
+    skin_model: Option<String>,
     quick_play: Option<String>,
     session: State<'_, Mutex<GameSession>>,
 ) -> Result<LaunchResult, String> {
@@ -654,11 +737,14 @@ async fn launch_pack(
         return fail(&session, "3–16 characters".into());
     }
 
+    let model = normalize_skin_model(skin_model.as_deref().unwrap_or("default")).to_string();
+
     let mut profile = load_profile(&root);
     profile.username = name.to_string();
     profile.skin_path = skin_path.clone();
-    // Keep Remined pack selection stable — vanilla installs are a separate rail.
-    if !vanilla::is_vanilla_pack_id(&pack_id) {
+    profile.skin_model = model.clone();
+    // Keep Remined pack selection stable — vanilla rails are separate.
+    if !vanilla::is_vanilla_pack_id(&pack_id) && !remined_vanilla::is_pack_id(&pack_id) {
         profile.selected_pack = pack_id.clone();
     }
     if let Err(err) = write_profile(&root, &profile) {
@@ -673,36 +759,110 @@ async fn launch_pack(
             format!("Pack `{pack_id}` is not installed — run setup or Update pack"),
         );
     }
-    if let Err(err) = lock_skinshuffle_ui(&instance) {
-        session.lock().expect("game session lock").phase = GamePhase::Idle;
-        return Err(err);
-    }
-    if let Err(err) = apply_customskinloader_config(&instance) {
-        eprintln!("[remined] CustomSkinLoader config: {err}");
-    }
-    if let Some(ref skin) = skin_path {
-        match materialize_skin(&root, skin).await {
-            Ok(local) => {
-                if let Err(err) = apply_skinshuffle(&instance, &local) {
+
+    let is_vanilla = vanilla::is_vanilla_pack_id(&pack_id);
+    if is_vanilla {
+        // Unmodded: resource pack + options.txt (SkinShuffle/CSL won't load).
+        let version_id = pack_id
+            .strip_prefix("vanilla-")
+            .unwrap_or(pack_id.as_str());
+        let skin_local = if let Some(ref skin) = skin_path {
+            match materialize_skin(&root, skin).await {
+                Ok(local) => local,
+                Err(err) => {
                     session.lock().expect("game session lock").phase = GamePhase::Idle;
                     return Err(err);
                 }
             }
-            Err(err) => {
+        } else {
+            let dir = root.join(".remined").join("skins");
+            if let Err(err) = fs::create_dir_all(&dir) {
                 session.lock().expect("game session lock").phase = GamePhase::Idle;
-                return Err(err);
+                return Err(err.to_string());
             }
+            let dest = dir.join("active.png");
+            if let Err(err) = fs::write(&dest, default_steve_png()) {
+                session.lock().expect("game session lock").phase = GamePhase::Idle;
+                return Err(err.to_string());
+            }
+            dest
+        };
+        if let Err(err) =
+            vanilla_skin_pack::apply(&instance, &skin_local, &model, version_id, name)
+        {
+            session.lock().expect("game session lock").phase = GamePhase::Idle;
+            return Err(err);
         }
-    } else if let Err(err) = apply_default_steve_skin(&instance) {
-        // No cloud skin → Remined default Steve (same as UI), not vanilla blank preset
-        let _ = clear_skinshuffle(&instance);
-        session.lock().expect("game session lock").phase = GamePhase::Idle;
-        return Err(err);
+    } else {
+        if let Err(err) = lock_skinshuffle_ui(&instance) {
+            session.lock().expect("game session lock").phase = GamePhase::Idle;
+            return Err(err);
+        }
+        if let Err(err) = apply_customskinloader_config(&instance) {
+            eprintln!("[remined] CustomSkinLoader config: {err}");
+        }
+        if let Some(ref skin) = skin_path {
+            match materialize_skin(&root, skin).await {
+                Ok(local) => {
+                    if let Err(err) = apply_skinshuffle(&instance, &local, &model) {
+                        session.lock().expect("game session lock").phase = GamePhase::Idle;
+                        return Err(err);
+                    }
+                }
+                Err(err) => {
+                    session.lock().expect("game session lock").phase = GamePhase::Idle;
+                    return Err(err);
+                }
+            }
+        } else if let Err(err) = apply_default_steve_skin(&instance, &model) {
+            // No cloud skin → Remined default Steve (same as UI), not vanilla blank preset
+            let _ = clear_skinshuffle(&instance);
+            session.lock().expect("game session lock").phase = GamePhase::Idle;
+            return Err(err);
+        }
     }
 
-    let java_info = java_runtime::find_java25(&root, profile.java_path.as_deref());
+    let java_major = instance::read_meta(&instance)
+        .and_then(|m| m.java_major)
+        .or_else(|| {
+            // Fall back to version JSON if meta predates java_major.
+            instance::find_version_json(&instance, None)
+                .ok()
+                .and_then(|p| fs::read_to_string(p).ok())
+                .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+                .and_then(|v| {
+                    v.pointer("/javaVersion/majorVersion")
+                        .and_then(|x| x.as_u64())
+                        .map(|n| n as u32)
+                })
+        })
+        .unwrap_or(25);
+
+    let java_info = {
+        let found =
+            java_runtime::find_java(&root, java_major, profile.java_path.as_deref());
+        if found.ok {
+            found
+        } else {
+            // Fresh JDK download — drive the playbar PixelProgress via remined-progress.
+            progress::reset();
+            progress::emit(
+                &app,
+                "java",
+                1,
+                format!("Java {java_major} required — downloading…"),
+            );
+            match java_runtime::ensure_java(&app, &root, java_major).await {
+                Ok(info) => info,
+                Err(err) => return fail(&session, err),
+            }
+        }
+    };
     if !java_info.ok {
-        return fail(&session, "Java 25 required — run setup".into());
+        return fail(
+            &session,
+            format!("Java {java_major} required — could not install runtime"),
+        );
     }
 
     let opts = runtime::LaunchOpts {
@@ -715,6 +875,7 @@ async fn launch_pack(
         quick_play: quick_play
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty()),
+        launch_label_suffix: None,
     };
 
     let mut child = match runtime::launch_game(&app, opts).await {
@@ -722,15 +883,13 @@ async fn launch_pack(
         Err(err) => return fail(&session, err),
     };
 
-    tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+    // Detached LaunchServices starts are slower to become "alive"; give JNA/mixins time.
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
 
     let mut session = session.lock().expect("game session lock");
     match child.try_wait() {
         Ok(Some(status)) if !status.success() => {
-            let mut err = String::new();
-            if let Some(mut stderr) = child.stderr.take() {
-                let _ = stderr.read_to_string(&mut err);
-            }
+            let err = child.error_tail();
             session.child = None;
             session.phase = GamePhase::Idle;
             Ok(LaunchResult {
@@ -738,7 +897,7 @@ async fn launch_pack(
                 message: if err.is_empty() {
                     format!("Exit {status}")
                 } else {
-                    err.chars().take(200).collect()
+                    err
                 },
                 phase: GamePhase::Idle,
             })
@@ -806,11 +965,16 @@ pub fn run() {
             sync_selected_pack,
             get_pack_status,
             ensure_pack,
+            cancel_install,
             list_vanilla_versions,
             install_vanilla_version,
+            list_remined_vanilla_versions,
+            install_remined_vanilla_version,
             delete_pack,
+            open_pack_folder,
             porthole_status,
             porthole_selftest,
+            open_steam_client,
             porthole_start_host,
             porthole_start_join,
             porthole_stop_host,

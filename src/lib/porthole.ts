@@ -66,6 +66,11 @@ export async function readLanPort(packId: string): Promise<number | null> {
   return port && port > 0 ? port : null;
 }
 
+/** Find Steam on disk (standard macOS/Windows paths) and launch it. */
+export async function openSteamClient(): Promise<string> {
+  return invoke<string>("open_steam_client");
+}
+
 /** Prefer Steam deep link; fall back to store page in browser. */
 export async function openPortholeOnSteam(
   status?: PortholeStatus | null,

@@ -1,5 +1,5 @@
 use serde::Serialize;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use tauri::{AppHandle, Emitter};
 
 #[derive(Debug, Clone, Serialize)]
@@ -11,6 +11,8 @@ pub struct ProgressEvent {
 
 /// Global floor so the UI bar never jumps backwards across phases / races.
 static OVERALL: AtomicU32 = AtomicU32::new(0);
+/// Set by UI cancel; install/download loops poll via [`check_cancelled`].
+static CANCELLED: AtomicBool = AtomicBool::new(false);
 
 /// Map a phase-local 0..=100 into a fixed overall band.
 fn map_overall(phase: &str, local: u32) -> u32 {
@@ -49,6 +51,23 @@ fn raise_overall(target: u32) -> u32 {
 
 pub fn reset() {
     OVERALL.store(0, Ordering::Relaxed);
+    CANCELLED.store(false, Ordering::SeqCst);
+}
+
+pub fn request_cancel() {
+    CANCELLED.store(true, Ordering::SeqCst);
+}
+
+pub fn is_cancelled() -> bool {
+    CANCELLED.load(Ordering::SeqCst)
+}
+
+pub fn check_cancelled() -> Result<(), String> {
+    if is_cancelled() {
+        Err("Cancelled".into())
+    } else {
+        Ok(())
+    }
 }
 
 pub fn emit(app: &AppHandle, phase: &str, local_percent: u32, message: impl Into<String>) {

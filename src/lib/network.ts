@@ -1,13 +1,20 @@
 /** Best-effort online check for Tauri / WKWebView. */
 
+/** Dev-only: `VITE_FORCE_OFFLINE=1 npm run tauri:dev:offline` */
+export function isForceOffline(): boolean {
+  const flag = import.meta.env.VITE_FORCE_OFFLINE;
+  return flag === "1" || flag === "true";
+}
+
 export function isBrowserOnline(): boolean {
+  if (isForceOffline()) return false;
   if (typeof navigator === "undefined") return true;
   return navigator.onLine !== false;
 }
 
 /**
- * Probe a cheap HEAD/GET. Falls back to `navigator.onLine` if the probe fails
- * for non-network reasons (CORS, etc.).
+ * Probe a cheap HEAD/GET. Abort/network failure means offline — do not fall
+ * back to navigator.onLine (often true with Wi‑Fi but no internet).
  */
 export async function probeOnline(
   url?: string,
@@ -29,11 +36,35 @@ export async function probeOnline(
     });
     return true;
   } catch {
-    // no-cors opaque success still resolves; abort/network throw → offline-ish
-    return isBrowserOnline();
+    return false;
   } finally {
     window.clearTimeout(timer);
   }
+}
+
+/** Reject (or resolve fallback) if `promise` does not settle in time. */
+export function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  fallback?: () => T,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      if (fallback) resolve(fallback());
+      else reject(new Error("timeout"));
+    }, ms);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        window.clearTimeout(timer);
+        if (fallback) resolve(fallback());
+        else reject(err);
+      },
+    );
+  });
 }
 
 export function subscribeConnectivity(

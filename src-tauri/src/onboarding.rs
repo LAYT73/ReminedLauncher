@@ -93,6 +93,9 @@ pub async fn run_full(app: &AppHandle, root: &Path) -> Result<OnboardingState, S
 /// Vanilla packs skip the Remined catalog and use Mojang install/prepare instead.
 pub async fn ensure_pack(app: &AppHandle, root: &Path, pack_id: &str) -> Result<PackStatus, String> {
     let instance = pack_dir(root, pack_id);
+    if crate::remined_vanilla::is_pack_id(pack_id) {
+        return crate::remined_vanilla::ensure_installed(app, root, pack_id).await;
+    }
     if crate::vanilla::is_vanilla_pack_id(pack_id) || crate::vanilla::is_vanilla_instance(&instance)
     {
         return crate::vanilla::ensure_installed(app, root, pack_id).await;
