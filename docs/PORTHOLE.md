@@ -27,3 +27,10 @@ Run SQL migration `006_sessions_share_code.sql` (adds `sessions.share_code`).
 ## CLI notes
 
 Launcher looks for the Steam install of `porthole` (override with `REMINED_PORTHOLE_PATH`). Commands use `--json --render-backend software`.
+
+## Voice rooms
+
+Voice tab hosts a local **LiveKit** server and exposes `tcp/7880` + `udp/7881-7890` through the same Porthole lobby. Guests Join the room invite → Porthole connect → `ws://127.0.0.1:7880`. Chat/history live in Supabase (`008_voice_rooms.sql`). Steam + Porthole required on every PC.
+
+- **macOS host:** LiveKit via Homebrew (`brew install livekit`) — Remined will use `livekit-server` on PATH or install via brew on first Create room.
+- **Windows host:** LiveKit binary is downloaded into `.remined/voice/` on first Create room.

@@ -762,23 +762,38 @@ pub fn start_host(
         return Err("Invalid LAN port".into());
     }
     let backend = format!("tcp/127.0.0.1:{port}");
+    start_host_backends(app, state, &backend, port, "Remined")
+}
+
+/// Expose arbitrary Porthole backends (comma-separated tcp/udp specs).
+pub fn start_host_backends(
+    app: AppHandle,
+    state: PortholeState,
+    backends: &str,
+    primary_port: u16,
+    game_name: &str,
+) -> Result<PortholeHostInfo, String> {
+    let backends = backends.trim();
+    if backends.is_empty() {
+        return Err("No Porthole backends".into());
+    }
     let child = spawn_porthole(&[
         "expose",
-        &backend,
+        backends,
         "--visibility",
         "friends",
         "--game-name",
-        "Remined",
+        game_name,
         "--max-peers",
         "8",
     ])?;
-    let code = watch_stdout_for_code(app, state, child, port, true)?;
+    let code = watch_stdout_for_code(app, state, child, primary_port, true)?;
     if code.is_empty() {
         return Err("Porthole started but no share code was published".into());
     }
     Ok(PortholeHostInfo {
         share_code: code,
-        port,
+        port: primary_port,
     })
 }
 
@@ -788,23 +803,38 @@ pub fn start_join(
     share_code: &str,
     port: u16,
 ) -> Result<(), String> {
-    let code = share_code.trim();
-    if code.len() < 4 {
-        return Err("Invalid share code".into());
-    }
     if port == 0 {
         return Err("Invalid LAN port".into());
     }
     let approve = format!("tcp/{port}");
+    start_join_approve(app, state, share_code, &approve, port)
+}
+
+/// Connect and auto-approve a custom port list (e.g. `tcp/7880,udp/7881-7890`).
+pub fn start_join_approve(
+    app: AppHandle,
+    state: PortholeState,
+    share_code: &str,
+    approve_ports: &str,
+    primary_port: u16,
+) -> Result<(), String> {
+    let code = share_code.trim();
+    if code.len() < 4 {
+        return Err("Invalid share code".into());
+    }
+    let approve = approve_ports.trim();
+    if approve.is_empty() {
+        return Err("No ports to approve".into());
+    }
     let child = spawn_porthole(&[
         "connect",
         code,
         "--auto-approve-ports",
-        &approve,
+        approve,
         "--bind",
         "127.0.0.1",
     ])?;
-    let _ = watch_stdout_for_code(app, state, child, port, false)?;
+    let _ = watch_stdout_for_code(app, state, child, primary_port, false)?;
     Ok(())
 }
 

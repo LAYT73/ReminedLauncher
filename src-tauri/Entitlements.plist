@@ -10,10 +10,15 @@
 	<!-- Spawned Java + native Minecraft libs -->
 	<key>com.apple.security.cs.disable-library-validation</key>
 	<true/>
-	<!-- Mic for voice-chat mods launched as children of Remined -->
+	<!-- Mic for voice rooms + in-game voice-chat mods -->
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
 	<key>com.apple.security.device.microphone</key>
+	<true/>
+	<!-- WebRTC (UDP) needs both; client-only cannot receive datagrams -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.network.server</key>
 	<true/>
 </dict>
 </plist>

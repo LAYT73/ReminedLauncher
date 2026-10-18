@@ -4,6 +4,6 @@
 <dict>
 	<!-- Required so macOS can show a mic prompt for child Java (Simple Voice Chat, etc.) -->
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Minecraft mods such as voice chat need microphone access while you play.</string>
+	<string>Remined needs microphone access for voice rooms and in-game voice chat mods.</string>
 </dict>
 </plist>

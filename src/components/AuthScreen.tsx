@@ -140,7 +140,11 @@ export function AuthScreen({
 
           {error ? <p className="gate-error">{error}</p> : null}
 
-          <button type="submit" className="btn-mc gate-submit" disabled={busy}>
+          <button
+            type="submit"
+            className="btn-mc ok gate-submit"
+            disabled={busy}
+          >
             {busy ? "…" : mode === "login" ? "Sign in" : "Register"}
           </button>
         </form>

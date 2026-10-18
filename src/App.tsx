@@ -13,7 +13,9 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import type { Session } from "@supabase/supabase-js";
 import { AuthScreen } from "./components/AuthScreen";
 import { FriendsPanel } from "./components/FriendsPanel";
+import { InfoNote } from "./components/InfoNote";
 import { NetworkPlayPanel } from "./components/NetworkPlayPanel";
+import { VoicePanel } from "./components/VoicePanel";
 import { OnboardingScreen } from "./components/OnboardingScreen";
 import { PackGallery } from "./components/PackGallery";
 import { PackSelect } from "./components/PackSelect";
@@ -159,21 +161,39 @@ type TopTab =
   | "installations"
   | "friends"
   | "network"
+  | "voice"
   | "skins"
   | "settings";
 
 const HOME_TABS: Array<
-  [Exclude<TopTab, "home" | "play" | "installations" | "settings" | "skins">, string]
+  [
+    Exclude<
+      TopTab,
+      "home" | "play" | "installations" | "settings" | "skins"
+    >,
+    string,
+  ]
 > = [
   ["friends", "Friends"],
   ["network", "Network"],
+  ["voice", "Voice"],
 ];
 
 const PACK_TABS: Array<
   [Exclude<TopTab, "home" | "installations" | "settings" | "skins">, string]
 > = [["play", "Play"], ...HOME_TABS];
 
-function TopNavTabIcon({ id }: { id: string }) {
+function TopNavTabIcon({
+  id,
+  inRoom,
+  inviteCount = 0,
+}: {
+  id: string;
+  /** Show the "you're in a voice room" dot. */
+  inRoom?: boolean;
+  /** Pending invite count — takes priority over the in-room dot. */
+  inviteCount?: number;
+}) {
   if (id === "play") {
     return (
       <svg className="topnav-tab-icon" viewBox="0 0 24 24" aria-hidden>
@@ -199,6 +219,25 @@ function TopNavTabIcon({ id }: { id: string }) {
           d="M12 4a8 8 0 0 1 8 8h-2a6 6 0 1 0-6 6v2a8 8 0 0 1 0-16zm0 4a4 4 0 0 1 4 4h-2a2 2 0 1 0-2 2v2a4 4 0 0 1 0-8zm-.75 7.25a1.25 1.25 0 1 1 1.5 0V20h-1.5v-4.75z"
         />
       </svg>
+    );
+  }
+  if (id === "voice") {
+    return (
+      <>
+        <svg className="topnav-tab-icon" viewBox="0 0 24 24" aria-hidden>
+          <path
+            fill="currentColor"
+            d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5-3a1 1 0 1 1 2 0 7 7 0 0 1-6 6.92V20h3a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2h3v-2.08A7 7 0 0 1 5 11a1 1 0 1 1 2 0 5 5 0 0 0 10 0z"
+          />
+        </svg>
+        {inviteCount > 0 ? (
+          <span className="topnav-tab-count" aria-label={`${inviteCount} pending invites`}>
+            {inviteCount > 9 ? "9+" : inviteCount}
+          </span>
+        ) : inRoom ? (
+          <span className="topnav-tab-badge" />
+        ) : null}
+      </>
     );
   }
   return null;
@@ -291,7 +330,7 @@ export default function App() {
     | "profile"
   >("home");
   const [javaInfo, setJavaInfo] = useState<JavaInfo | null>(null);
-  const [appVersion, setAppVersion] = useState("0.5.1");
+  const [appVersion, setAppVersion] = useState("0.5.2");
   const [updateBusy, setUpdateBusy] = useState(false);
   const [packBusy, setPackBusy] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -317,6 +356,8 @@ export default function App() {
   const [reminedId, setReminedId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [toastTone, setToastTone] = useState<ToastTone>("default");
+  const [voiceInRoom, setVoiceInRoom] = useState(false);
+  const [voiceInvites, setVoiceInvites] = useState(0);
 
   function showToast(message: string, tone: ToastTone = "default") {
     setToastTone(tone);
@@ -360,7 +401,7 @@ export default function App() {
           invoke<Pack[]>("list_packs"),
           invoke<Profile>("get_profile"),
           invoke<GamePhase>("get_game_phase"),
-          invoke<string>("get_app_version").catch(() => "0.5.1"),
+          invoke<string>("get_app_version").catch(() => "0.5.2"),
           catalogPromise,
         ]);
       const next = normalizeProfile(saved);
@@ -1486,7 +1527,11 @@ export default function App() {
                 void refreshJava(profile.java_path);
               }}
             />
-            <button type="button" className="btn-mc" onClick={() => void pickJava()}>
+            <button
+              type="button"
+              className="btn-mc ok"
+              onClick={() => void pickJava()}
+            >
               Browse
             </button>
             {profile.java_path ? (
@@ -1537,7 +1582,7 @@ export default function App() {
         <div className="update-row">
           <button
             type="button"
-            className="btn-mc"
+            className="btn-mc ok"
             disabled={packBusy}
             onClick={() => void syncPack()}
           >
@@ -1593,7 +1638,7 @@ export default function App() {
         <div className="update-row">
           <button
             type="button"
-            className="btn-mc"
+            className="btn-mc ok"
             disabled={updateBusy}
             onClick={() => void checkForUpdate()}
           >
@@ -1627,7 +1672,7 @@ export default function App() {
         ) : null}
         <button
           type="button"
-          className="btn-signout"
+          className="btn-mc danger btn-signout"
           onClick={() => void signOut()}
         >
           {offlineMode ? "Leave offline" : "Sign out"}
@@ -2285,7 +2330,7 @@ export default function App() {
           </button>
           <button
             type="button"
-            className="btn-mc dim install-delete"
+            className="btn-mc danger install-delete"
             onClick={() => void deleteInstalledPack(pack.id)}
           >
             Delete
@@ -2491,6 +2536,33 @@ export default function App() {
       )
     ) : null;
 
+  const voicePanel =
+    offlineMode || !session?.user?.id ? (
+      topTab === "voice" ? (
+        <section className="section">
+          <h2 className="page-title">Voice</h2>
+          <p className="friends-lead">
+            {offlineMode
+              ? "Voice rooms need internet and Steam. You're in offline mode."
+              : "Sign in to use voice rooms."}
+          </p>
+        </section>
+      ) : null
+    ) : (
+      <div style={{ display: topTab === "voice" ? "block" : "none" }}>
+        <VoicePanel
+          userId={session.user.id}
+          displayName={
+            (usernameDraft ?? profile.username ?? "Player").trim() || "Player"
+          }
+          onToast={showToast}
+          onOpenNetworkPlay={() => setTopTab("network")}
+          onRoomStatusChange={setVoiceInRoom}
+          onInvitesChange={setVoiceInvites}
+        />
+      </div>
+    );
+
   const profilePanel = (
     <section className="section">
       <h2 className="page-title">Profile</h2>
@@ -2502,7 +2574,7 @@ export default function App() {
         <p className="friends-lead">Your Remined account</p>
       )}
       {reminedId ? (
-        <div className="friends-info-block" role="note">
+        <InfoNote id="profile.remined-id">
           <p>
             Your Remined id is{" "}
             <button
@@ -2515,7 +2587,7 @@ export default function App() {
             </button>
             . Friends add you with this id.
           </p>
-        </div>
+        </InfoNote>
       ) : null}
 
       <div className="skin-layout">
@@ -2636,7 +2708,7 @@ export default function App() {
           <div className="btn-row">
             <button
               type="button"
-              className="btn-mc"
+              className="btn-mc ok"
               onClick={() => void pickSkin()}
             >
               Choose skin
@@ -2644,7 +2716,7 @@ export default function App() {
             {profile.skin_path ? (
               <button
                 type="button"
-                className="btn-mc dim"
+                className="btn-mc danger"
                 onClick={() => void clearSkin()}
               >
                 Remove
@@ -2663,7 +2735,7 @@ export default function App() {
         ) : null}
         <button
           type="button"
-          className="btn-signout"
+          className="btn-mc danger btn-signout"
           onClick={() => void signOut()}
         >
           {offlineMode ? "Leave offline" : "Sign out"}
@@ -2816,7 +2888,11 @@ export default function App() {
                     className={`topnav-tab ${topTab === id ? "active" : ""}`}
                     onClick={() => setTopTab(id)}
                   >
-                    <TopNavTabIcon id={id} />
+                    <TopNavTabIcon
+                      id={id}
+                      inRoom={id === "voice" && voiceInRoom}
+                      inviteCount={id === "voice" ? voiceInvites : 0}
+                    />
                     {label}
                   </button>
                 ))}
@@ -3033,6 +3109,7 @@ export default function App() {
                   {sharedTabBody}
                 </PageMotion>
               ) : null}
+              {voicePanel}
             </div>
           </>
         )}

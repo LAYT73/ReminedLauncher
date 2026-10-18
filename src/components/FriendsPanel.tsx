@@ -9,6 +9,7 @@ import {
 } from "../lib/friends";
 import { portholeStatus, type PortholeStatus } from "../lib/porthole";
 import { SkinHead } from "./SkinHead";
+import { InfoNote } from "./InfoNote";
 
 type Props = {
   userId: string;
@@ -144,7 +145,7 @@ export function FriendsPanel({
         .
       </p>
 
-      <div className="friends-info-block" role="note">
+      <InfoNote id="friends.play-together">
         <p>
           To play together: host{" "}
           <strong>Open to LAN</strong> → friends hit <strong>Join</strong>.
@@ -162,7 +163,7 @@ export function FriendsPanel({
           )}
           .
         </p>
-      </div>
+      </InfoNote>
 
       {hostingSelf ? (
         <p className="friends-hosting-banner" role="status">
@@ -180,7 +181,7 @@ export function FriendsPanel({
             {onInstallPorthole ? (
               <button
                 type="button"
-                className="btn-mc"
+                className="btn-mc ok"
                 onClick={() => onInstallPorthole()}
               >
                 Install on Steam
@@ -208,7 +209,11 @@ export function FriendsPanel({
           spellCheck={false}
           aria-label="Friend Remined id"
         />
-        <button type="submit" className="btn-mc" disabled={busy || !query.trim()}>
+        <button
+          type="submit"
+          className="btn-mc ok"
+          disabled={busy || !query.trim()}
+        >
           {busy ? "Sending…" : "Add friend"}
         </button>
       </form>
@@ -251,7 +256,7 @@ export function FriendsPanel({
                     <div className="friend-actions">
                       <button
                         type="button"
-                        className="btn-mc"
+                        className="btn-mc ok"
                         onClick={() =>
                           void respondFriendRequest(row.friendshipId, true).then(
                             () => refresh(),
@@ -313,7 +318,7 @@ export function FriendsPanel({
                       {joinable ? (
                         <button
                           type="button"
-                          className="btn-mc friend-join"
+                          className="btn-mc ok friend-join"
                           disabled={Boolean(joiningFriendId)}
                           onClick={() => onJoinFriend(row)}
                         >
@@ -324,7 +329,7 @@ export function FriendsPanel({
                       )}
                       <button
                         type="button"
-                        className="btn-mc dim friend-remove"
+                        className="btn-mc danger friend-remove"
                         onClick={() =>
                           void removeFriendship(row.friendshipId).then(() =>
                             refresh(),
@@ -365,7 +370,7 @@ export function FriendsPanel({
                     </div>
                     <button
                       type="button"
-                      className="btn-mc dim"
+                      className="btn-mc danger"
                       onClick={() =>
                         void removeFriendship(row.friendshipId).then(() =>
                           refresh(),

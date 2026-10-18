@@ -69,7 +69,7 @@ export function OnboardingScreen({ onDone }: Props) {
             <p className="gate-error">{error}</p>
             <button
               type="button"
-              className="btn-mc"
+              className="btn-mc ok"
               onClick={() => void start()}
               disabled={running}
             >

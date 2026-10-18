@@ -225,7 +225,7 @@ export function NetworkPlayPanel({
           {!installed ? (
             <button
               type="button"
-              className="btn-mc"
+              className="btn-mc ok"
               disabled={busy || checking}
               onClick={() => void openSteam(true)}
             >
@@ -235,7 +235,7 @@ export function NetworkPlayPanel({
             <>
               <button
                 type="button"
-                className="btn-mc"
+                className="btn-mc ok"
                 disabled={busy || checking}
                 onClick={() => void runCheck()}
               >
@@ -244,7 +244,7 @@ export function NetworkPlayPanel({
               {check && !check.ok && !check.steam_ok ? (
                 <button
                   type="button"
-                  className="btn-mc"
+                  className="btn-mc ok"
                   disabled={busy || checking}
                   onClick={() => void launchSteamApp()}
                 >

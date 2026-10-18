@@ -13,6 +13,8 @@ mod runtime;
 mod skinshuffle_patch;
 mod vanilla;
 mod vanilla_skin_pack;
+mod voice_log;
+mod voice_runtime;
 
 use java_runtime::JavaInfo;
 use onboarding::{OnboardingState, RuntimeStatus};
@@ -682,6 +684,100 @@ fn porthole_current_host(
 }
 
 #[tauri::command]
+fn voice_log_path(app: AppHandle) -> Result<String, String> {
+    voice_log::log_path(&app).map(|p| p.display().to_string())
+}
+
+#[tauri::command]
+fn voice_log_append(app: AppHandle, source: String, message: String) -> Result<(), String> {
+    voice_log::append(&app, &source, &message)
+}
+
+#[tauri::command]
+fn voice_log_tail(app: AppHandle, max_bytes: Option<usize>) -> Result<String, String> {
+    voice_log::read_tail(&app, max_bytes.unwrap_or(48_000))
+}
+
+#[tauri::command]
+async fn voice_ensure_runtime(app: AppHandle) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        voice_runtime::ensure_runtime(&app).map(|p| p.display().to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn voice_start_livekit(
+    app: AppHandle,
+    voice: State<'_, voice_runtime::VoiceRuntimeState>,
+) -> Result<voice_runtime::VoiceHostReady, String> {
+    let voice = voice.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        voice_runtime::start_voice_livekit(&app, &voice)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn voice_start_porthole(
+    app: AppHandle,
+    porthole: State<'_, porthole::PortholeState>,
+) -> Result<voice_runtime::VoiceHostReady, String> {
+    let porthole = porthole.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        voice_runtime::start_voice_porthole(app, porthole)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn voice_start_host(
+    app: AppHandle,
+    voice: State<'_, voice_runtime::VoiceRuntimeState>,
+    porthole: State<'_, porthole::PortholeState>,
+) -> Result<voice_runtime::VoiceHostReady, String> {
+    let voice = voice.inner().clone();
+    let porthole = porthole.inner().clone();
+    let app2 = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        voice_runtime::start_voice_host(app2, voice, porthole)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn voice_stop_host(
+    voice: State<'_, voice_runtime::VoiceRuntimeState>,
+    porthole: State<'_, porthole::PortholeState>,
+) {
+    voice_runtime::stop_voice_host(&voice, &porthole);
+}
+
+#[tauri::command]
+async fn voice_guest_connect(
+    app: AppHandle,
+    porthole: State<'_, porthole::PortholeState>,
+    share_code: String,
+) -> Result<(), String> {
+    let porthole = porthole.inner().clone();
+    let app2 = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        voice_runtime::guest_connect(app2, porthole, &share_code)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn voice_mint_token(room: String, identity: String, name: String) -> Result<String, String> {
+    voice_runtime::mint_token(&room, &identity, &name)
+}
+
+#[tauri::command]
 fn read_lan_port(app: AppHandle, pack_id: String) -> Result<Option<u16>, String> {
     let root = paths::remined_root(&app)?;
     let log = paths::pack_dir(&root, &pack_id).join("logs").join("latest.log");
@@ -939,6 +1035,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
+            voice_runtime::apply_loopback_no_proxy();
             #[cfg(desktop)]
             app.handle()
                 .plugin(tauri_plugin_updater::Builder::new().build())?;
@@ -946,6 +1043,7 @@ pub fn run() {
         })
         .manage(Mutex::new(GameSession::default()))
         .manage(porthole::PortholeState::default())
+        .manage(voice_runtime::VoiceRuntimeState::default())
         .invoke_handler(tauri::generate_handler![
             list_packs,
             get_profile,
@@ -981,6 +1079,16 @@ pub fn run() {
             porthole_stop_join,
             porthole_stop_all,
             porthole_current_host,
+            voice_log_path,
+            voice_log_append,
+            voice_log_tail,
+            voice_ensure_runtime,
+            voice_start_livekit,
+            voice_start_porthole,
+            voice_start_host,
+            voice_stop_host,
+            voice_guest_connect,
+            voice_mint_token,
             read_lan_port,
         ])
         .run(tauri::generate_context!())

@@ -82,10 +82,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v0.5.1
-          releaseName: Remined v0.5.1
+          tagName: v0.5.2
+          releaseName: Remined v0.5.2
           releaseBody: |
-            Remined launcher v0.5.1 — Remined Vanilla beta banner/UI polish, friends skeletons, Network Steam/Porthole badges, transient footer status, fullscreen skin framing.
+            Remined launcher v0.5.2 — Voice Chat with LiveKit, Porthole integration, invite badges & toasts, chat avatars, VPN bypass for localhost, and UI polish.
             macOS (arm64 + x64) and Windows builds.
           releaseDraft: false
           prerelease: false
