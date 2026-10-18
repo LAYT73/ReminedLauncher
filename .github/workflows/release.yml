@@ -82,10 +82,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v0.5.0
-          releaseName: Remined v0.5.0
+          tagName: v0.5.1
+          releaseName: Remined v0.5.1
           releaseBody: |
-            Remined launcher v0.5.0 — Remined Vanilla (skins + opti stack), friends Join/LAN offline, Resourcify, launch focus fixes.
+            Remined launcher v0.5.1 — Remined Vanilla beta banner/UI polish, friends skeletons, Network Steam/Porthole badges, transient footer status, fullscreen skin framing.
             macOS (arm64 + x64) and Windows builds.
           releaseDraft: false
           prerelease: false

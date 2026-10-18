@@ -21,6 +21,29 @@ type Props = {
   onInstallPorthole?: () => void;
 };
 
+function FriendsSkeletonList() {
+  return (
+    <ul
+      className="friends-list"
+      aria-busy="true"
+      aria-label="Loading friends"
+    >
+      {[0, 1, 2].map((i) => (
+        <li key={i} className="friend-row has-join is-skeleton">
+          <span className="skel skel-avatar" />
+          <div className="friend-copy">
+            <span className="skel skel-line skel-name" />
+            <span className="skel skel-line skel-id" />
+          </div>
+          <span className="skel skel-chip" />
+          <span className="skel skel-chip skel-chip-narrow" />
+          <span className="skel skel-status" />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function FriendsPanel({
   userId,
   myReminedId,
@@ -191,155 +214,174 @@ export function FriendsPanel({
       </form>
 
       {error ? <p className="friends-error">{error}</p> : null}
-      {loading ? <p className="friends-muted">Loading…</p> : null}
 
-      {incoming.length > 0 ? (
+      {loading ? (
         <div className="friends-block">
-          <h3 className="settings-heading">Requests</h3>
-          <ul className="friends-list">
-            {incoming.map((row) => (
-              <li key={row.friendshipId} className="friend-row">
-                <SkinHead
-                  skinUrl={row.profile.skin_path}
-                  className="friend-avatar"
-                  size={40}
-                />
-                <div className="friend-copy">
-                  <strong>{row.profile.username}</strong>
-                  <button
-                    type="button"
-                    className="friend-id"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(row.profile.remined_id);
-                      onToast("Copied Remined id");
-                    }}
-                  >
-                    #{row.profile.remined_id}
-                  </button>
-                </div>
-                <div className="friend-actions">
-                  <button
-                    type="button"
-                    className="btn-mc"
-                    onClick={() =>
-                      void respondFriendRequest(row.friendshipId, true).then(() =>
-                        refresh(),
-                      )
-                    }
-                  >
-                    Accept
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-mc dim"
-                    onClick={() =>
-                      void respondFriendRequest(row.friendshipId, false).then(() =>
-                        refresh(),
-                      )
-                    }
-                  >
-                    Decline
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <h3 className="settings-heading">Online circle</h3>
+          <FriendsSkeletonList />
         </div>
-      ) : null}
+      ) : (
+        <>
+          {incoming.length > 0 ? (
+            <div className="friends-block">
+              <h3 className="settings-heading">Requests</h3>
+              <ul className="friends-list">
+                {incoming.map((row) => (
+                  <li key={row.friendshipId} className="friend-row">
+                    <SkinHead
+                      skinUrl={row.profile.skin_path}
+                      className="friend-avatar"
+                      size={40}
+                    />
+                    <div className="friend-copy">
+                      <strong>{row.profile.username}</strong>
+                      <button
+                        type="button"
+                        className="friend-id"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(
+                            row.profile.remined_id,
+                          );
+                          onToast("Copied Remined id");
+                        }}
+                      >
+                        #{row.profile.remined_id}
+                      </button>
+                    </div>
+                    <div className="friend-actions">
+                      <button
+                        type="button"
+                        className="btn-mc"
+                        onClick={() =>
+                          void respondFriendRequest(row.friendshipId, true).then(
+                            () => refresh(),
+                          )
+                        }
+                      >
+                        Accept
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-mc dim"
+                        onClick={() =>
+                          void respondFriendRequest(
+                            row.friendshipId,
+                            false,
+                          ).then(() => refresh())
+                        }
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
-      <div className="friends-block">
-        <h3 className="settings-heading">Online circle</h3>
-        {friends.length === 0 && !loading ? (
-          <p className="friends-muted">No friends yet — send an id above.</p>
-        ) : (
-          <ul className="friends-list">
-            {friends.map((row) => {
-              const joinable = canJoinFriend(row);
-              const joining = joiningFriendId === row.friendshipId;
-              return (
-                <li key={row.friendshipId} className="friend-row has-join">
-                  <SkinHead
-                    skinUrl={row.profile.skin_path}
-                    className="friend-avatar"
-                    size={40}
-                  />
-                  <div className="friend-copy">
-                    <strong>{row.profile.username}</strong>
+          <div className="friends-block">
+            <h3 className="settings-heading">Online circle</h3>
+            {friends.length === 0 ? (
+              <p className="friends-muted">No friends yet — send an id above.</p>
+            ) : (
+              <ul className="friends-list">
+                {friends.map((row) => {
+                  const joinable = canJoinFriend(row);
+                  const joining = joiningFriendId === row.friendshipId;
+                  return (
+                    <li key={row.friendshipId} className="friend-row has-join">
+                      <SkinHead
+                        skinUrl={row.profile.skin_path}
+                        className="friend-avatar"
+                        size={40}
+                      />
+                      <div className="friend-copy">
+                        <strong>{row.profile.username}</strong>
+                        <button
+                          type="button"
+                          className="friend-id"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(
+                              row.profile.remined_id,
+                            );
+                            onToast("Copied Remined id");
+                          }}
+                        >
+                          #{row.profile.remined_id}
+                        </button>
+                      </div>
+                      {joinable ? (
+                        <button
+                          type="button"
+                          className="btn-mc friend-join"
+                          disabled={Boolean(joiningFriendId)}
+                          onClick={() => onJoinFriend(row)}
+                        >
+                          {joining ? "Joining…" : "Join"}
+                        </button>
+                      ) : (
+                        <span className="friend-join-slot" aria-hidden />
+                      )}
+                      <button
+                        type="button"
+                        className="btn-mc dim friend-remove"
+                        onClick={() =>
+                          void removeFriendship(row.friendshipId).then(() =>
+                            refresh(),
+                          )
+                        }
+                      >
+                        Remove
+                      </button>
+                      <span
+                        className={`friend-status is-${row.sessionStatus ?? "offline"}`}
+                        title={presenceLabel(row)}
+                      >
+                        {presenceLabel(row)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          {outgoing.length > 0 ? (
+            <div className="friends-block">
+              <h3 className="settings-heading">Outgoing</h3>
+              <ul className="friends-list">
+                {outgoing.map((row) => (
+                  <li key={row.friendshipId} className="friend-row">
+                    <SkinHead
+                      skinUrl={row.profile.skin_path}
+                      className="friend-avatar"
+                      size={40}
+                    />
+                    <div className="friend-copy">
+                      <strong>{row.profile.username}</strong>
+                      <span className="friend-id-static">
+                        #{row.profile.remined_id}
+                      </span>
+                    </div>
                     <button
                       type="button"
-                      className="friend-id"
-                      onClick={() => {
-                        void navigator.clipboard.writeText(row.profile.remined_id);
-                        onToast("Copied Remined id");
-                      }}
+                      className="btn-mc dim"
+                      onClick={() =>
+                        void removeFriendship(row.friendshipId).then(() =>
+                          refresh(),
+                        )
+                      }
                     >
-                      #{row.profile.remined_id}
+                      Cancel
                     </button>
-                  </div>
-                  {joinable ? (
-                    <button
-                      type="button"
-                      className="btn-mc friend-join"
-                      disabled={Boolean(joiningFriendId)}
-                      onClick={() => onJoinFriend(row)}
-                    >
-                      {joining ? "Joining…" : "Join"}
-                    </button>
-                  ) : (
-                    <span className="friend-join-slot" aria-hidden />
-                  )}
-                  <button
-                    type="button"
-                    className="btn-mc dim friend-remove"
-                    onClick={() =>
-                      void removeFriendship(row.friendshipId).then(() => refresh())
-                    }
-                  >
-                    Remove
-                  </button>
-                  <span
-                    className={`friend-status is-${row.sessionStatus ?? "offline"}`}
-                    title={presenceLabel(row)}
-                  >
-                    {presenceLabel(row)}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-
-      {outgoing.length > 0 ? (
-        <div className="friends-block">
-          <h3 className="settings-heading">Outgoing</h3>
-          <ul className="friends-list">
-            {outgoing.map((row) => (
-              <li key={row.friendshipId} className="friend-row">
-                <SkinHead
-                  skinUrl={row.profile.skin_path}
-                  className="friend-avatar"
-                  size={40}
-                />
-                <div className="friend-copy">
-                  <strong>{row.profile.username}</strong>
-                  <span className="friend-id-static">#{row.profile.remined_id}</span>
-                </div>
-                <button
-                  type="button"
-                  className="btn-mc dim"
-                  onClick={() =>
-                    void removeFriendship(row.friendshipId).then(() => refresh())
-                  }
-                >
-                  Cancel
-                </button>
-                <span className="friend-status">Pending</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+                    <span className="friend-status">Pending</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </>
+      )}
     </section>
   );
 }

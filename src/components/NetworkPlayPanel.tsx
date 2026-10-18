@@ -15,6 +15,24 @@ type Props = {
   onToast: (msg: string) => void;
 };
 
+function StatusBadge({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "ok" | "warn" | "bad" | "idle";
+}) {
+  return (
+    <span className={`network-pill is-${tone}`} title={`${label}: ${value}`}>
+      <span className="network-pill-dot" aria-hidden />
+      <span className="network-pill-label">{label}</span>
+      <span className="network-pill-value">{value}</span>
+    </span>
+  );
+}
+
 export function NetworkPlayPanel({
   hostingSelf,
   hostingPort,
@@ -104,6 +122,57 @@ export function NetworkPlayPanel({
   }
 
   const installed = Boolean(status?.installed);
+  const steamOk =
+    check != null ? check.steam_ok : status?.steam_ok === true;
+  const steamKnown =
+    check != null || status?.steam_ok === true || status?.steam_ok === false;
+
+  const steamTone: "ok" | "warn" | "bad" | "idle" = !status
+    ? "idle"
+    : checking
+      ? "idle"
+      : steamOk
+        ? "ok"
+        : steamKnown
+          ? "bad"
+          : "warn";
+  const steamValue = !status
+    ? "…"
+    : checking
+      ? "Checking"
+      : steamOk
+        ? "Running"
+        : steamKnown
+          ? "Closed"
+          : "Unknown";
+
+  const portholeTone: "ok" | "warn" | "bad" | "idle" = !status
+    ? "idle"
+    : checking
+      ? "idle"
+      : check
+        ? check.ok
+          ? "ok"
+          : installed
+            ? "warn"
+            : "bad"
+        : installed
+          ? "ok"
+          : "bad";
+  const portholeValue = !status
+    ? "…"
+    : checking
+      ? "Checking"
+      : check
+        ? check.ok
+          ? "Ready"
+          : installed
+            ? "Issue"
+            : "Missing"
+        : installed
+          ? "Installed"
+          : "Missing";
+
   const statusClass = check
     ? check.ok
       ? "is-ready"
@@ -130,7 +199,17 @@ export function NetworkPlayPanel({
 
   return (
     <section className="section network-panel">
-      <h2 className="page-title">Network Play</h2>
+      <div className="page-title-row">
+        <h2 className="page-title">Network Play</h2>
+        <div className="network-status-badges" aria-live="polite">
+          <StatusBadge label="Steam" value={steamValue} tone={steamTone} />
+          <StatusBadge
+            label="Porthole"
+            value={portholeValue}
+            tone={portholeTone}
+          />
+        </div>
+      </div>
       <p className="friends-lead">
         Play Open-to-LAN worlds with friends over the internet. Remined uses{" "}
         <strong>Porthole</strong> — a free Steam app that tunnels your LAN port

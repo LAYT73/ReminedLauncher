@@ -766,6 +766,9 @@ ul {
 
 .topnav-tab {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   padding: 0 16px;
   color: var(--text-muted);
   font-size: 13px;
@@ -775,12 +778,28 @@ ul {
   box-shadow: none;
 }
 
+.topnav-tab-icon {
+  display: block;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  opacity: 0.82;
+}
+
 .topnav-tab:hover {
   color: var(--text);
 }
 
+.topnav-tab:hover .topnav-tab-icon {
+  opacity: 1;
+}
+
 .topnav-tab.active {
   color: var(--text);
+}
+
+.topnav-tab.active .topnav-tab-icon {
+  opacity: 1;
 }
 
 .topnav-tab.active::after {
@@ -1014,6 +1033,26 @@ ul {
   image-rendering: auto;
   user-select: none;
   -webkit-user-drag: none;
+  transform-origin: center center;
+  animation: home-logo-pulse 2.8s ease-in-out infinite;
+}
+
+@keyframes home-logo-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.04);
+    filter: brightness(1.07);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-mc-logo {
+    animation: none;
+  }
 }
 
 .home-stage > .pack-enchant {
@@ -1040,7 +1079,8 @@ ul {
   min-width: 0;
   min-height: 0;
   height: 100%;
-  padding-right: 220px;
+  /* Match .home-player width so feature card doesn’t sit under the skin */
+  padding-right: clamp(220px, 34vh, 380px);
   box-sizing: border-box;
 }
 
@@ -1051,13 +1091,14 @@ ul {
   width: min(560px, 100%);
 }
 
-/* Absolute slot — never taller than the stage, so legs aren't clipped */
+/* Absolute slot — width tracks viewport height so fullscreen doesn’t clip arms */
 .home-player {
+  --home-player-w: clamp(220px, 34vh, 380px);
   position: absolute;
   top: 8px;
   right: 0;
   bottom: 8px;
-  width: 200px;
+  width: var(--home-player-w);
   z-index: 2;
   pointer-events: auto;
 }
@@ -1068,7 +1109,7 @@ ul {
   background: transparent;
   border: none;
   box-shadow: none;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .home-player-skin canvas {
@@ -1243,6 +1284,35 @@ ul {
     0 8px 24px rgba(0, 0, 0, 0.55);
 }
 
+.hero-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 14px;
+}
+
+.hero-beta-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px 5px;
+  background: #8a6a18;
+  border: 2px solid #000;
+  box-shadow:
+    inset 1px 1px 0 #d4b45a,
+    inset -1px -1px 0 #5a4210,
+    0 3px 0 rgba(0, 0, 0, 0.45);
+  color: #fff8d8;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow: 1px 1px 0 #3a2a08;
+  line-height: 1;
+  image-rendering: pixelated;
+  transform: translateY(2px);
+}
+
 [data-theme^="light"] .hero.home .hero-kicker,
 [data-theme^="light"] .hero.home .hero-title {
   text-shadow: none;
@@ -1276,6 +1346,18 @@ ul {
   font-size: 28px;
   letter-spacing: 0.02em;
   line-height: 1;
+}
+
+.page-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 0 0 18px;
+}
+
+.page-title-row .page-title {
+  margin: 0;
 }
 
 /* Pack page — enchant glyphs float over hero + about */
@@ -1420,6 +1502,15 @@ ul {
 
 .pack-about-titles {
   min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0 8px;
+}
+
+.pack-about-titles > .pack-about-title,
+.pack-about-titles > .pack-about-version {
+  width: 100%;
 }
 
 .pack-about-title {
@@ -1473,6 +1564,15 @@ ul {
   box-shadow:
     inset 1px 1px 0 #6cc349,
     inset -1px -1px 0 #2a5c1a;
+}
+
+.vanilla-skin-badge.is-beta {
+  background: #8a6a18;
+  color: #fff8d8;
+  text-shadow: 1px 1px 0 #3a2a08;
+  box-shadow:
+    inset 1px 1px 0 #d4b45a,
+    inset -1px -1px 0 #5a4210;
 }
 
 .pack-about-blurb {
@@ -3230,6 +3330,74 @@ img.install-icon.is-bare {
 .friends-block {
   margin-top: 22px;
   max-width: 640px;
+  min-height: 4.5rem;
+}
+
+.friend-row.is-skeleton {
+  pointer-events: none;
+}
+
+.skel {
+  display: block;
+  background: color-mix(in srgb, var(--text-on-stone, #bbb) 14%, transparent);
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  animation: friends-skel 1.15s ease-in-out infinite;
+}
+
+.skel-avatar {
+  width: 40px;
+  height: 40px;
+}
+
+.skel-line {
+  height: 10px;
+  border-radius: 0;
+}
+
+.skel-name {
+  width: 48%;
+  max-width: 140px;
+  margin-bottom: 6px;
+}
+
+.skel-id {
+  width: 28%;
+  max-width: 72px;
+  height: 8px;
+  opacity: 0.85;
+}
+
+.skel-chip {
+  width: 72px;
+  height: 28px;
+  justify-self: end;
+}
+
+.skel-chip-narrow {
+  width: 64px;
+}
+
+.skel-status {
+  width: 70px;
+  height: 12px;
+  justify-self: end;
+}
+
+@keyframes friends-skel {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skel {
+    animation: none;
+  }
 }
 
 .friends-list {
@@ -3320,6 +3488,80 @@ img.install-icon.is-bare {
 
 .network-panel {
   max-width: 720px;
+}
+
+.network-status-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.network-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px 4px;
+  border: 2px solid #000;
+  background: var(--mc-stone);
+  box-shadow: var(--bevel-panel);
+  color: var(--text-on-stone);
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  image-rendering: pixelated;
+}
+
+.network-pill-dot {
+  width: 8px;
+  height: 8px;
+  border: 1px solid #000;
+  background: #777;
+  flex-shrink: 0;
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.network-pill-label {
+  opacity: 0.78;
+}
+
+.network-pill-value {
+  font-weight: 400;
+}
+
+.network-pill.is-ok {
+  background: #3c8527;
+  color: #fff;
+  text-shadow: 1px 1px 0 #1a4a12;
+}
+
+.network-pill.is-ok .network-pill-dot {
+  background: #7dce55;
+}
+
+.network-pill.is-warn {
+  background: #8a6a18;
+  color: #fff8d8;
+  text-shadow: 1px 1px 0 #3a2a08;
+}
+
+.network-pill.is-warn .network-pill-dot {
+  background: #e2c15a;
+}
+
+.network-pill.is-bad {
+  background: #7a2e2e;
+  color: #ffe4e4;
+  text-shadow: 1px 1px 0 #3a1212;
+}
+
+.network-pill.is-bad .network-pill-dot {
+  background: #e07070;
+}
+
+.network-pill.is-idle .network-pill-dot {
+  background: #9a9a9a;
 }
 
 .network-status {

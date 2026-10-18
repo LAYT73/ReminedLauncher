@@ -40,6 +40,10 @@ const MODRINTH_RESOURCIFY: &str = "RLzHAoZe";
 /// Sodium + Iris are installed separately (pinned pair). Each entry is skipped if
 /// Modrinth has no Fabric build for that MC version.
 
+const MODRINTH_C2ME: &str = "VSNURh3q";
+const MODRINTH_SODIUM_EXTRA: &str = "PtjYWJkn";
+const MODRINTH_MORE_CULLING: &str = "51shyZVL";
+
 /// Recommended row (both catalogs).
 const OPTI_RECOMMENDED: &[(&str, &str)] = &[
     ("gvQqBUqZ", "Lithium"),
@@ -47,7 +51,7 @@ const OPTI_RECOMMENDED: &[(&str, &str)] = &[
     ("NNAgCjsB", "Entity Culling"),
     ("5ZwdcRci", "ImmediatelyFast"),
     ("fQEb0iXm", "Krypton"),
-    ("51shyZVL", "More Culling"),
+    (MODRINTH_MORE_CULLING, "More Culling"),
 ];
 
 /// 1.20-catalog extras (ModernFix / Starlight).
@@ -64,10 +68,6 @@ const OPTI_MODERN_EXTRA: &[(&str, &str)] = &[
     ("Ps1zyz6x", "ScalableLux"),
     ("vEC2jm6I", "Async"),
 ];
-
-const MODRINTH_C2ME: &str = "VSNURh3q";
-const MODRINTH_SODIUM_EXTRA: &str = "PtjYWJkn";
-const MODRINTH_MORE_CULLING: &str = "51shyZVL";
 
 /// C2ME — only when Java 25+ (natives-math module rejects Java 21).
 const OPTI_C2ME: (&str, &str) = (MODRINTH_C2ME, "C2ME");
@@ -232,6 +232,92 @@ fn detect_sodium_maj_min(mods_dir: &Path) -> Option<(u32, u32)> {
         }
     }
     None
+}
+
+/// First `X.Y.Z` in a string (stops at `-beta` / `+mc…`).
+fn parse_first_semver(s: &str) -> Option<(u32, u32, u32)> {
+    let bytes = s.as_bytes();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if !bytes[i].is_ascii_digit() {
+            i += 1;
+            continue;
+        }
+        let mut j = i;
+        let mut major: u32 = 0;
+        while j < bytes.len() && bytes[j].is_ascii_digit() {
+            major = major.saturating_mul(10).saturating_add((bytes[j] - b'0') as u32);
+            j += 1;
+        }
+        if j >= bytes.len() || bytes[j] != b'.' {
+            i += 1;
+            continue;
+        }
+        j += 1;
+        if j >= bytes.len() || !bytes[j].is_ascii_digit() {
+            i += 1;
+            continue;
+        }
+        let mut minor: u32 = 0;
+        while j < bytes.len() && bytes[j].is_ascii_digit() {
+            minor = minor.saturating_mul(10).saturating_add((bytes[j] - b'0') as u32);
+            j += 1;
+        }
+        if j >= bytes.len() || bytes[j] != b'.' {
+            i += 1;
+            continue;
+        }
+        j += 1;
+        if j >= bytes.len() || !bytes[j].is_ascii_digit() {
+            i += 1;
+            continue;
+        }
+        let mut patch: u32 = 0;
+        while j < bytes.len() && bytes[j].is_ascii_digit() {
+            patch = patch.saturating_mul(10).saturating_add((bytes[j] - b'0') as u32);
+            j += 1;
+        }
+        return Some((major, minor, patch));
+    }
+    None
+}
+
+/// Iris 1.8.13+ requires Sodium 0.8; older release Iris (1.8.8) requires Sodium 0.6.x.
+fn iris_needs_sodium_08(version_number: &str) -> bool {
+    match parse_first_semver(version_number) {
+        Some((1, 8, patch)) => patch >= 13,
+        Some((1, minor, _)) => minor > 8,
+        Some((major, _, _)) => major > 1,
+        None => false,
+    }
+}
+
+fn detect_iris_needs_sodium_08(mods_dir: &Path) -> Option<bool> {
+    let Ok(rd) = fs::read_dir(mods_dir) else {
+        return None;
+    };
+    for ent in rd.flatten() {
+        let name = ent.file_name().to_string_lossy().to_ascii_lowercase();
+        if !name.ends_with(".jar") || !name.contains("iris") {
+            continue;
+        }
+        return Some(iris_needs_sodium_08(&name));
+    }
+    None
+}
+
+fn iris_sodium_line_mismatch(mods_dir: &Path) -> bool {
+    let Some(need_08) = detect_iris_needs_sodium_08(mods_dir) else {
+        return false;
+    };
+    let Some((0, sod_minor)) = detect_sodium_maj_min(mods_dir) else {
+        return false;
+    };
+    if need_08 {
+        sod_minor < 8
+    } else {
+        sod_minor >= 8
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -488,21 +574,21 @@ async fn fetch_fabric_profile(
     resp.json().await.map_err(|e| e.to_string())
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct ModrinthVersionFile {
     url: String,
     filename: String,
     primary: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct ModrinthDependency {
     version_id: Option<String>,
     project_id: Option<String>,
     dependency_type: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct ModrinthVersion {
     #[allow(dead_code)]
     id: Option<String>,
@@ -735,12 +821,133 @@ fn sort_modrinth_versions(versions: &mut [ModrinthVersion], game: &str, hints: M
     });
 }
 
+fn is_prerelease_modrinth(ver: &ModrinthVersion) -> bool {
+    let n = ver.version_number.to_ascii_lowercase();
+    ver.version_type != "release"
+        || n.contains("beta")
+        || n.contains("alpha")
+        || n.contains("-rc")
+        || ver.files.iter().any(|f| {
+            let f = f.filename.to_ascii_lowercase();
+            f.contains("beta") || f.contains("alpha") || f.contains("-rc")
+        })
+}
+
+fn version_zero_maj_min(ver: &ModrinthVersion) -> Option<(u32, u32)> {
+    parse_zero_maj_min(&ver.version_number).or_else(|| {
+        ver.files
+            .iter()
+            .find_map(|f| parse_zero_maj_min(&f.filename))
+    })
+}
+
+/// Drop incompatible candidates before sort (More Culling betas, wrong Sodium Extra line).
+fn filter_modrinth_versions_for_project(
+    project: &str,
+    versions: &mut Vec<ModrinthVersion>,
+    hints: ModrinthPickHints,
+) {
+    if project == MODRINTH_MORE_CULLING {
+        let mut pool: Vec<ModrinthVersion> = versions
+            .iter()
+            .filter(|v| !is_prerelease_modrinth(v))
+            .cloned()
+            .collect();
+        if pool.is_empty() {
+            return;
+        }
+        // Sodium 0.6.9+ rejects More Culling < 1.0.4; More Culling 1.0.9+ rejects
+        // Sodium ≤ 0.6.13. Sweet spot for Iris 1.8.8 + Sodium 0.6.x: 1.0.4 ..= 1.0.7.
+        if hints.sodium_maj_min == Some((0, 6)) {
+            let mid: Vec<ModrinthVersion> = pool
+                .iter()
+                .filter(|v| moreculling_ok_for_sodium_06(v))
+                .cloned()
+                .collect();
+            if !mid.is_empty() {
+                pool = mid;
+            }
+        }
+        *versions = pool;
+        return;
+    }
+    if project == MODRINTH_SODIUM_EXTRA || project == MODRINTH_SODIUM {
+        if let Some(want) = hints.sodium_maj_min {
+            let matched: Vec<ModrinthVersion> = versions
+                .iter()
+                .filter(|v| version_zero_maj_min(v) == Some(want))
+                .cloned()
+                .collect();
+            if !matched.is_empty() {
+                *versions = matched;
+            }
+        }
+        // Never ship Sodium/Extra betas when a release exists on the same line.
+        let releases: Vec<ModrinthVersion> = versions
+            .iter()
+            .filter(|v| !is_prerelease_modrinth(v))
+            .cloned()
+            .collect();
+        if !releases.is_empty() {
+            *versions = releases;
+        }
+    }
+}
+
 fn pick_hints_for_project(project: &str, base: ModrinthPickHints) -> ModrinthPickHints {
-    if project == MODRINTH_SODIUM_EXTRA {
+    // More Culling also needs the Sodium line hint (1.0.x vs 0.27.x).
+    if project == MODRINTH_SODIUM_EXTRA
+        || project == MODRINTH_SODIUM
+        || project == MODRINTH_MORE_CULLING
+    {
         base
     } else {
         ModrinthPickHints::default()
     }
+}
+
+fn sodium_jar_is_prerelease(mods_dir: &Path) -> bool {
+    let Ok(rd) = fs::read_dir(mods_dir) else {
+        return false;
+    };
+    rd.flatten().any(|ent| {
+        let name = ent.file_name().to_string_lossy().to_ascii_lowercase();
+        name.ends_with(".jar")
+            && name.contains("sodium")
+            && !name.contains("sodium-extra")
+            && !name.contains("sodiumextra")
+            && (name.contains("beta") || name.contains("alpha") || name.contains("-rc"))
+    })
+}
+
+/// More Culling versions that work with Sodium 0.6.x (Iris 1.8.8 stack).
+fn moreculling_ok_for_sodium_06(ver: &ModrinthVersion) -> bool {
+    let semver = parse_first_semver(&ver.version_number).or_else(|| {
+        ver.files
+            .iter()
+            .find_map(|f| parse_first_semver(&f.filename))
+    });
+    matches!(semver, Some((1, 0, patch)) if (4..=7).contains(&patch))
+}
+
+fn moreculling_jar_wrong_for_sodium_06(mods_dir: &Path, markers: &[&str]) -> bool {
+    let Ok(rd) = fs::read_dir(mods_dir) else {
+        return false;
+    };
+    rd.flatten().any(|ent| {
+        let name = ent.file_name().to_string_lossy().to_ascii_lowercase();
+        if !name.ends_with(".jar") || !markers.iter().any(|m| name.contains(m)) {
+            return false;
+        }
+        // 0.27.x is too old for Sodium 0.6.9+; 1.0.9+ wants Sodium newer than 0.6.13.
+        if name.contains("0.27") || name.contains("0.26") {
+            return true;
+        }
+        if let Some((1, 0, patch)) = parse_first_semver(&name) {
+            return !(4..=7).contains(&patch);
+        }
+        true
+    })
 }
 
 async fn fetch_modrinth_versions(
@@ -946,11 +1153,9 @@ async fn try_download_modrinth_mod_with_deps(
         resolved.remove(project);
         return Ok(None);
     }
-    sort_modrinth_versions(
-        &mut versions,
-        game,
-        pick_hints_for_project(project, hints),
-    );
+    let project_hints = pick_hints_for_project(project, hints);
+    filter_modrinth_versions_for_project(project, &mut versions, project_hints);
+    sort_modrinth_versions(&mut versions, game, project_hints);
     let ver = versions.swap_remove(0);
     // Replace prior jars for this project so 1.20.4 builds don't stack beside 1.20.
     let markers = markers_for_perf_project(project);
@@ -976,11 +1181,9 @@ async fn ensure_modrinth_required_deps(
     if versions.is_empty() {
         return Ok(());
     }
-    sort_modrinth_versions(
-        &mut versions,
-        game,
-        pick_hints_for_project(project, hints),
-    );
+    let project_hints = pick_hints_for_project(project, hints);
+    filter_modrinth_versions_for_project(project, &mut versions, project_hints);
+    sort_modrinth_versions(&mut versions, game, project_hints);
     install_required_modrinth_deps(client, &versions[0], game, mods_dir, resolved, 0).await
 }
 
@@ -1003,24 +1206,19 @@ async fn install_sodium_iris(
         return Ok(());
     }
     sort_modrinth_versions(&mut iris_versions, game, ModrinthPickHints::default());
-    // Prefer an Iris build that pins Sodium or exactly matches the MC version.
+    // Prefer exact MC + release Iris. (Iris 1.8.8 = Sodium 0.6.x; only 1.8.13+ wants 0.8.x,
+    // and on 1.21.1 that line is still beta — stay on the stable release pair.)
     iris_versions.sort_by(|a, b| {
-        let pin = |v: &ModrinthVersion| {
-            v.dependencies.iter().any(|d| {
-                d.dependency_type == "required"
-                    && d.project_id.as_deref() == Some(MODRINTH_SODIUM)
-                    && d.version_id.as_ref().is_some_and(|id| !id.is_empty())
-            }) as i32
-        };
         let exact = |v: &ModrinthVersion| version_mentions_exact_game(&v.version_number, game) as i32;
+        let release = |v: &ModrinthVersion| (v.version_type == "release") as i32;
         exact(b)
             .cmp(&exact(a))
-            .then_with(|| pin(b).cmp(&pin(a)))
+            .then_with(|| release(b).cmp(&release(a)))
             .then_with(|| b.version_number.cmp(&a.version_number))
     });
-    let iris = &iris_versions[0];
+    let iris = iris_versions.swap_remove(0);
     clear_mod_jars_with_markers(mods_dir, &["iris"]);
-    download_modrinth_version_file(client, iris, mods_dir).await?;
+    download_modrinth_version_file(client, &iris, mods_dir).await?;
     progress::check_cancelled()?;
 
     let sodium_pin = iris.dependencies.iter().find_map(|d| {
@@ -1030,14 +1228,46 @@ async fn install_sodium_iris(
             None
         }
     });
+    let sodium_line = if iris_needs_sodium_08(&iris.version_number) {
+        (0, 8)
+    } else {
+        (0, 6)
+    };
 
     progress::emit(app, "pack", 56, "Downloading Sodium…");
     clear_sodium_jars(mods_dir);
+    // Prefer a Modrinth pin only when it already matches the Iris Sodium line.
+    // Otherwise pick newest Sodium on that line (Iris 1.8.8 → 0.6.13, not latest 0.8.13).
+    let mut used_pin = false;
     if let Some(version_id) = sodium_pin {
-        download_modrinth_version_id(client, &version_id, mods_dir).await?;
-    } else {
-        // No pin — pick Sodium with the same exact-game preference.
-        let _ = try_download_modrinth_mod(client, MODRINTH_SODIUM, game, mods_dir).await;
+        if let Ok(pinned) = fetch_modrinth_version_by_id(client, &version_id).await {
+            let pin_line = parse_zero_maj_min(&pinned.version_number).or_else(|| {
+                pinned
+                    .files
+                    .iter()
+                    .find_map(|f| parse_zero_maj_min(&f.filename))
+            });
+            if pin_line == Some(sodium_line) {
+                download_modrinth_version_file(client, &pinned, mods_dir).await?;
+                used_pin = true;
+            }
+        }
+    }
+    if !used_pin {
+        let hints = ModrinthPickHints {
+            sodium_maj_min: Some(sodium_line),
+        };
+        let mut resolved = new_modrinth_resolved_set();
+        let _ = try_download_modrinth_mod_with_deps(
+            client,
+            MODRINTH_SODIUM,
+            game,
+            mods_dir,
+            &mut resolved,
+            hints,
+            0,
+        )
+        .await?;
     }
     progress::check_cancelled()?;
     Ok(())
@@ -1252,8 +1482,10 @@ async fn ensure_perf_mods(
         return Ok(());
     }
     remove_known_bad_opti_jars(mods_dir, game, java_major);
-    let needs_pair =
-        !mods_dir_has_sodium(mods_dir) || iris_jar_mismatched_for_game(mods_dir, game);
+    let needs_pair = !mods_dir_has_sodium(mods_dir)
+        || iris_jar_mismatched_for_game(mods_dir, game)
+        || iris_sodium_line_mismatch(mods_dir)
+        || sodium_jar_is_prerelease(mods_dir);
     if needs_pair {
         progress::emit(app, "pack", 42, "Fixing Sodium / Iris…");
         let _ = install_sodium_iris(app, client, game, mods_dir).await;
@@ -1280,8 +1512,12 @@ async fn ensure_perf_mods(
         if markers.is_empty() {
             continue;
         }
+        let moreculling_wrong_gen = project == MODRINTH_MORE_CULLING
+            && hints.sodium_maj_min == Some((0, 6))
+            && moreculling_jar_wrong_for_sodium_06(mods_dir, markers);
         let mismatched = opti_jars_mismatched_for_game(mods_dir, markers, game)
             || (project == MODRINTH_MORE_CULLING && opti_jars_look_prerelease(mods_dir, markers))
+            || moreculling_wrong_gen
             || (project == MODRINTH_SODIUM_EXTRA
                 && sodium_extra_line_mismatched(mods_dir, hints.sodium_maj_min));
         if mods_dir_has_marker(mods_dir, markers) && !mismatched {

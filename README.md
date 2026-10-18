@@ -1,6 +1,8 @@
 # Remined Launcher
 
-Tauri + React лаунчер в стиле официального Minecraft Launcher (Noto Sans, тёмный UI, зелёный Play).
+Tauri + React лаунчер в духе официального Minecraft Launcher: тёмный UI, зелёный Play, встроенный Rust-рантайм.
+
+**Текущая версия:** `0.5.1`
 
 ## Запуск (dev)
 
@@ -18,13 +20,29 @@ npm run tauri dev
 rustup update stable
 ```
 
-и в `src-tauri/Cargo.toml` можно вернуть версии `tauri = "2"` без пина.
+## Что умеет
 
-## Что умеет сейчас
+- **Home** — обои, логотип, превью скина; вкладки Friends / Network
+- **Remined Vanilla** (beta) — Fabric + скины Remined, версионный opti-стек (Sodium/Iris и др.), Resourcify где есть на Modrinth
+- **Vanilla** / **Java packs** — чистый ваниль и паки из Supabase
+- **Скины** — ник, PNG-скин, 3D-превью; синк в облако; SkinShuffle / CustomSkinLoader перед стартом
+- **Friends** — Remined id, заявки, presence; Join к хосту через Network Play
+- **Network Play** — туннель через free Steam-приложение [Porthole](docs/PORTHOLE.md); статусы Steam / Porthole в UI
+- **Installations / Settings** — удаления, тема, Java, проверка апдейтов лаунчера
+- **Офлайн** — кэш аккаунта и паков после первого онлайна
 
-- Список паков из Supabase + локальные установки
-- Ник + скин (PNG)
-- Play → встроенный Rust runtime (Java + Fabric libs/assets)
-- Скин кладётся в SkinShuffle перед стартом
+## Релиз
 
-Сервер / CDN / апдейты паков — ещё нет.
+Куда поднимать версию и как тегать — в [`docs/RELEASE.md`](docs/RELEASE.md).
+
+Апдейтер: Settings → Check for updates  
+(`latest.json` с GitHub Releases).
+
+## Docs
+
+| Файл | О чём |
+|---|---|
+| [`docs/RELEASE.md`](docs/RELEASE.md) | bump версии, тег, CI |
+| [`docs/PORTHOLE.md`](docs/PORTHOLE.md) | Network Play / Steam |
+| [`docs/PACK_ASSETS.md`](docs/PACK_ASSETS.md) | ассеты паков |
+| [`docs/PREP.md`](docs/PREP.md) | GitHub / Supabase / prep notes |

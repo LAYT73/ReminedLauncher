@@ -172,11 +172,12 @@ function frameFullHome(viewer: SkinViewer) {
   skin.head.visible = true;
 
   // Body mid ~16, nametag sits above head — keep both in frame
-  viewer.fov = 50;
-  viewer.zoom = 0.5;
+  // Slightly wider FOV so outstretched idle arms stay inside tall fullscreen slots
+  viewer.fov = 54;
+  viewer.zoom = 0.48;
   viewer.controls.target.set(0, 17, 0);
   // Camera from front-right → subject reads as facing screen-left
-  viewer.camera.position.set(20, 17, 46);
+  viewer.camera.position.set(20, 17, 48);
   viewer.playerWrapper.rotation.y = 0;
   viewer.adjustCameraDistance();
   viewer.controls.update();

@@ -64,6 +64,7 @@ import { supabase } from "./lib/supabase";
 import brandLogo from "./assets/logo.png";
 import vanillaLogo from "./assets/vanilla.png";
 import reminedVanillaLogo from "./assets/remined-vanilla-logo.png";
+import reminedVanillaBanner from "./assets/remined-vanilla-banner.jpg";
 import vanillaWallpaper from "./assets/vanilla-wallpaper.jpg";
 import homeWallpaperVideo from "./assets/home-wallpaper.mp4";
 import homeMcLogo from "./assets/home-mc-logo.png";
@@ -172,6 +173,37 @@ const PACK_TABS: Array<
   [Exclude<TopTab, "home" | "installations" | "settings" | "skins">, string]
 > = [["play", "Play"], ...HOME_TABS];
 
+function TopNavTabIcon({ id }: { id: string }) {
+  if (id === "play") {
+    return (
+      <svg className="topnav-tab-icon" viewBox="0 0 24 24" aria-hidden>
+        <path fill="currentColor" d="M8 5.14v13.72L19 12 8 5.14z" />
+      </svg>
+    );
+  }
+  if (id === "friends") {
+    return (
+      <svg className="topnav-tab-icon" viewBox="0 0 24 24" aria-hidden>
+        <path
+          fill="currentColor"
+          d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zm6.5-.5a2.75 2.75 0 1 0 0-5.5 2.75 2.75 0 0 0 0 5.5zM3.5 19.25c0-2.9 2.35-5.25 5.5-5.25s5.5 2.35 5.5 5.25V20H3.5v-.75zm11.25-.75c0-1.55.48-2.98 1.28-4.16.72.28 1.5.44 2.32.44 2.76 0 5 2.01 5 4.5V20h-8.6v-.75z"
+        />
+      </svg>
+    );
+  }
+  if (id === "network") {
+    return (
+      <svg className="topnav-tab-icon" viewBox="0 0 24 24" aria-hidden>
+        <path
+          fill="currentColor"
+          d="M12 4a8 8 0 0 1 8 8h-2a6 6 0 1 0-6 6v2a8 8 0 0 1 0-16zm0 4a4 4 0 0 1 4 4h-2a2 2 0 1 0-2 2v2a4 4 0 0 1 0-8zm-.75 7.25a1.25 1.25 0 1 1 1.5 0V20h-1.5v-4.75z"
+        />
+      </svg>
+    );
+  }
+  return null;
+}
+
 type PackRelease = {
   id: string;
   version: string;
@@ -259,7 +291,7 @@ export default function App() {
     | "profile"
   >("home");
   const [javaInfo, setJavaInfo] = useState<JavaInfo | null>(null);
-  const [appVersion, setAppVersion] = useState("0.5.0");
+  const [appVersion, setAppVersion] = useState("0.5.1");
   const [updateBusy, setUpdateBusy] = useState(false);
   const [packBusy, setPackBusy] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -328,7 +360,7 @@ export default function App() {
           invoke<Pack[]>("list_packs"),
           invoke<Profile>("get_profile"),
           invoke<GamePhase>("get_game_phase"),
-          invoke<string>("get_app_version").catch(() => "0.5.0"),
+          invoke<string>("get_app_version").catch(() => "0.5.1"),
           catalogPromise,
         ]);
       const next = normalizeProfile(saved);
@@ -513,6 +545,18 @@ export default function App() {
 
   const launchPreparing = phase === "launching";
   const showPlayProgress = installing || launchPreparing;
+
+  // Footer status is for transient feedback — don't leave "Pack deleted" etc. stuck.
+  useEffect(() => {
+    if (!status || showPlayProgress) return;
+    if (statusKind !== "ok" && statusKind !== "error") return;
+    const delay = statusKind === "error" ? 6500 : 3200;
+    const id = window.setTimeout(() => {
+      setStatus("");
+      setStatusKind("idle");
+    }, delay);
+    return () => window.clearTimeout(id);
+  }, [status, statusKind, showPlayProgress]);
 
   useEffect(() => {
     if (!showPlayProgress) return;
@@ -2772,6 +2816,7 @@ export default function App() {
                     className={`topnav-tab ${topTab === id ? "active" : ""}`}
                     onClick={() => setTopTab(id)}
                   >
+                    <TopNavTabIcon id={id} />
                     {label}
                   </button>
                 ))}
@@ -2840,12 +2885,20 @@ export default function App() {
                     className="hero has-art"
                     style={
                       {
-                        ["--hero-image"]: `url("${vanillaWallpaper}")`,
+                        ["--hero-image"]: `url("${reminedVanillaBanner}")`,
                       } as CSSProperties
                     }
                   >
                     <p className="hero-kicker">Fabric · Skins</p>
-                    <h1 className="hero-title">Remined Vanilla</h1>
+                    <h1 className="hero-title hero-title-row">
+                      Remined Vanilla
+                      <span
+                        className="hero-beta-badge"
+                        title="Beta — expect bugs and rough edges while we polish this pack."
+                      >
+                        Beta
+                      </span>
+                    </h1>
                   </header>
                   <PageMotion viewKey={`${rail}:${topTab}`}>
                     <section className="pack-about">
@@ -2863,6 +2916,12 @@ export default function App() {
                               : rvPick
                                 ? "Not installed"
                                 : "—"}
+                          </p>
+                          <p
+                            className="vanilla-skin-badge is-beta"
+                            title="Beta — expect bugs and rough edges while we polish this pack."
+                          >
+                            Beta · bugs may happen
                           </p>
                           <p
                             className="vanilla-skin-badge is-ok"
