@@ -8,8 +8,10 @@
 
 .screenshot-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  /* auto-fit collapses empty tracks so 1 shot can use the row width */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
   gap: 10px;
+  width: 100%;
 }
 
 .screenshot-card {
@@ -20,20 +22,25 @@
   background: var(--bg-input);
   border: 3px solid #000;
   box-shadow: var(--bevel-panel);
+  min-width: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
 }
 
 .screenshot-card img {
   width: 100%;
   aspect-ratio: 16 / 9;
-  object-fit: cover;
-  background: #000;
+  object-fit: contain;
+  background: #111;
   display: block;
 }
 
 .screenshot-card .screenshot-placeholder {
   width: 100%;
   aspect-ratio: 16 / 9;
-  background: #000;
+  background: #111;
 }
 
 .screenshot-meta {
@@ -47,4 +54,35 @@
 .screenshot-actions {
   display: flex;
   gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Full-viewport lightbox — do not reuse .voice-modal (fixed 440px). */
+.screenshot-lightbox {
+  box-sizing: border-box;
+  width: min(96vw, 1280px);
+  max-height: min(92vh, 900px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-panel);
+  border: 3px solid #000;
+  box-shadow:
+    var(--bevel-panel),
+    0 12px 0 #000,
+    0 18px 40px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.screenshot-lightbox-img {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  max-height: calc(92vh - 72px);
+  object-fit: contain;
+  object-position: center;
+  background: #111;
+  display: block;
+  border: 2px solid #000;
 }

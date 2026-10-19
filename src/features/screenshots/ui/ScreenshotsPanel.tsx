@@ -126,23 +126,23 @@ export function ScreenshotsPanel({ packId, onToast }: Props) {
           className="voice-modal-backdrop"
           role="dialog"
           aria-modal="true"
+          aria-label="Screenshot preview"
           onClick={() => setOpen(null)}
         >
           <div
-            className="voice-modal"
-            style={{ maxWidth: "90vw", maxHeight: "90vh", width: "auto" }}
+            className="screenshot-lightbox"
             onClick={(e) => e.stopPropagation()}
           >
             {thumbs[open] ? (
               <img
+                className="screenshot-lightbox-img"
                 src={thumbs[open]}
                 alt={open}
-                style={{ maxWidth: "100%", maxHeight: "78vh", display: "block" }}
               />
             ) : (
               <p className="friends-lead">Loading…</p>
             )}
-            <div className="screenshot-actions" style={{ marginTop: 8 }}>
+            <div className="screenshot-actions">
               <button
                 type="button"
                 className="btn-mc dim"

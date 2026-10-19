@@ -139,7 +139,6 @@ export function VoicePanel({
         setDraft={actions.setDraft}
         chatEndRef={chatEndRef}
         onToast={onToast}
-        onOpenNetworkPlay={onOpenNetworkPlay}
         setDevicesOpen={setDevicesOpen}
         toggleCamera={live.toggleCamera}
         toggleScreen={live.toggleScreen}

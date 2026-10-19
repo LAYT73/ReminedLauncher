@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  listRoomMembers,
   subscribeRoomChat,
+  subscribeRoomMembers,
   type VoiceMember,
   type VoiceMessage,
   type VoiceRoom,
@@ -35,6 +37,18 @@ export function useRoomData(userId: string, displayName: string) {
       });
     });
   }, [active, userId, displayName]);
+
+  useEffect(() => {
+    if (!active) return;
+    const roomId = active.id;
+    const refresh = () => {
+      void listRoomMembers(roomId)
+        .then(setMembers)
+        .catch(() => undefined);
+    };
+    refresh();
+    return subscribeRoomMembers(roomId, refresh);
+  }, [active]);
 
   function reset() {
     setActive(null);

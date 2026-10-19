@@ -23,4 +23,9 @@ export {
 } from "./api/invites";
 export { listRoomMembers } from "./api/members";
 export { listMessages, sendMessage } from "./api/messages";
-export { subscribeInvites, subscribeRoomChat } from "./api/realtime";
+export {
+  subscribeInvites,
+  subscribeRoomChat,
+  subscribeRoomMembers,
+  subscribeVoiceRoom,
+} from "./api/realtime";

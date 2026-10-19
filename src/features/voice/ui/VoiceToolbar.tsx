@@ -1,6 +1,6 @@
 import { PTT_KEYS, type PttConfig } from "../lib/pushToTalk";
 import type { VoiceSession } from "../lib/voiceSession";
-import { HearIcon, MicIcon } from "./VoiceBits";
+import { CamIcon, HearIcon, MicIcon, ScreenIcon } from "./VoiceBits";
 import { MSG } from "@/shared/config/messages";
 
 type Props = {
@@ -18,7 +18,6 @@ type Props = {
   screenOn: boolean;
   toggleCamera: () => Promise<void>;
   toggleScreen: () => Promise<void>;
-  onOpenNetworkPlay?: () => void;
   setDevicesOpen: (open: boolean) => void;
   onLeave: () => Promise<void>;
 };
@@ -39,7 +38,6 @@ export function VoiceToolbar({
   screenOn,
   toggleCamera,
   toggleScreen,
-  onOpenNetworkPlay,
   setDevicesOpen,
   onLeave,
 }: Props) {
@@ -103,32 +101,24 @@ export function VoiceToolbar({
         ) : null}
         <button
           type="button"
-          className={`voice-icon-btn voice-text-btn ${camOn ? "is-on" : "is-neutral"}`}
+          className={`voice-icon-btn ${camOn ? "is-on" : "is-neutral"}`}
           aria-pressed={camOn}
           title={camOn ? "Turn camera off" : "Turn camera on"}
+          aria-label={camOn ? "Turn camera off" : "Turn camera on"}
           onClick={() => void toggleCamera()}
         >
-          Cam
+          <CamIcon slashed={!camOn} />
         </button>
         <button
           type="button"
-          className={`voice-icon-btn voice-text-btn ${screenOn ? "is-on" : "is-neutral"}`}
+          className={`voice-icon-btn ${screenOn ? "is-on" : "is-neutral"}`}
           aria-pressed={screenOn}
           title={screenOn ? "Stop sharing screen" : "Share screen"}
+          aria-label={screenOn ? "Stop sharing screen" : "Share screen"}
           onClick={() => void toggleScreen()}
         >
-          Share
+          <ScreenIcon slashed={!screenOn} />
         </button>
-        {onOpenNetworkPlay ? (
-          <button
-            type="button"
-            className="voice-icon-btn voice-text-btn is-neutral"
-            title="Open Network Play (same Porthole lobby)"
-            onClick={onOpenNetworkPlay}
-          >
-            Net
-          </button>
-        ) : null}
         <button
           type="button"
           className="voice-icon-btn is-neutral"

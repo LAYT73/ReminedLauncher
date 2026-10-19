@@ -50,7 +50,6 @@ type Props = {
   setDraft: (v: string) => void;
   chatEndRef: RefObject<HTMLDivElement | null>;
   onToast: (msg: string, tone?: "default" | "ok" | "err") => void;
-  onOpenNetworkPlay?: () => void;
   setDevicesOpen: (open: boolean) => void;
   toggleCamera: () => Promise<void>;
   toggleScreen: () => Promise<void>;
@@ -170,7 +169,6 @@ export function VoiceRoomView(props: Props) {
         screenOn={props.screenOn}
         toggleCamera={props.toggleCamera}
         toggleScreen={props.toggleScreen}
-        onOpenNetworkPlay={props.onOpenNetworkPlay}
         setDevicesOpen={props.setDevicesOpen}
         onLeave={props.onLeave}
       />

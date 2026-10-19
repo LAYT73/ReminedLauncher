@@ -58,14 +58,57 @@ export function HearIcon({ slashed }: { slashed?: boolean }) {
   );
 }
 
+export function CamIcon({ slashed }: { slashed?: boolean }) {
+  return (
+    <svg className="voice-icon-svg" viewBox="0 0 24 24" aria-hidden>
+      <path
+        fill="currentColor"
+        d="M4 7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1.4l4.2 2.5A1 1 0 0 0 22 17V9a1 1 0 0 0-1.8-.6L16 10.9V9a2 2 0 0 0-2-2H4z"
+      />
+      {slashed ? (
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          d="M5 5l14 14"
+        />
+      ) : null}
+    </svg>
+  );
+}
+
+export function ScreenIcon({ slashed }: { slashed?: boolean }) {
+  return (
+    <svg className="voice-icon-svg" viewBox="0 0 24 24" aria-hidden>
+      <path
+        fill="currentColor"
+        d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-5v2h2a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2h2v-2H5a2 2 0 0 1-2-2V5zm2 0v10h14V5H5z"
+      />
+      {slashed ? (
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          d="M5 5l14 14"
+        />
+      ) : null}
+    </svg>
+  );
+}
+
 export function VideoTileView({ tile, label }: { tile: VoiceVideoTile; label: string }) {
   const ref = useRef<HTMLVideoElement | null>(null);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    const media = tile.track.mediaStreamTrack;
+    if (!media || media.readyState === "ended") return;
     tile.track.attach(el);
     return () => {
       tile.track.detach(el);
+      el.srcObject = null;
     };
   }, [tile.track]);
   return (
@@ -73,7 +116,7 @@ export function VideoTileView({ tile, label }: { tile: VoiceVideoTile; label: st
       <video ref={ref} autoPlay playsInline muted={tile.local} />
       <span className="voice-video-label">
         {label}
-        {tile.source === "screen" ? " - screen" : ""}
+        {tile.source === "screen" ? " — screen" : ""}
       </span>
     </div>
   );

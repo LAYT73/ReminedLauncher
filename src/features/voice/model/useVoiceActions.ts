@@ -1,5 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { EVENT } from "@/shared/config/events";
 import { unlockAchievement } from "@/shared/lib/achievements";
 import {
@@ -13,6 +13,7 @@ import {
   respondVoiceInvite,
   sendMessage,
   setVoiceRoomShareCode,
+  subscribeVoiceRoom,
   type VoiceInvite,
   type VoiceRoom,
 } from "@/entities/voice-room";
@@ -68,6 +69,35 @@ export function useVoiceActions({
     live.resetLiveUi();
     onRoomStatusChange?.(false);
   }
+
+  // Guest: when host Ends room, leave UI + Porthole (membership may linger until delete).
+  const activeId = active?.id ?? null;
+  const activeHostId = active?.hostId ?? null;
+  useEffect(() => {
+    if (!activeId || activeHostId === userId) return;
+    return subscribeVoiceRoom(activeId, (status) => {
+      if (status !== "closed") return;
+      void (async () => {
+        await leaveVoiceRoom(activeId, userId).catch(() => undefined);
+        await live.disconnect().catch(() => undefined);
+        await portholeStopJoin().catch(() => undefined);
+        room.reset();
+        live.resetLiveUi();
+        onRoomStatusChange?.(false);
+        await lists.refreshLists().catch(() => undefined);
+        onToast("Host ended the room", "ok");
+      })();
+    });
+  }, [
+    activeId,
+    activeHostId,
+    userId,
+    live,
+    lists,
+    onRoomStatusChange,
+    onToast,
+    room,
+  ]);
 
   async function openRoomSession(target: VoiceRoom, asGuest: boolean) {
     room.setActive(target);
@@ -200,13 +230,13 @@ export function useVoiceActions({
         // Switching rooms: leave the current one first so the old session/SFU
         // does not linger (and so we don't keep hosting a dead room).
         if (active && active.id !== inv.roomId) {
-          await live.disconnect();
           if (active.hostId === userId) {
             await closeVoiceRoom(active.id).catch(() => undefined);
             voiceStopHost().catch(() => undefined);
           } else {
             await leaveVoiceRoom(active.id, userId).catch(() => undefined);
           }
+          await live.disconnect();
           resetActiveUi();
         }
         const joined = await respondVoiceInvite(inv.id, true, userId);
@@ -246,14 +276,18 @@ export function useVoiceActions({
     if (createInFlight.current) return;
     setBusy(true);
     try {
-      await live.sessionRef.current?.disconnect();
-      live.sessionRef.current = null;
+      // Drop Supabase membership/room BEFORE LiveKit disconnect so the host's
+      // ParticipantDisconnected → listRoomMembers refresh does not resurrect a ghost.
       if (active && isHost) {
-        await closeVoiceRoom(active.id);
-        await voiceStopHost().catch(() => undefined);
+        await closeVoiceRoom(active.id).catch(() => undefined);
       } else if (active) {
         await leaveVoiceRoom(active.id, userId).catch(() => undefined);
         await portholeStopJoin().catch(() => undefined);
+      }
+      await live.sessionRef.current?.disconnect().catch(() => undefined);
+      live.sessionRef.current = null;
+      if (active && isHost) {
+        await voiceStopHost().catch(() => undefined);
       }
       resetActiveUi();
       await lists.refreshLists();

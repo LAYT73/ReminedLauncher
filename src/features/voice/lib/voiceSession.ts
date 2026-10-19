@@ -40,9 +40,69 @@ export class VoiceSession {
   private levelSource: MediaStreamAudioSourceNode | null = null;
   private cbs: VoiceSessionCallbacks;
   private volumes = new Map<string, number>();
+  private outputDeviceId: string | undefined;
+  private resumeBound: (() => void) | null = null;
 
   constructor(cbs: VoiceSessionCallbacks = {}) {
     this.cbs = cbs;
+  }
+
+  /** Re-attach / unmute remote audio after cam/share/focus steals the WebView audio path. */
+  async resumePlayback() {
+    const room = this.room;
+    if (!room) return;
+    try {
+      await room.startAudio();
+    } catch {
+      /* autoplay policies vary */
+    }
+    for (const p of room.remoteParticipants.values()) {
+      for (const pub of p.audioTrackPublications.values()) {
+        const track = pub.track;
+        if (!track || track.kind !== Track.Kind.Audio) continue;
+        const attached = track.attach();
+        const els = Array.isArray(attached) ? attached : [attached];
+        for (const el of els) {
+          if (!(el instanceof HTMLAudioElement)) continue;
+          el.dataset.identity = p.identity;
+          el.autoplay = true;
+          el.style.display = "none";
+          el.muted = this.deafened;
+          el.volume = this.volumes.get(p.identity) ?? 1;
+          if (!el.isConnected) document.body.appendChild(el);
+          void el.play().catch(() => undefined);
+          if (this.outputDeviceId && "setSinkId" in el) {
+            void (
+              el as HTMLAudioElement & { setSinkId: (id: string) => Promise<void> }
+            )
+              .setSinkId(this.outputDeviceId)
+              .catch(() => undefined);
+          }
+        }
+      }
+    }
+  }
+
+  private wireResumeHooks() {
+    this.unwireResumeHooks();
+    const onResume = () => {
+      void this.resumePlayback();
+    };
+    this.resumeBound = onResume;
+    document.addEventListener("visibilitychange", onResume);
+    window.addEventListener("focus", onResume);
+    navigator.mediaDevices?.addEventListener?.("devicechange", onResume);
+  }
+
+  private unwireResumeHooks() {
+    if (!this.resumeBound) return;
+    document.removeEventListener("visibilitychange", this.resumeBound);
+    window.removeEventListener("focus", this.resumeBound);
+    navigator.mediaDevices?.removeEventListener?.(
+      "devicechange",
+      this.resumeBound,
+    );
+    this.resumeBound = null;
   }
 
   async connect(opts: {
@@ -105,13 +165,24 @@ export class VoiceSession {
       },
     });
 
+    this.outputDeviceId = opts.outputDeviceId;
     room.on(RoomEvent.ParticipantConnected, () => this.cbs.onParticipants?.());
-    room.on(RoomEvent.ParticipantDisconnected, () => this.cbs.onParticipants?.());
+    room.on(RoomEvent.ParticipantDisconnected, (p) => {
+      this.cbs.onSpeaking?.(p.identity, false);
+      this.cbs.onParticipants?.();
+      this.cbs.onVideo?.();
+    });
     room.on(RoomEvent.TrackMuted, () => this.cbs.onParticipants?.());
     room.on(RoomEvent.TrackUnmuted, () => this.cbs.onParticipants?.());
     room.on(RoomEvent.ParticipantAttributesChanged, () => this.cbs.onParticipants?.());
-    room.on(RoomEvent.LocalTrackPublished, () => this.cbs.onVideo?.());
-    room.on(RoomEvent.LocalTrackUnpublished, () => this.cbs.onVideo?.());
+    room.on(RoomEvent.LocalTrackPublished, () => {
+      this.cbs.onVideo?.();
+      void this.resumePlayback();
+    });
+    room.on(RoomEvent.LocalTrackUnpublished, () => {
+      this.cbs.onVideo?.();
+      void this.resumePlayback();
+    });
     room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
       const ids = new Set(speakers.map((s) => s.identity));
       for (const p of room.remoteParticipants.values()) {
@@ -145,21 +216,26 @@ export class VoiceSession {
         el.style.display = "none";
         el.volume = this.volumes.get(participant.identity) ?? 1;
         document.body.appendChild(el);
-        if (opts.outputDeviceId && "setSinkId" in el) {
+        if (this.outputDeviceId && "setSinkId" in el) {
           void (el as HTMLAudioElement & { setSinkId: (id: string) => Promise<void> })
-            .setSinkId(opts.outputDeviceId)
+            .setSinkId(this.outputDeviceId)
             .catch(() => undefined);
         }
         if (this.deafened) el.muted = true;
+        void el.play().catch(() => undefined);
       },
     );
     room.on(RoomEvent.TrackUnsubscribed, (trackRemote) => {
+      const detached = trackRemote.detach();
+      const els = Array.isArray(detached) ? detached : [detached];
       if (trackRemote.kind === Track.Kind.Video) {
-        trackRemote.detach();
+        for (const el of els) {
+          if (el instanceof HTMLVideoElement) el.srcObject = null;
+        }
         this.cbs.onVideo?.();
         return;
       }
-      trackRemote.detach().forEach((el) => el.remove());
+      for (const el of els) el.remove();
     });
 
     try {
@@ -214,6 +290,8 @@ export class VoiceSession {
       throw err instanceof Error ? err : new Error(msg);
     }
     this.wireLevelMeter(track);
+    this.wireResumeHooks();
+    await this.resumePlayback();
     this.cbs.onParticipants?.();
   }
 
@@ -323,12 +401,16 @@ export class VoiceSession {
     if (!this.room) return;
     await this.room.localParticipant.setCameraEnabled(on);
     this.cbs.onVideo?.();
+    await this.resumePlayback();
   }
 
   async setScreenShareEnabled(on: boolean) {
     if (!this.room) return;
-    await this.room.localParticipant.setScreenShareEnabled(on);
+    await this.room.localParticipant.setScreenShareEnabled(on, {
+      audio: false,
+    });
     this.cbs.onVideo?.();
+    await this.resumePlayback();
   }
 
   isCameraOn(): boolean {
@@ -346,14 +428,18 @@ export class VoiceSession {
     const add = (
       identity: string,
       local: boolean,
-      pubs: Iterable<{ track?: Track; source: Track.Source }>,
+      pubs: Iterable<{ track?: Track; source: Track.Source; isMuted?: boolean }>,
     ) => {
       for (const pub of pubs) {
-        if (!pub.track || pub.track.kind !== Track.Kind.Video) continue;
+        const track = pub.track;
+        if (!track || track.kind !== Track.Kind.Video) continue;
+        if (pub.isMuted) continue;
+        const media = track.mediaStreamTrack;
+        if (!media || media.readyState === "ended") continue;
         out.push({
           identity,
           local,
-          track: pub.track,
+          track,
           source: pub.source === Track.Source.ScreenShare ? "screen" : "camera",
         });
       }
@@ -389,6 +475,7 @@ export class VoiceSession {
   }
 
   async switchOutput(deviceId: string) {
+    this.outputDeviceId = deviceId;
     document
       .querySelectorAll<HTMLAudioElement>("audio[data-identity]")
       .forEach((el) => {
@@ -401,6 +488,7 @@ export class VoiceSession {
   }
 
   async disconnect() {
+    this.unwireResumeHooks();
     this.teardownLevelMeter();
     try {
       this.localTrack?.stop();
