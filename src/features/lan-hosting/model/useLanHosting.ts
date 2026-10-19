@@ -7,7 +7,6 @@ import {
   portholeStartHost,
   portholeStopAll,
   portholeStopHost,
-  readLanPort,
 } from "@/shared/api/porthole";
 import { toast } from "@/shared/lib/toast";
 import { useRail } from "@/shared/lib/useRoute";
@@ -20,6 +19,14 @@ import {
   useVoiceStatusStore,
 } from "@/entities/voice-room";
 import { voiceStartPorthole } from "@/features/voice/api/voiceNative";
+
+/** Only trust tray-parsed LAN (session-bounded). Never raw log archaeology. */
+function liveLanPort(): number | null {
+  const live = useGameStore.getState().live;
+  if (!live || live.phase !== "lan") return null;
+  const port = live.lan_port;
+  return typeof port === "number" && port > 0 ? port : null;
+}
 
 /**
  * While the game runs, watches for Open-to-LAN, exposes the port through
@@ -52,8 +59,12 @@ export function useLanHosting(): void {
         miss.current = 0;
         const voiceHost = useVoiceStatusStore.getState().hostRoomId;
         if (voiceHost && hadLan) {
-          void voiceStartPorthole(null)
-            .then(async (ready) => {
+          // Only rebuild if Porthole still exposes LAN — avoid kicking voice
+          // peers when hostingLan was a stale UI flag.
+          void portholeCurrentHost()
+            .then(async (live) => {
+              if (!live?.lan_port) return;
+              const ready = await voiceStartPorthole(null);
               await setVoiceRoomShareCode(voiceHost, ready.share_code).catch(
                 () => undefined,
               );
@@ -73,7 +84,9 @@ export function useLanHosting(): void {
       void (async () => {
         if (cancelled || busy.current) return;
         try {
-          const port = await readLanPort(packId);
+          // gamewatch live status resets on "Setting user:" — unlike the old
+          // reverse log scan that resurrected yesterday's Open-to-LAN.
+          const port = liveLanPort();
           if (cancelled) return;
 
           if (!port) {
@@ -89,11 +102,15 @@ export function useLanHosting(): void {
               game().setHostingLan(null);
               const voiceHost = useVoiceStatusStore.getState().hostRoomId;
               if (voiceHost) {
-                const ready = await voiceStartPorthole(null).catch(() => null);
-                if (ready?.share_code) {
-                  await setVoiceRoomShareCode(voiceHost, ready.share_code).catch(
-                    () => undefined,
-                  );
+                const liveHost = await portholeCurrentHost().catch(() => null);
+                if (liveHost?.lan_port) {
+                  const ready = await voiceStartPorthole(null).catch(() => null);
+                  if (ready?.share_code) {
+                    await setVoiceRoomShareCode(
+                      voiceHost,
+                      ready.share_code,
+                    ).catch(() => undefined);
+                  }
                 }
               } else {
                 await portholeStopHost().catch(() => undefined);

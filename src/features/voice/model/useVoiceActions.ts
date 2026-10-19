@@ -115,6 +115,9 @@ export function useVoiceActions({
       const code = patch.portholeShareCode;
       room.setActive((prev) => {
         if (!prev || prev.id !== activeId) return prev;
+        // Same-code Realtime echo must not force a guest rejoin — that kills
+        // the in-flight Porthole connect (localhost:7880 never opens).
+        if (code === prev.portholeShareCode) return prev;
         const next = { ...prev, portholeShareCode: code };
         // Guests auto-reconnect onto the rebuilt Voice+LAN lobby.
         if (activeHostId !== userId && code) {

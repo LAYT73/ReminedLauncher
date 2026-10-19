@@ -38,6 +38,7 @@ export function VoiceMembers({
   onInvite,
 }: Props) {
   const liveIds = new Set(session?.participantIds() ?? []);
+  const iAmLive = liveIds.has(userId);
   return (
     <div className="voice-col">
       <h3 className="settings-heading">In room</h3>
@@ -52,12 +53,25 @@ export function VoiceMembers({
             };
             const isMe = m.userId === userId;
             const inVoice = liveIds.has(m.userId);
+            // Only treat others as "connecting" once *we* are in LiveKit —
+            // otherwise every tile (incl. the host) looks stuck while we still
+            // negotiate Porthole.
+            const pendingJoin = iAmLive && !inVoice && !isMe;
+            const statusLabel = (() => {
+              if (isMe && !inVoice) return "Connecting…";
+              if (pendingJoin) return "Connecting…";
+              if (!iAmLive) {
+                return m.role === "host" ? "Host" : "In lobby";
+              }
+              if (m.role === "host") return "Host · In voice";
+              return "In voice";
+            })();
             return (
               <div
                 key={m.userId}
                 className={`voice-tile ${
                   speaking[m.userId] && inVoice ? "is-speaking" : ""
-                } ${inVoice ? "" : "is-connecting"}`}
+                } ${pendingJoin || (isMe && !inVoice) ? "is-connecting" : ""}`}
               >
                 <div className="voice-tile-avatar">
                   <SkinHead
@@ -76,13 +90,7 @@ export function VoiceMembers({
                   {m.username || FALLBACK_USERNAME}
                   {isMe ? " (you)" : ""}
                 </strong>
-                <span className="friend-id-static">
-                  {!inVoice
-                    ? "Connecting…"
-                    : m.role === "host"
-                      ? "Host · In voice"
-                      : "In voice"}
-                </span>
+                <span className="friend-id-static">{statusLabel}</span>
                 {!isMe && inVoice ? (
                   <label className="voice-vol" title="Volume for this person">
                     <input

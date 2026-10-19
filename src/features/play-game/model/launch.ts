@@ -1,5 +1,6 @@
 import { netLog } from "@/shared/api/netLog";
 import {
+  portholeCurrentHost,
   portholeStartJoin,
   portholeStopGameJoin,
   portholeStopAll,
@@ -97,21 +98,25 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
     .getState()
     .beginLaunch(quick ? MSG.launch.joiningFriend : MSG.launch.preparing);
   if (!quick) {
-    // Fresh local launch clears LAN state. Restarting Porthole while voice is
-    // live kicks every Steam peer (guest WebRTC dies) — only rebuild the lobby
-    // when we actually need to drop LAN backends from it.
-    const hadLan = game.hostingLan != null;
+    // Clear UI LAN chip. Never restart a live voice lobby on Play unless
+    // Porthole is actually still exposing a Minecraft port (stale hostingLan
+    // + old latest.log used to kick every guest here).
     game.setHostingLan(null);
+    game.setLive(null);
     const voice = useVoiceStatusStore.getState();
     if (voice.hostRoomId) {
-      if (hadLan) {
-        void netLog("ui", "launch: drop LAN from voice lobby (keep voice)");
-        void voiceStartPorthole(null)
-          .then((ready) =>
+      void portholeCurrentHost()
+        .then((live) => {
+          if (!live?.lan_port) {
+            void netLog("ui", "launch: voice host — leave Porthole alone");
+            return;
+          }
+          void netLog("ui", "launch: drop LAN from voice lobby (keep voice)");
+          return voiceStartPorthole(null).then((ready) =>
             setVoiceRoomShareCode(voice.hostRoomId!, ready.share_code),
-          )
-          .catch(() => undefined);
-      }
+          );
+        })
+        .catch(() => undefined);
     } else if (voice.inRoom) {
       // Voice guest: keep join, drop any leftover host expose.
       void portholeStopHost().catch(() => undefined);

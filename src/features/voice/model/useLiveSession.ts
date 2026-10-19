@@ -48,11 +48,17 @@ export function useLiveSession({
   const audioUnlockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pruneTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const [, setStateTick] = useState(0);
-  /** Share code we last successfully joined as a guest. */
+  /** Share code we last successfully joined as a guest (LiveKit up). */
   const joinedCodeRef = useRef<string | null>(null);
+  /** Share code the current guest connect() attempt is targeting. */
+  const connectingCodeRef = useRef<string | null>(null);
+  /** Newer lobby:<id> that arrived while connect/reconnect was in flight. */
+  const pendingShareCodeRef = useRef<string | null>(null);
   const guestRoomRef = useRef<VoiceRoom | null>(null);
   const intentionalLeaveRef = useRef(false);
   const reconnectingRef = useRef(false);
+  /** True while connect()/voiceGuestConnect is in flight. */
+  const connectingRef = useRef(false);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectFnRef = useRef<(opts?: { force?: boolean }) => Promise<void>>(
     async () => undefined,
@@ -91,6 +97,8 @@ export function useLiveSession({
     await sessionRef.current?.disconnect().catch(() => undefined);
     sessionRef.current = null;
     joinedCodeRef.current = null;
+    connectingCodeRef.current = null;
+    pendingShareCodeRef.current = null;
     guestRoomRef.current = null;
   }, [clearPruneTimers]);
 
@@ -130,131 +138,194 @@ export function useLiveSession({
   const connect = useCallback(
     async (room: VoiceRoom, asGuest: boolean) => {
       intentionalLeaveRef.current = false;
+      connectingRef.current = true;
       setStatus(asGuest ? "Connecting Porthole…" : MSG.voice.connectingVoice);
-      if (asGuest) {
-        if (!room.portholeShareCode) {
-          throw new Error(
-            "Room has no share code yet — ask the host to wait for the lobby code",
-          );
-        }
-        guestRoomRef.current = room;
-        // Drop a stale join tunnel before binding the new lobby.
-        await portholeStopJoin().catch(() => undefined);
-        await voiceGuestConnect(room.portholeShareCode);
-        joinedCodeRef.current = room.portholeShareCode;
-        // Brief settle — WS can race the bind even after TCP accept.
-        await new Promise((r) => setTimeout(r, 250));
-        setStatus(MSG.voice.connectingVoice);
-      }
-      const session = new VoiceSession({
-        onParticipants: () => {
-          setStateTick((t) => t + 1);
-          void listRoomMembers(room.id).then(setMembers);
-        },
-        onVideo: () => {
-          refreshVideo();
-        },
-        onSpeaking: (id, on) => setSpeaking((prev) => ({ ...prev, [id]: on })),
-        onAudioPlayback,
-        onRemoteJoined: (identity) => {
-          const pending = pruneTimers.current.get(identity);
-          if (pending) {
-            clearTimeout(pending);
-            pruneTimers.current.delete(identity);
+      let liveRoom = room;
+      try {
+        if (asGuest) {
+          guestRoomRef.current = liveRoom;
+          const portholeAttempts = 3;
+          let portholeErr: unknown;
+          for (let i = 0; i < portholeAttempts; i++) {
+            const fresh =
+              i === 0
+                ? liveRoom
+                : ((await getVoiceRoom(liveRoom.id).catch(() => null)) ??
+                  guestRoomRef.current ??
+                  liveRoom);
+            const pendingCode = pendingShareCodeRef.current;
+            pendingShareCodeRef.current = null;
+            const code =
+              pendingCode?.trim() || fresh.portholeShareCode?.trim() || "";
+            if (!code) {
+              portholeErr = new Error(
+                "Room has no share code yet — ask the host to wait for the lobby code",
+              );
+              if (i < portholeAttempts - 1) {
+                setStatus("Waiting for host lobby code…");
+                await new Promise((r) => setTimeout(r, 800));
+                continue;
+              }
+              throw portholeErr;
+            }
+            liveRoom = { ...fresh, portholeShareCode: code };
+            guestRoomRef.current = liveRoom;
+            connectingCodeRef.current = code;
+            if (i > 0) {
+              setStatus(
+                `Connecting Porthole… (retry ${i + 1}/${portholeAttempts})`,
+              );
+              await new Promise((r) => setTimeout(r, 600 * i));
+            }
+            try {
+              // Drop a stale join tunnel before binding the new lobby.
+              await portholeStopJoin().catch(() => undefined);
+              await voiceGuestConnect(code);
+              portholeErr = null;
+              break;
+            } catch (err) {
+              portholeErr = err;
+              connectingCodeRef.current = null;
+              void netLog(
+                "ui",
+                `voice guest porthole try=${i + 1} FAILED: ${errorMessage(err)}`,
+              );
+            }
           }
-        },
-        onRemoteLeft: (identity) => {
-          const prev = pruneTimers.current.get(identity);
-          if (prev) clearTimeout(prev);
-          const timer = setTimeout(() => {
-            pruneTimers.current.delete(identity);
-            const sess = sessionRef.current;
-            if (sess?.participantIds().includes(identity)) return;
-            void leaveVoiceRoom(room.id, identity)
-              .then(() => listRoomMembers(room.id).then(setMembers))
-              .catch(() => undefined);
-          }, REMOTE_LEAVE_GRACE_MS);
-          pruneTimers.current.set(identity, timer);
-        },
-        onDisconnected: () => {
-          clearPruneTimers();
-          setVideoTiles([]);
-          setCamOn(false);
-          setScreenOn(false);
-          setSpeaking({});
-          setNeedsAudioUnlock(false);
-          if (asGuest && !intentionalLeaveRef.current) {
-            // Steam profile static_code never changes — we join via lobby:<id>.
-            // Host rebuild (Open to LAN) kills the tunnel; rejoin by force, not
-            // by waiting for a "new share code" string.
-            setStatus("Lobby changed — reconnecting…");
-            void netLog("ui", "voice guest disconnected — force reconnect loop");
-            if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-            reconnectTimer.current = setTimeout(() => {
-              void reconnectFnRef
-                .current({ force: true })
+          if (portholeErr) throw portholeErr;
+          // Brief settle — WS can race the bind even after TCP accept.
+          await new Promise((r) => setTimeout(r, 250));
+          setStatus(MSG.voice.connectingVoice);
+        }
+        const session = new VoiceSession({
+          onParticipants: () => {
+            setStateTick((t) => t + 1);
+            void listRoomMembers(liveRoom.id).then(setMembers);
+          },
+          onVideo: () => {
+            refreshVideo();
+          },
+          onSpeaking: (id, on) => setSpeaking((prev) => ({ ...prev, [id]: on })),
+          onAudioPlayback,
+          onRemoteJoined: (identity) => {
+            const pending = pruneTimers.current.get(identity);
+            if (pending) {
+              clearTimeout(pending);
+              pruneTimers.current.delete(identity);
+            }
+          },
+          onRemoteLeft: (identity) => {
+            const prev = pruneTimers.current.get(identity);
+            if (prev) clearTimeout(prev);
+            const timer = setTimeout(() => {
+              pruneTimers.current.delete(identity);
+              const sess = sessionRef.current;
+              if (sess?.participantIds().includes(identity)) return;
+              void leaveVoiceRoom(liveRoom.id, identity)
+                .then(() => listRoomMembers(liveRoom.id).then(setMembers))
                 .catch(() => undefined);
-            }, RECONNECT_GRACE_MS);
-            return;
-          }
-          onRoomStatusChange?.(false);
-          if (asGuest) {
-            void leaveVoiceRoom(room.id, userId)
-              .then(() => listRoomMembers(room.id).then(setMembers))
-              .catch(() => undefined);
-            setStatus("Disconnected — Leave or rejoin from the lobby");
-          } else {
-            setStatus(
-              "Voice disconnected — try Leave, then Create again if needed",
-            );
-          }
-        },
-        onError: (m) => onToast(m, "err"),
-      });
-      const wsUrl = (room.lkWsUrl || "ws://127.0.0.1:7880").replace(
-        "ws://localhost:",
-        "ws://127.0.0.1:",
-      );
-      const connectOpts = {
-        wsUrl,
-        roomId: room.id,
-        identity: userId,
-        name: displayName,
-        micDeviceId: micId || undefined,
-        outputDeviceId: outputId || undefined,
-      };
-      let lastErr: unknown;
-      const attempts = asGuest ? 4 : 1;
-      for (let i = 0; i < attempts; i++) {
-        try {
-          if (i > 0) {
-            setStatus(`Connecting voice… (retry ${i + 1}/${attempts})`);
-            await new Promise((r) => setTimeout(r, 700 * i));
-          }
-          await session.connect(connectOpts);
-          lastErr = null;
-          break;
-        } catch (err) {
-          lastErr = err;
-          const msg = err instanceof Error ? err.message : String(err);
-          if (!asGuest || i === attempts - 1) throw err;
-          if (
-            !/signal|unreachable|Load failed|timeout|refused|WebRTC/i.test(msg)
-          ) {
-            throw err;
+            }, REMOTE_LEAVE_GRACE_MS);
+            pruneTimers.current.set(identity, timer);
+          },
+          onDisconnected: () => {
+            clearPruneTimers();
+            setVideoTiles([]);
+            setCamOn(false);
+            setScreenOn(false);
+            setSpeaking({});
+            setNeedsAudioUnlock(false);
+            joinedCodeRef.current = null;
+            if (asGuest && !intentionalLeaveRef.current) {
+              // Steam profile static_code never changes — we join via lobby:<id>.
+              // Host rebuild (Open to LAN) kills the tunnel; rejoin by force, not
+              // by waiting for a "new share code" string.
+              setStatus("Lobby changed — reconnecting…");
+              void netLog("ui", "voice guest disconnected — force reconnect loop");
+              if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+              reconnectTimer.current = setTimeout(() => {
+                void reconnectFnRef
+                  .current({ force: true })
+                  .catch(() => undefined);
+              }, RECONNECT_GRACE_MS);
+              return;
+            }
+            onRoomStatusChange?.(false);
+            if (asGuest) {
+              void leaveVoiceRoom(liveRoom.id, userId)
+                .then(() => listRoomMembers(liveRoom.id).then(setMembers))
+                .catch(() => undefined);
+              setStatus("Disconnected — Leave or rejoin from the lobby");
+            } else {
+              setStatus(
+                "Voice disconnected — try Leave, then Create again if needed",
+              );
+            }
+          },
+          onError: (m) => onToast(m, "err"),
+        });
+        const wsUrl = (liveRoom.lkWsUrl || "ws://127.0.0.1:7880").replace(
+          "ws://localhost:",
+          "ws://127.0.0.1:",
+        );
+        const connectOpts = {
+          wsUrl,
+          roomId: liveRoom.id,
+          identity: userId,
+          name: displayName,
+          micDeviceId: micId || undefined,
+          outputDeviceId: outputId || undefined,
+        };
+        let lastErr: unknown;
+        const attempts = asGuest ? 4 : 1;
+        for (let i = 0; i < attempts; i++) {
+          try {
+            if (i > 0) {
+              setStatus(`Connecting voice… (retry ${i + 1}/${attempts})`);
+              await new Promise((r) => setTimeout(r, 700 * i));
+            }
+            await session.connect(connectOpts);
+            lastErr = null;
+            break;
+          } catch (err) {
+            lastErr = err;
+            const msg = err instanceof Error ? err.message : String(err);
+            if (!asGuest || i === attempts - 1) throw err;
+            if (
+              !/signal|unreachable|Load failed|timeout|refused|WebRTC/i.test(msg)
+            ) {
+              throw err;
+            }
           }
         }
+        if (lastErr) throw lastErr;
+        sessionRef.current = session;
+        if (asGuest && connectingCodeRef.current) {
+          joinedCodeRef.current = connectingCodeRef.current;
+        }
+        setMuted(false);
+        setDeafened(false);
+        setNeedsAudioUnlock(false);
+        setStatus("In voice");
+        refreshVideo();
+        setStateTick((t) => t + 1);
+        onAudioPlayback(session.room?.canPlaybackAudio ?? true);
+        onRoomStatusChange?.(true);
+      } finally {
+        connectingRef.current = false;
+        connectingCodeRef.current = null;
+        const pending = pendingShareCodeRef.current;
+        if (
+          asGuest &&
+          pending &&
+          pending !== joinedCodeRef.current &&
+          !reconnectingRef.current
+        ) {
+          pendingShareCodeRef.current = null;
+          queueMicrotask(() => {
+            void reconnectFnRef.current({ force: true }).catch(() => undefined);
+          });
+        }
       }
-      if (lastErr) throw lastErr;
-      sessionRef.current = session;
-      setMuted(false);
-      setDeafened(false);
-      setNeedsAudioUnlock(false);
-      setStatus("In voice");
-      refreshVideo();
-      setStateTick((t) => t + 1);
-      onAudioPlayback(session.room?.canPlaybackAudio ?? true);
-      onRoomStatusChange?.(true);
     },
     [
       clearPruneTimers,
@@ -345,8 +416,22 @@ export function useLiveSession({
   /** Host published a new lobby:<id> after Voice+LAN merge — force rejoin. */
   const onHostShareCode = useCallback(
     (room: VoiceRoom, shareCode: string | null) => {
-      if (!shareCode?.trim()) return;
-      guestRoomRef.current = { ...room, portholeShareCode: shareCode };
+      const code = shareCode?.trim();
+      if (!code) return;
+      guestRoomRef.current = { ...room, portholeShareCode: code };
+      // Same code we already joined or are joining — ignore Realtime echo.
+      if (code === joinedCodeRef.current || code === connectingCodeRef.current) {
+        return;
+      }
+      // First join / in-flight connect owns the tunnel — stash a newer lobby
+      // and apply it after the attempt finishes (see connect finally).
+      if (connectingRef.current || reconnectingRef.current) {
+        pendingShareCodeRef.current = code;
+        void netLog("ui", `voice guest defer lobby update target=${code}`);
+        return;
+      }
+      // Not in voice yet — let the current/next connect() pick up guestRoomRef.
+      if (!joinedCodeRef.current) return;
       void reconnectGuest({ force: true });
     },
     [reconnectGuest],

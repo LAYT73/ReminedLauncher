@@ -418,6 +418,14 @@ mod tests {
         );
         assert_eq!(s.phase, "lan");
         assert_eq!(s.lan_port, Some(55678));
+        // New client boot must clear yesterday's Open-to-LAN (Play must not
+        // rebuild Voice Porthole from a stale publish line).
+        let s = parse_game_log(
+            "Setting user: A\nPreparing level \"Old\"\nPublished LAN server on port 11111\n\
+             Setting user: B\nSound engine started\nPreparing level \"New\"\n",
+        );
+        assert_eq!(s.phase, "world");
+        assert_eq!(s.lan_port, None);
     }
 
     #[test]

@@ -1240,10 +1240,13 @@ fn spawn_join_keepalive(
         ChildSlot::JoinLan => "join-lan",
         _ => "join",
     };
+    // Steam drops idle Porthole peers (~20s MiscTimeout / RemoteTimeout).
+    // Hold a localhost TCP session open and refresh before that window —
+    // brief connect/drop every 3s left ~21s gaps once the loop was interrupted.
     thread::spawn(move || {
         let mut ticks = 0u32;
+        let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
         loop {
-            thread::sleep(Duration::from_secs(3));
             let alive = state.lock().ok().is_some_and(|g| match slot {
                 ChildSlot::JoinLan => g.lan_join.is_some() && g.lan_join_epoch == epoch,
                 _ => g.join.is_some() && g.join_epoch == epoch,
@@ -1251,8 +1254,7 @@ fn spawn_join_keepalive(
             if !alive {
                 break;
             }
-            let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
-            match TcpStream::connect_timeout(&addr, Duration::from_millis(500)) {
+            match TcpStream::connect_timeout(&addr, Duration::from_millis(800)) {
                 Ok(stream) => {
                     ticks = ticks.saturating_add(1);
                     if ticks == 1 || ticks % 10 == 0 {
@@ -1262,6 +1264,22 @@ fn spawn_join_keepalive(
                             &format!("keepalive ok localhost:{port} n={ticks}"),
                         );
                     }
+                    let _ = stream.set_nodelay(true);
+                    // Keep the forward busy for most of the MiscTimeout window.
+                    let mut held_ms = 0u64;
+                    while held_ms < 12_000 {
+                        let alive = state.lock().ok().is_some_and(|g| match slot {
+                            ChildSlot::JoinLan => {
+                                g.lan_join.is_some() && g.lan_join_epoch == epoch
+                            }
+                            _ => g.join.is_some() && g.join_epoch == epoch,
+                        });
+                        if !alive {
+                            break;
+                        }
+                        thread::sleep(Duration::from_millis(500));
+                        held_ms += 500;
+                    }
                     drop(stream);
                 }
                 Err(e) => {
@@ -1270,6 +1288,7 @@ fn spawn_join_keepalive(
                         tag,
                         &format!("keepalive MISS localhost:{port}: {e}"),
                     );
+                    thread::sleep(Duration::from_secs(1));
                 }
             }
         }
@@ -1343,60 +1362,12 @@ pub fn current_host(state: &PortholeState) -> Option<PortholeHostInfo> {
     })
 }
 
-/// Scan Minecraft latest.log for an *active* Open-to-LAN port.
-/// Walks newest → oldest: a world/server stop after publish means LAN is over.
+/// Active Open-to-LAN port for the *current* client session in latest.log.
 ///
-/// Publish: `Published LAN server on port 61647` / older `hosted on port`
-/// Stop: `Stopping singleplayer server…` / `Stopping server` / FastQuit disconnect
+/// Uses the same forward parser as the game tray (`gamewatch::parse_game_log`):
+/// a new `Setting user:` / `Loading Minecraft` clears a previous publish so a
+/// fresh Play does not rebuild Voice Porthole from yesterday's LAN line.
 pub fn read_lan_port(log_path: &Path) -> Option<u16> {
     let text = fs::read_to_string(log_path).ok()?;
-    let publish_markers = [
-        "published lan server on port",
-        "hosted on port",
-        "local game hosted on port",
-    ];
-    for line in text.lines().rev() {
-        let lower = line.to_ascii_lowercase();
-        if is_lan_stop_line(&lower) {
-            return None;
-        }
-        for marker in publish_markers {
-            if let Some(idx) = lower.find(marker) {
-                if let Some(port) = parse_port_after(&line[idx + marker.len()..]) {
-                    return Some(port);
-                }
-            }
-        }
-        // Chat: "… Порт: [61647]" — only count as publish if it looks like LAN open chat
-        if (lower.contains("локальной сети") || lower.contains("local network") || lower.contains("open to lan"))
-            && (lower.contains("порт:") || lower.contains("port:"))
-        {
-            for key in ["порт:", "port:"] {
-                if let Some(idx) = lower.find(key) {
-                    if let Some(port) = parse_port_after(&line[idx + key.len()..]) {
-                        return Some(port);
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
-fn is_lan_stop_line(lower: &str) -> bool {
-    // Avoid matching "Stopping worker threads" / JEI / mic — only world/server teardown.
-    lower.contains("stopping singleplayer server")
-        || lower.contains(": stopping server")
-        || lower.contains("[fastquit] disconnected")
-        || lower.contains(": stopping!")
-}
-
-fn parse_port_after(after: &str) -> Option<u16> {
-    let digits: String = after
-        .chars()
-        .skip_while(|c| !c.is_ascii_digit())
-        .take_while(|c| c.is_ascii_digit())
-        .collect();
-    let port: u16 = digits.parse().ok()?;
-    (port > 0).then_some(port)
+    crate::gamewatch::parse_game_log(&text).lan_port
 }
