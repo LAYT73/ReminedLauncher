@@ -1,8 +1,7 @@
 import { createPortal } from "react-dom";
 import { FALLBACK_USERNAME } from "@/shared/config/limits";
-import { TAB, routeFor } from "@/shared/config/routes";
+import { RAIL } from "@/shared/config/routes";
 import { toast } from "@/shared/lib/toast";
-import { useRail } from "@/shared/lib/useRoute";
 import { useNavigate } from "react-router";
 import { VoicePanel } from "@/features/voice";
 import { useProfileStore } from "@/entities/profile";
@@ -13,7 +12,6 @@ import { getVoiceHost } from "../model/host";
 /** Keeps the voice session alive for the whole signed-in, online app lifetime. */
 export function VoiceHost() {
   const navigate = useNavigate();
-  const rail = useRail();
   const userId = useSessionStore(selectUserId);
   const offlineMode = useSessionStore((s) => s.offlineMode);
   const username = useProfileStore((s) => s.profile.username);
@@ -26,7 +24,7 @@ export function VoiceHost() {
       userId={userId}
       displayName={(draft ?? username ?? FALLBACK_USERNAME).trim() || FALLBACK_USERNAME}
       onToast={toast}
-      onOpenNetworkPlay={() => navigate(routeFor(rail, TAB.network))}
+      onOpenNetworkPlay={() => navigate(`/${RAIL.settings}#network`)}
       onRoomStatusChange={setInRoom}
       onInvitesChange={setPendingInvites}
     />,

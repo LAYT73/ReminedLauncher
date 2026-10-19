@@ -5,6 +5,8 @@ type Props = {
   hostingPort?: number | null;
   /** You're in a voice room — remind that voice and LAN share nothing to configure. */
   voiceLive?: boolean;
+  /** Nested under Settings — skip the page chrome title. */
+  embedded?: boolean;
   onToast: (msg: string) => void;
 };
 
@@ -30,6 +32,7 @@ export function NetworkPlayPanel({
   hostingSelf,
   hostingPort,
   voiceLive,
+  embedded,
   onToast,
 }: Props) {
   const {
@@ -121,10 +124,15 @@ export function NetworkPlayPanel({
         ? "Leave Steam open and logged in to host or join."
         : "Install free Porthole on Steam to play with friends online.";
 
+  const Root = embedded ? "div" : "section";
   return (
-    <section className="section network-panel">
-      <div className="page-title-row">
-        <h2 className="page-title">Network Play</h2>
+    <Root
+      className={
+        embedded ? "network-panel is-embedded" : "section network-panel"
+      }
+    >
+      <div className={embedded ? "network-embedded-badges" : "page-title-row"}>
+        {embedded ? null : <h2 className="page-title">Network Play</h2>}
         <div className="network-status-badges" aria-live="polite">
           <StatusBadge label="Steam" value={steamValue} tone={steamTone} />
           <StatusBadge
@@ -242,6 +250,6 @@ export function NetworkPlayPanel({
           </ol>
         </div>
       </div>
-    </section>
+    </Root>
   );
 }

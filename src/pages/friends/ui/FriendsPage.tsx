@@ -1,9 +1,8 @@
 import { useNavigate } from "react-router";
 import { openPortholeOnSteam } from "@/shared/api/porthole";
 import { MSG } from "@/shared/config/messages";
-import { TAB, routeFor } from "@/shared/config/routes";
+import { RAIL } from "@/shared/config/routes";
 import { toast } from "@/shared/lib/toast";
-import { useRail } from "@/shared/lib/useRoute";
 import { NoticePage } from "@/shared/ui/Notice";
 import { FriendsPanel } from "@/features/friends";
 import { joinFriendSession, useJoiningFriend } from "@/features/play-game";
@@ -12,7 +11,6 @@ import { selectUserId, useSessionStore } from "@/entities/session";
 
 export function FriendsPage() {
   const navigate = useNavigate();
-  const rail = useRail();
   const userId = useSessionStore(selectUserId);
   const offlineMode = useSessionStore((s) => s.offlineMode);
   const reminedId = useSessionStore((s) => s.reminedId);
@@ -34,7 +32,7 @@ export function FriendsPage() {
       onToast={toast}
       joiningFriendId={joiningFriendId}
       hostingSelf={hostingSelf}
-      onOpenNetworkPlay={() => navigate(routeFor(rail, TAB.network))}
+      onOpenNetworkPlay={() => navigate(`/${RAIL.settings}#network`)}
       onInstallPorthole={() => {
         void openPortholeOnSteam().then(() => toast(MSG.friends.openingSteam));
       }}

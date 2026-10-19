@@ -2,9 +2,11 @@ export type ThemeId =
   | "dark-green"
   | "dark-purple"
   | "dark-pink"
+  | "dark-blue"
   | "light-green"
   | "light-pink"
-  | "light-purple";
+  | "light-purple"
+  | "light-blue";
 
 export type ThemePreset = {
   id: ThemeId;
@@ -33,6 +35,14 @@ export const THEME_PRESETS: ThemePreset[] = [
     surface: "#1a1624",
   },
   {
+    id: "dark-blue",
+    label: "Dark · Warden",
+    mode: "dark",
+    accent: "#019295",
+    accentMid: "#27dfe8",
+    surface: "#0c1315",
+  },
+  {
     id: "dark-green",
     label: "Dark · Green",
     mode: "dark",
@@ -55,6 +65,14 @@ export const THEME_PRESETS: ThemePreset[] = [
     accent: "#7b3fe4",
     accentMid: "#9458f0",
     surface: "#f6f2ff",
+  },
+  {
+    id: "light-blue",
+    label: "Light · Warden",
+    mode: "light",
+    accent: "#019295",
+    accentMid: "#27dfe8",
+    surface: "#eef8f9",
   },
   {
     id: "light-green",

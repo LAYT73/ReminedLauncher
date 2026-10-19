@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { useLiveSession } from "../model/useLiveSession";
-import { usePushToTalkState } from "../model/usePushToTalkState";
 import { useRoomData } from "../model/useRoomData";
 import { useRuntimeModal } from "../model/useRuntimeModal";
 import { useVoiceActions } from "../model/useVoiceActions";
@@ -30,12 +29,6 @@ export function VoicePanel({
     onRoomStatusChange,
     setMembers: room.setMembers,
   });
-  const { ptt, setPtt, pttDown } = usePushToTalkState(
-    Boolean(room.active),
-    live.muted,
-    live.sessionRef,
-    onToast,
-  );
   const runtime = useRuntimeModal();
   const actions = useVoiceActions({
     userId,
@@ -127,11 +120,10 @@ export function VoicePanel({
         setMuted={live.setMuted}
         deafened={live.deafened}
         setDeafened={live.setDeafened}
-        ptt={ptt}
-        setPtt={setPtt}
-        pttDown={pttDown}
         camOn={live.camOn}
         screenOn={live.screenOn}
+        needsAudioUnlock={live.needsAudioUnlock}
+        unlockAudio={live.unlockAudio}
         inviteOptions={inviteOptions}
         invitePick={actions.invitePick}
         setInvitePick={actions.setInvitePick}

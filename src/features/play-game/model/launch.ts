@@ -1,4 +1,8 @@
-import { portholeStopAll, portholeStopJoin } from "@/shared/api/porthole";
+import {
+  portholeStopAll,
+  portholeStopHost,
+  portholeStopJoin,
+} from "@/shared/api/porthole";
 import { MSG } from "@/shared/config/messages";
 import { FALLBACK_USERNAME, USERNAME } from "@/shared/config/limits";
 import { RAIL, routeFor, parseRoute, type Rail } from "@/shared/config/routes";
@@ -23,6 +27,11 @@ import {
 import { usePlaytimeStore } from "@/entities/playtime";
 import { syncCloudProfile, useProfileStore } from "@/entities/profile";
 import { useSessionStore } from "@/entities/session";
+import {
+  setVoiceRoomShareCode,
+  useVoiceStatusStore,
+} from "@/entities/voice-room";
+import { voiceStartPorthole } from "@/features/voice/api/voiceNative";
 import { downloadPack, ensurePackUpToDate } from "./pack-install";
 import { getPlayState } from "./play-state";
 import { installVersion } from "./versions";
@@ -81,8 +90,21 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
     .getState()
     .beginLaunch(quick ? MSG.launch.joiningFriend : MSG.launch.preparing);
   if (!quick) {
+    // Fresh local launch clears LAN, but must not tear down an active voice tunnel.
     game.setHostingLan(null);
-    void portholeStopAll().catch(() => undefined);
+    const voice = useVoiceStatusStore.getState();
+    if (voice.hostRoomId) {
+      void voiceStartPorthole(null)
+        .then((ready) =>
+          setVoiceRoomShareCode(voice.hostRoomId!, ready.share_code),
+        )
+        .catch(() => undefined);
+    } else if (voice.inRoom) {
+      // Voice guest: keep join, drop any leftover host expose.
+      void portholeStopHost().catch(() => undefined);
+    } else {
+      void portholeStopAll().catch(() => undefined);
+    }
   }
 
   try {

@@ -294,8 +294,15 @@ pub fn read_screenshot(app: AppHandle, pack_id: String, name: String) -> Result<
 
 #[tauri::command]
 pub fn screenshots_dir(app: AppHandle, pack_id: String) -> Result<String, String> {
-    let dir = instance_for(&app, &pack_id)?.join("screenshots");
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let instance = instance_for(&app, &pack_id)?;
+    // Never mkdir a ghost instance — only open folders for installed packs.
+    if !instance.is_dir() {
+        return Err("Pack is not installed yet".into());
+    }
+    let dir = instance.join("screenshots");
+    if !dir.is_dir() {
+        fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    }
     Ok(dir.display().to_string())
 }
 

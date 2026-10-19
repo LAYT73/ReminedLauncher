@@ -8,9 +8,6 @@ export function ThemeSection() {
   return (
     <div className="settings-block">
       <h3 className="settings-heading">Theme</h3>
-      <p className="field-hint theme-hint">
-        Pick a surface and accent. Applies instantly.
-      </p>
       <div className="theme-grid" role="listbox" aria-label="Theme presets">
         {THEME_PRESETS.map((preset) => {
           const active = theme === preset.id;
@@ -20,6 +17,8 @@ export function ThemeSection() {
               type="button"
               role="option"
               aria-selected={active}
+              aria-label={preset.label}
+              title={preset.label}
               className={`theme-card ${active ? "is-active" : ""}`}
               onClick={() => void setTheme(preset.id)}
             >
@@ -30,10 +29,6 @@ export function ThemeSection() {
                 }}
                 aria-hidden
               />
-              <span className="theme-card-copy">
-                <strong>{preset.label}</strong>
-                <em>{preset.mode}</em>
-              </span>
             </button>
           );
         })}

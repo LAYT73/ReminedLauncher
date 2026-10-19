@@ -5,7 +5,6 @@ import type {
   RefObject,
   SetStateAction,
 } from "react";
-import type { PttConfig } from "../lib/pushToTalk";
 import type {
   VoiceInvite,
   VoiceMember,
@@ -38,11 +37,10 @@ type Props = {
   setMuted: (v: boolean) => void;
   deafened: boolean;
   setDeafened: (v: boolean) => void;
-  ptt: PttConfig;
-  setPtt: (update: (prev: PttConfig) => PttConfig) => void;
-  pttDown: boolean;
   camOn: boolean;
   screenOn: boolean;
+  needsAudioUnlock: boolean;
+  unlockAudio: () => void;
   inviteOptions: { id: string; label: string; hint?: string }[];
   invitePick: string;
   setInvitePick: (id: string) => void;
@@ -162,11 +160,10 @@ export function VoiceRoomView(props: Props) {
         setMuted={props.setMuted}
         deafened={props.deafened}
         setDeafened={props.setDeafened}
-        ptt={props.ptt}
-        setPtt={props.setPtt}
-        pttDown={props.pttDown}
         camOn={props.camOn}
         screenOn={props.screenOn}
+        needsAudioUnlock={props.needsAudioUnlock}
+        unlockAudio={props.unlockAudio}
         toggleCamera={props.toggleCamera}
         toggleScreen={props.toggleScreen}
         setDevicesOpen={props.setDevicesOpen}

@@ -581,15 +581,19 @@ pub fn start_host_server(app: &AppHandle, state: &VoiceRuntimeState) -> Result<(
     Ok(())
 }
 
-/// Porthole `expose` backends: each UDP port must be listed (ranges like
-/// `udp/127.0.0.1:7881-7890` are rejected with "bad port").
-pub fn porthole_backends() -> String {
+/// Voice LiveKit ports, optionally merged with an Open-to-LAN TCP port so one
+/// Steam lobby can carry both voice and Network Play.
+/// Each UDP port must be listed (ranges like `udp/127.0.0.1:7881-7890` are rejected).
+pub fn porthole_backends_with_lan(lan_port: Option<u16>) -> String {
     let mut parts = vec![
         format!("tcp/127.0.0.1:{LK_TCP_PORT}"),
         format!("tcp/127.0.0.1:{LK_RTC_TCP_PORT}"),
     ];
     for port in LK_UDP_START..=LK_UDP_END {
         parts.push(format!("udp/127.0.0.1:{port}"));
+    }
+    if let Some(port) = lan_port.filter(|p| *p > 0) {
+        parts.push(format!("tcp/127.0.0.1:{port}"));
     }
     parts.join(",")
 }
@@ -629,25 +633,39 @@ pub fn start_voice_livekit(app: &AppHandle, voice: &VoiceRuntimeState) -> Result
 }
 
 /// Expose LiveKit ports over Steam Porthole after the host has joined locally.
+/// Pass `lan_port` to keep Open-to-LAN on the same lobby (shared Porthole host).
 pub fn start_voice_porthole(
     app: AppHandle,
     porthole: PortholeState,
+    lan_port: Option<u16>,
 ) -> Result<VoiceHostReady, String> {
     emit_progress(&app, "Voice", "Opening Porthole tunnel…", 92);
-    let backends = porthole_backends();
+    let backends = porthole_backends_with_lan(lan_port);
+    let game_name = if lan_port.filter(|p| *p > 0).is_some() {
+        "Remined Voice+LAN"
+    } else {
+        "Remined Voice"
+    };
     voice_log::append_ok(&app, "porthole", &format!("expose backends={backends}"));
     match porthole::start_host_backends(
         app.clone(),
         porthole,
         &backends,
         LK_TCP_PORT,
-        "Remined Voice",
+        game_name,
     ) {
         Ok(info) => {
             voice_log::append_ok(
                 &app,
                 "porthole",
-                &format!("lobby ready code={}", info.share_code),
+                &format!(
+                    "lobby ready code={} lan={}",
+                    info.share_code,
+                    lan_port
+                        .filter(|p| *p > 0)
+                        .map(|p| p.to_string())
+                        .unwrap_or_else(|| "-".into())
+                ),
             );
             Ok(VoiceHostReady {
                 share_code: info.share_code,
@@ -670,12 +688,48 @@ pub fn start_voice_host(
     porthole: PortholeState,
 ) -> Result<VoiceHostReady, String> {
     start_voice_livekit(&app, &voice)?;
-    start_voice_porthole(app, porthole)
+    start_voice_porthole(app, porthole, None)
 }
 
-pub fn stop_voice_host(voice: &VoiceRuntimeState, porthole: &PortholeState) {
-    porthole::stop_host(porthole);
+/// Stop LiveKit. If `keep_lan_port` is set, re-expose that TCP port alone so
+/// Network Play survives voice End/Leave; otherwise tear the Porthole host down.
+pub fn stop_voice_host(
+    app: &AppHandle,
+    voice: &VoiceRuntimeState,
+    porthole: &PortholeState,
+    keep_lan_port: Option<u16>,
+) -> Option<porthole::PortholeHostInfo> {
     stop_host(voice);
+    let lan = keep_lan_port.filter(|p| *p > 0);
+    if let Some(port) = lan {
+        voice_log::append_ok(
+            app,
+            "porthole",
+            &format!("voice stopped — keeping LAN expose on {port}"),
+        );
+        match porthole::start_host(app.clone(), porthole.clone(), port) {
+            Ok(info) => {
+                voice_log::append_ok(
+                    app,
+                    "porthole",
+                    &format!("LAN lobby restored code={}", info.share_code),
+                );
+                Some(info)
+            }
+            Err(e) => {
+                voice_log::append_ok(
+                    app,
+                    "porthole",
+                    &format!("LAN restore FAILED: {e}"),
+                );
+                porthole::stop_host(porthole);
+                None
+            }
+        }
+    } else {
+        porthole::stop_host(porthole);
+        None
+    }
 }
 
 pub fn guest_connect(
@@ -684,12 +738,22 @@ pub fn guest_connect(
     share_code: &str,
 ) -> Result<(), String> {
     porthole::start_join_approve(
-        app,
+        app.clone(),
         porthole,
         share_code,
         &porthole_approve(),
         LK_TCP_PORT,
-    )
+    )?;
+    // Signalling up is not enough — wait briefly for ICE/TCP so WebRTC
+    // does not start against a half-ready Porthole forward.
+    if !porthole::wait_port_listening(LK_RTC_TCP_PORT, StdDuration::from_secs(4)) {
+        voice_log::append_ok(
+            &app,
+            "porthole",
+            &format!("guest: rtc tcp {LK_RTC_TCP_PORT} not open yet (continuing)"),
+        );
+    }
+    Ok(())
 }
 
 pub fn mint_token(room: &str, identity: &str, name: &str) -> Result<String, String> {

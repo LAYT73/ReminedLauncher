@@ -6,11 +6,24 @@
   margin-right: 10px;
 }
 
+.screenshot-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  margin: 0 0 12px;
+}
+
+.screenshot-page-head .page-title {
+  margin: 0;
+}
+
 .screenshot-grid {
   display: grid;
-  /* auto-fit collapses empty tracks so 1 shot can use the row width */
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
-  gap: 10px;
+  /* auto-fill keeps empty tracks so a single shot stays card-sized */
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
   width: 100%;
 }
 
@@ -23,32 +36,29 @@
   border: 3px solid #000;
   box-shadow: var(--bevel-panel);
   min-width: 0;
+  max-width: 100%;
   text-align: left;
   cursor: pointer;
   color: inherit;
   font: inherit;
 }
 
-.screenshot-card img {
+.screenshot-card img,
+.screenshot-card .screenshot-placeholder {
   width: 100%;
   aspect-ratio: 16 / 9;
-  object-fit: contain;
+  object-fit: cover;
   background: #111;
   display: block;
 }
 
-.screenshot-card .screenshot-placeholder {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  background: #111;
-}
-
-.screenshot-meta {
+.screenshot-card-meta {
   display: flex;
   justify-content: space-between;
   gap: 6px;
   font-size: 12px;
   align-items: center;
+  color: var(--text-muted, inherit);
 }
 
 .screenshot-actions {
@@ -57,32 +67,132 @@
   flex-shrink: 0;
 }
 
-/* Full-viewport lightbox — do not reuse .voice-modal (fixed 440px). */
-.screenshot-lightbox {
-  box-sizing: border-box;
-  width: min(96vw, 1280px);
-  max-height: min(92vh, 900px);
+/* Full-tab style viewer — covers the window, image stays contained. */
+.screenshot-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 220;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  background: var(--bg-panel);
-  border: 3px solid #000;
-  box-shadow:
-    var(--bevel-panel),
-    0 12px 0 #000,
-    0 18px 40px rgba(0, 0, 0, 0.55);
-  overflow: hidden;
+  background: rgba(0, 0, 0, 0.92);
+  color: #fff;
 }
 
-.screenshot-lightbox-img {
+.screenshot-viewer-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 2;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 3px solid #000;
+  background: var(--mc-stone-mid, #555);
+  color: #fff;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--bevel-btn);
+}
+
+.screenshot-viewer-close:hover {
+  filter: brightness(1.1);
+}
+
+.screenshot-viewer-stage {
+  position: relative;
   flex: 1 1 auto;
   min-height: 0;
-  width: 100%;
-  max-height: calc(92vh - 72px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 64px 12px;
+  box-sizing: border-box;
+}
+
+.screenshot-viewer-img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
   object-fit: contain;
   object-position: center;
-  background: #111;
-  display: block;
   border: 2px solid #000;
+  background: #0a0a0a;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
+.screenshot-viewer-loading {
+  margin: 0;
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.screenshot-viewer-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 44px;
+  height: 64px;
+  padding: 0;
+  border: 3px solid #000;
+  background: var(--mc-stone-mid, #555);
+  color: #fff;
+  font-size: 36px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--bevel-btn);
+}
+
+.screenshot-viewer-nav.is-prev {
+  left: 12px;
+}
+
+.screenshot-viewer-nav.is-next {
+  right: 12px;
+}
+
+.screenshot-viewer-nav:hover {
+  filter: brightness(1.12);
+}
+
+.screenshot-viewer-nav:active {
+  transform: translateY(calc(-50% + 2px));
+}
+
+.screenshot-viewer-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 16px;
+  border-top: 3px solid #000;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.screenshot-viewer-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 14px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.screenshot-viewer-info strong {
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
+}
+
+.screenshot-viewer-info span {
+  opacity: 0.8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: min(42vw, 420px);
 }

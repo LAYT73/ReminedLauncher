@@ -1,5 +1,6 @@
 import {
   ConnectionError,
+  ConnectionState,
   Room,
   RoomEvent,
   Track,
@@ -19,6 +20,8 @@ export type VoiceSessionCallbacks = {
   onError?: (message: string) => void;
   /** Camera / screen-share tracks changed (local or remote). */
   onVideo?: () => void;
+  /** LiveKit autoplay gate — false means UI should offer a click-to-hear fallback. */
+  onAudioPlayback?: (canPlay: boolean) => void;
 };
 
 export type VoiceVideoTile = {
@@ -42,12 +45,24 @@ export class VoiceSession {
   private volumes = new Map<string, number>();
   private outputDeviceId: string | undefined;
   private resumeBound: (() => void) | null = null;
+  private pointerBound: (() => void) | null = null;
+  private watchdog: ReturnType<typeof setInterval> | null = null;
+  private resumeTimers: ReturnType<typeof setTimeout>[] = [];
 
   constructor(cbs: VoiceSessionCallbacks = {}) {
     this.cbs = cbs;
   }
 
-  /** Re-attach / unmute remote audio after cam/share/focus steals the WebView audio path. */
+  /** Burst of resume attempts — WebView often needs a beat after cam/focus. */
+  scheduleResume() {
+    for (const t of this.resumeTimers) clearTimeout(t);
+    this.resumeTimers = [];
+    for (const ms of [0, 200, 600, 1500]) {
+      this.resumeTimers.push(setTimeout(() => void this.resumePlayback(), ms));
+    }
+  }
+
+  /** Force-reattach remote audio after cam/share/focus steals the WebView path. */
   async resumePlayback() {
     const room = this.room;
     if (!room) return;
@@ -56,10 +71,28 @@ export class VoiceSession {
     } catch {
       /* autoplay policies vary */
     }
+    try {
+      if (this.levelCtx && this.levelCtx.state === "suspended") {
+        await this.levelCtx.resume();
+      }
+    } catch {
+      /* meter optional */
+    }
+
+    // Drop stale <audio> nodes — WebView leaves them paused after renegotiation.
+    document.querySelectorAll("audio[data-identity]").forEach((el) => el.remove());
+
     for (const p of room.remoteParticipants.values()) {
       for (const pub of p.audioTrackPublications.values()) {
         const track = pub.track;
         if (!track || track.kind !== Track.Kind.Audio) continue;
+        try {
+          const detached = track.detach();
+          const old = Array.isArray(detached) ? detached : [detached];
+          for (const el of old) el.remove();
+        } catch {
+          /* ignore */
+        }
         const attached = track.attach();
         const els = Array.isArray(attached) ? attached : [attached];
         for (const el of els) {
@@ -69,8 +102,7 @@ export class VoiceSession {
           el.style.display = "none";
           el.muted = this.deafened;
           el.volume = this.volumes.get(p.identity) ?? 1;
-          if (!el.isConnected) document.body.appendChild(el);
-          void el.play().catch(() => undefined);
+          document.body.appendChild(el);
           if (this.outputDeviceId && "setSinkId" in el) {
             void (
               el as HTMLAudioElement & { setSinkId: (id: string) => Promise<void> }
@@ -78,31 +110,68 @@ export class VoiceSession {
               .setSinkId(this.outputDeviceId)
               .catch(() => undefined);
           }
+          void el.play().catch(() => undefined);
         }
       }
     }
+    this.cbs.onAudioPlayback?.(room.canPlaybackAudio);
   }
 
   private wireResumeHooks() {
     this.unwireResumeHooks();
-    const onResume = () => {
-      void this.resumePlayback();
+    const onResume = () => this.scheduleResume();
+    // Immediate startAudio while the gesture is still active (delayed retries lose it).
+    const onPointer = () => {
+      const room = this.room;
+      if (room && !room.canPlaybackAudio) void this.resumePlayback();
+      else onResume();
     };
     this.resumeBound = onResume;
+    this.pointerBound = onPointer;
     document.addEventListener("visibilitychange", onResume);
     window.addEventListener("focus", onResume);
+    window.addEventListener("pageshow", onResume);
+    document.addEventListener("pointerdown", onPointer, { passive: true });
     navigator.mediaDevices?.addEventListener?.("devicechange", onResume);
+    this.watchdog = setInterval(() => {
+      const room = this.room;
+      if (!room || room.state !== ConnectionState.Connected) return;
+      let remoteAudio = 0;
+      for (const p of room.remoteParticipants.values()) {
+        for (const pub of p.audioTrackPublications.values()) {
+          if (pub.track?.kind === Track.Kind.Audio) remoteAudio += 1;
+        }
+      }
+      if (remoteAudio === 0) return;
+      const nodes = document.querySelectorAll<HTMLAudioElement>("audio[data-identity]");
+      const dead =
+        nodes.length < remoteAudio ||
+        [...nodes].some((el) => el.paused || el.ended || el.readyState === 0);
+      if (dead || !room.canPlaybackAudio) void this.resumePlayback();
+    }, 3500);
   }
 
   private unwireResumeHooks() {
-    if (!this.resumeBound) return;
-    document.removeEventListener("visibilitychange", this.resumeBound);
-    window.removeEventListener("focus", this.resumeBound);
-    navigator.mediaDevices?.removeEventListener?.(
-      "devicechange",
-      this.resumeBound,
-    );
-    this.resumeBound = null;
+    if (this.resumeBound) {
+      document.removeEventListener("visibilitychange", this.resumeBound);
+      window.removeEventListener("focus", this.resumeBound);
+      window.removeEventListener("pageshow", this.resumeBound);
+      navigator.mediaDevices?.removeEventListener?.(
+        "devicechange",
+        this.resumeBound,
+      );
+      this.resumeBound = null;
+    }
+    if (this.pointerBound) {
+      document.removeEventListener("pointerdown", this.pointerBound);
+      this.pointerBound = null;
+    }
+    if (this.watchdog) {
+      clearInterval(this.watchdog);
+      this.watchdog = null;
+    }
+    for (const t of this.resumeTimers) clearTimeout(t);
+    this.resumeTimers = [];
   }
 
   async connect(opts: {
@@ -157,6 +226,9 @@ export class VoiceSession {
     const room = new Room({
       adaptiveStream: true,
       dynacast: true,
+      // Keep the session when the WebView fires pagehide (tab/rail switches).
+      disconnectOnPageLeave: false,
+      webAudioMix: false,
       audioCaptureDefaults: {
         deviceId: opts.micDeviceId,
         echoCancellation: true,
@@ -177,11 +249,15 @@ export class VoiceSession {
     room.on(RoomEvent.ParticipantAttributesChanged, () => this.cbs.onParticipants?.());
     room.on(RoomEvent.LocalTrackPublished, () => {
       this.cbs.onVideo?.();
-      void this.resumePlayback();
+      this.scheduleResume();
     });
     room.on(RoomEvent.LocalTrackUnpublished, () => {
       this.cbs.onVideo?.();
-      void this.resumePlayback();
+      this.scheduleResume();
+    });
+    room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
+      this.cbs.onAudioPlayback?.(room.canPlaybackAudio);
+      if (!room.canPlaybackAudio) this.scheduleResume();
     });
     room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
       const ids = new Set(speakers.map((s) => s.identity));
@@ -223,6 +299,7 @@ export class VoiceSession {
         }
         if (this.deafened) el.muted = true;
         void el.play().catch(() => undefined);
+        this.scheduleResume();
       },
     );
     room.on(RoomEvent.TrackUnsubscribed, (trackRemote) => {
@@ -243,7 +320,9 @@ export class VoiceSession {
       await room.connect(opts.wsUrl, token, {
         autoSubscribe: true,
         peerConnectionTimeout: 25_000,
-        maxRetries: 2,
+        // Porthole guests need extra headroom for the first WS after bind.
+        websocketTimeout: 20_000,
+        maxRetries: 3,
         rtcConfig: {
           iceServers: [],
           iceTransportPolicy: "all",
@@ -291,7 +370,7 @@ export class VoiceSession {
     }
     this.wireLevelMeter(track);
     this.wireResumeHooks();
-    await this.resumePlayback();
+    this.scheduleResume();
     this.cbs.onParticipants?.();
   }
 
@@ -401,7 +480,7 @@ export class VoiceSession {
     if (!this.room) return;
     await this.room.localParticipant.setCameraEnabled(on);
     this.cbs.onVideo?.();
-    await this.resumePlayback();
+    this.scheduleResume();
   }
 
   async setScreenShareEnabled(on: boolean) {
@@ -410,7 +489,7 @@ export class VoiceSession {
       audio: false,
     });
     this.cbs.onVideo?.();
-    await this.resumePlayback();
+    this.scheduleResume();
   }
 
   isCameraOn(): boolean {

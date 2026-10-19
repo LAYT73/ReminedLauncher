@@ -7,18 +7,24 @@ type Row = { name: string; path: string; modified_ms: number; size: number };
 
 type Props = {
   packId: string | null;
+  /** False when the pack folder is not on disk yet. */
+  installed?: boolean;
   onToast: (msg: string, tone?: "default" | "ok" | "err") => void;
 };
 
 /** Local-only viewer for Minecraft's `screenshots/` folder. Nothing is uploaded. */
-export function ScreenshotsPanel({ packId, onToast }: Props) {
+export function ScreenshotsPanel({
+  packId,
+  installed = false,
+  onToast,
+}: Props) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
-  const [open, setOpen] = useState<string | null>(null);
+  const [index, setIndex] = useState<number | null>(null);
   const loading = useRef<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
-    if (!packId) {
+    if (!packId || !installed) {
       setRows([]);
       return;
     }
@@ -28,11 +34,12 @@ export function ScreenshotsPanel({ packId, onToast }: Props) {
       setRows([]);
       onToast(String(err), "err");
     }
-  }, [packId, onToast]);
+  }, [packId, installed, onToast]);
 
   useEffect(() => {
     setThumbs({});
     loading.current.clear();
+    setIndex(null);
     void refresh();
   }, [refresh]);
 
@@ -65,8 +72,47 @@ export function ScreenshotsPanel({ packId, onToast }: Props) {
     };
   }, [rows, load]);
 
+  const openRow = index != null && rows ? rows[index] ?? null : null;
+
+  // Prefetch neighbors while previewing.
+  useEffect(() => {
+    if (index == null || !rows?.length) return;
+    const names = [
+      rows[index]?.name,
+      rows[index - 1]?.name,
+      rows[index + 1]?.name,
+    ].filter(Boolean) as string[];
+    for (const name of names) void load(name);
+  }, [index, rows, load]);
+
+  useEffect(() => {
+    if (index == null || !rows?.length) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIndex(null);
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setIndex((i) =>
+          i == null ? i : (i - 1 + rows.length) % rows.length,
+        );
+        return;
+      }
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setIndex((i) => (i == null ? i : (i + 1) % rows.length));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [index, rows]);
+
   async function openFolder() {
-    if (!packId) return;
+    if (!packId || !installed) {
+      onToast("Install this pack before opening screenshots", "err");
+      return;
+    }
     try {
       const dir = await call<string>(CMD.screenshotsDir, { packId });
       await revealItemInDir(dir);
@@ -75,15 +121,32 @@ export function ScreenshotsPanel({ packId, onToast }: Props) {
     }
   }
 
+  const multi = (rows?.length ?? 0) > 1;
+
   return (
-    <section className="section">
-      <div className="screenshot-meta">
+    <section className="section screenshot-page">
+      <div className="screenshot-page-head">
         <h3 className="page-title">Screenshots</h3>
         <div className="screenshot-actions">
-          <button type="button" className="btn-mc dim" onClick={() => void refresh()}>
+          <button
+            type="button"
+            className="btn-mc dim"
+            disabled={!installed}
+            onClick={() => void refresh()}
+          >
             Refresh
           </button>
-          <button type="button" className="btn-mc dim" onClick={() => void openFolder()}>
+          <button
+            type="button"
+            className="btn-mc dim"
+            disabled={!installed}
+            title={
+              installed
+                ? "Open screenshots folder"
+                : "Install this pack first"
+            }
+            onClick={() => void openFolder()}
+          >
             Show folder
           </button>
         </div>
@@ -92,19 +155,24 @@ export function ScreenshotsPanel({ packId, onToast }: Props) {
         Press F2 in game. Shown from this installation&apos;s screenshots folder
         — stays on your computer, never uploaded.
       </p>
-      {rows === null ? (
+      {!installed ? (
+        <p className="friends-lead">
+          Install this pack first — screenshots appear here after you take them
+          in game.
+        </p>
+      ) : rows === null ? (
         <p className="friends-lead">Loading…</p>
       ) : rows.length === 0 ? (
         <p className="friends-lead">No screenshots yet.</p>
       ) : (
         <div className="screenshot-grid">
-          {rows.map((r) => (
+          {rows.map((r, i) => (
             <button
               key={r.name}
               type="button"
               className="screenshot-card"
               onClick={() => {
-                setOpen(r.name);
+                setIndex(i);
                 void load(r.name);
               }}
               onMouseEnter={() => void load(r.name)}
@@ -114,46 +182,105 @@ export function ScreenshotsPanel({ packId, onToast }: Props) {
               ) : (
                 <div className="screenshot-placeholder" />
               )}
-              <span className="screenshot-meta">
+              <span className="screenshot-card-meta">
                 <span>{new Date(r.modified_ms).toLocaleString()}</span>
               </span>
             </button>
           ))}
         </div>
       )}
-      {open ? (
+
+      {openRow ? (
         <div
-          className="voice-modal-backdrop"
+          className="screenshot-viewer"
           role="dialog"
           aria-modal="true"
           aria-label="Screenshot preview"
-          onClick={() => setOpen(null)}
         >
-          <div
-            className="screenshot-lightbox"
-            onClick={(e) => e.stopPropagation()}
+          <button
+            type="button"
+            className="screenshot-viewer-close"
+            aria-label="Close preview"
+            onClick={() => setIndex(null)}
           >
-            {thumbs[open] ? (
+            ×
+          </button>
+
+          <div
+            className="screenshot-viewer-stage"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setIndex(null);
+            }}
+          >
+            {multi ? (
+              <button
+                type="button"
+                className="screenshot-viewer-nav is-prev"
+                aria-label="Previous screenshot"
+                onClick={() =>
+                  setIndex((i) =>
+                    i == null || !rows
+                      ? i
+                      : (i - 1 + rows.length) % rows.length,
+                  )
+                }
+              >
+                ‹
+              </button>
+            ) : null}
+
+            {thumbs[openRow.name] ? (
               <img
-                className="screenshot-lightbox-img"
-                src={thumbs[open]}
-                alt={open}
+                className="screenshot-viewer-img"
+                src={thumbs[openRow.name]}
+                alt={openRow.name}
+                onClick={(e) => e.stopPropagation()}
               />
             ) : (
-              <p className="friends-lead">Loading…</p>
+              <p className="screenshot-viewer-loading">Loading…</p>
             )}
+
+            {multi ? (
+              <button
+                type="button"
+                className="screenshot-viewer-nav is-next"
+                aria-label="Next screenshot"
+                onClick={() =>
+                  setIndex((i) =>
+                    i == null || !rows ? i : (i + 1) % rows.length,
+                  )
+                }
+              >
+                ›
+              </button>
+            ) : null}
+          </div>
+
+          <div className="screenshot-viewer-bar">
+            <div className="screenshot-viewer-info">
+              <strong>
+                {index != null && rows
+                  ? `${index + 1} / ${rows.length}`
+                  : ""}
+              </strong>
+              <span>{openRow.name}</span>
+              <span>{new Date(openRow.modified_ms).toLocaleString()}</span>
+            </div>
             <div className="screenshot-actions">
               <button
                 type="button"
                 className="btn-mc dim"
                 onClick={() => {
-                  const r = rows?.find((x) => x.name === open);
-                  if (r) void revealItemInDir(r.path).catch(() => undefined);
+                  void revealItemInDir(openRow.path).catch(() => undefined);
                 }}
               >
                 Show file
               </button>
-              <button type="button" className="btn-mc dim" onClick={() => setOpen(null)}>
+              <button
+                type="button"
+                className="btn-mc dim"
+                onClick={() => setIndex(null)}
+              >
                 Close
               </button>
             </div>

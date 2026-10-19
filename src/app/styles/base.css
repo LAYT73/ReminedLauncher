@@ -25,6 +25,16 @@
   font-display: swap;
 }
 
+/* Enchanting-table runes (Standard Galactic Alphabet → Latin A–Z) */
+@font-face {
+  font-family: "Minecraft Enchanting";
+  src: url("../../shared/assets/fonts/MinecraftEnchanting-Regular.ttf")
+    format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 @font-face {
   font-family: "Noto Sans";
   src: url("../../shared/assets/fonts/NotoSans-Regular.woff2") format("woff2");
@@ -89,6 +99,7 @@
 
   --font-ui: "Noto Sans", "Segoe UI", Tahoma, sans-serif;
   --font-display: "Minecraft Ten", "Noto Sans", sans-serif;
+  --font-enchant: "Minecraft Enchanting", "Apple Symbols", monospace;
 
   --bevel-btn:
     inset 0 3px 0 0 rgba(255, 255, 255, 0.22),
@@ -162,6 +173,26 @@
   --bg-input: #0c080a;
   --bg-menu: #161014;
   --pack-about-end: #140f12;
+}
+
+/* Warden / sculk — deep dark + soul cyan */
+[data-theme="dark-blue"] {
+  --mc-green: #019295;
+  --mc-green-mid: #1ab8be;
+  --mc-green-hi: #27dfe8;
+  --accent-deep: #032a31;
+  --accent-shadow: #014a4d;
+  --accent-text: #27dfe8;
+  --accent-wash: rgba(39, 223, 232, 0.1);
+  --bg: #0c1315;
+  --bg-deep: #070b0d;
+  --bg-sidebar: #06090b;
+  --bg-panel: #101b1f;
+  --bg-raised: #16262c;
+  --bg-playbar: #080d0f;
+  --bg-input: #050809;
+  --bg-menu: #0c1417;
+  --pack-about-end: #080d0f;
 }
 
 [data-theme="light-green"] {
@@ -292,6 +323,55 @@
   --overlay-hover: rgba(0, 0, 0, 0.06);
   --pack-about-end: #ece4f8;
   --caret: #1a1228;
+  --danger-text: #c41818;
+  --warn-text: #b85a10;
+  --shadow-soft: transparent;
+  --bevel-btn:
+    inset 0 3px 0 0 rgba(255, 255, 255, 0.55),
+    inset 0 -4px 0 0 rgba(0, 0, 0, 0.16),
+    inset 3px 0 0 0 rgba(255, 255, 255, 0.25),
+    inset -3px 0 0 0 rgba(0, 0, 0, 0.1),
+    0 3px 0 #000;
+  --bevel-panel:
+    inset 0 2px 0 0 rgba(255, 255, 255, 0.5),
+    inset 0 -2px 0 0 rgba(0, 0, 0, 0.1),
+    inset 2px 0 0 0 rgba(255, 255, 255, 0.2),
+    inset -2px 0 0 0 rgba(0, 0, 0, 0.08);
+  --bevel-inset:
+    inset 0 2px 0 0 rgba(0, 0, 0, 0.1),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.45);
+}
+
+[data-theme="light-blue"] {
+  --mc-green: #019295;
+  --mc-green-mid: #1ab8be;
+  --mc-green-hi: #36d9e6;
+  --accent-deep: #d4f4f6;
+  --accent-shadow: #016a6d;
+  --accent-text: #016a6d;
+  --accent-wash: rgba(1, 146, 149, 0.1);
+  --mc-stone: #e2eef0;
+  --mc-stone-mid: #d4e6e8;
+  --mc-stone-hi: #c4dade;
+  --bg: #eef8f9;
+  --bg-deep: #e0f0f2;
+  --bg-sidebar: #d4e8eb;
+  --bg-panel: #f5fbfc;
+  --bg-raised: #ffffff;
+  --bg-playbar: #e4f2f4;
+  --bg-input: #ffffff;
+  --bg-menu: #ffffff;
+  --text: #0c1a1c;
+  --text-secondary: #2a4044;
+  --text-muted: #4a6468;
+  --text-on-stone: #0c1a1c;
+  --text-on-stone-muted: #4a6468;
+  --chip-bg: rgba(1, 106, 109, 0.07);
+  --chip-border: rgba(1, 106, 109, 0.2);
+  --chip-text: #2a4044;
+  --overlay-hover: rgba(0, 0, 0, 0.06);
+  --pack-about-end: #e4f2f4;
+  --caret: #0c1a1c;
   --danger-text: #c41818;
   --warn-text: #b85a10;
   --shadow-soft: transparent;

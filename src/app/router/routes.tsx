@@ -6,7 +6,6 @@ import { PageMotion } from "@/shared/ui/PageMotion";
 import { FriendsPage } from "@/pages/friends";
 import { HomePage } from "@/pages/home";
 import { InstallationsPage } from "@/pages/installations";
-import { NetworkPage } from "@/pages/network";
 import { JavaPackPage, ReminedVanillaPage, VanillaPage } from "@/pages/pack";
 import { ProfilePage } from "@/pages/profile";
 import { ScreenshotsPage } from "@/pages/screenshots";
@@ -21,10 +20,12 @@ function Motion({ children }: { children: ReactNode }) {
   return <PageMotion viewKey={pathname}>{children}</PageMotion>;
 }
 
-/** Friends / Network / Voice are available on every rail that shows tabs. */
+const settingsNetwork = `/${RAIL.settings}#network`;
+
+/** Friends / Voice on every rail that shows tabs. Network → Settings. */
 const socialRoutes: RouteObject[] = [
   { path: TAB.friends, element: <Motion><FriendsPage /></Motion> },
-  { path: TAB.network, element: <Motion><NetworkPage /></Motion> },
+  { path: TAB.network, element: <Navigate to={settingsNetwork} replace /> },
   { path: TAB.voice, element: <VoicePage /> },
 ];
 

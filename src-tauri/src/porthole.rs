@@ -24,7 +24,7 @@ fn port_listening(port: u16) -> bool {
     .is_ok()
 }
 
-fn wait_port_listening(port: u16, timeout: Duration) -> bool {
+pub(crate) fn wait_port_listening(port: u16, timeout: Duration) -> bool {
     let start = Instant::now();
     while start.elapsed() < timeout {
         if port_listening(port) {

@@ -5,34 +5,8 @@ type Props = {
   count?: number;
 };
 
-const GLYPHS = [
-  "ᔑ",
-  "ʖ",
-  "ᓵ",
-  "↸",
-  "ᒷ",
-  "⎓",
-  "⊣",
-  "⍑",
-  "╎",
-  "⋮",
-  "ꖌ",
-  "ꖎ",
-  "ᒲ",
-  "リ",
-  "𝙹",
-  "¡",
-  "ᑑ",
-  "∷",
-  "ᓭ",
-  "ℸ",
-  "⚍",
-  "⍊",
-  "∴",
-  "✶",
-  "✦",
-  "✧",
-];
+/** Latin A–Z → Standard Galactic glyphs via "Minecraft Enchanting" @font-face. */
+const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
 type Particle = {
   root: HTMLSpanElement;

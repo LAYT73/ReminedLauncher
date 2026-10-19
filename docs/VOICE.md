@@ -6,10 +6,12 @@ Local **LiveKit** SFU on the host PC, tunnelled to friends via **Steam Porthole*
 
 | Port | Proto | Role |
 |---|---|---|
-| 7880 | TCP | LiveKit signalling (`ws://localhost:7880`) |
-| 7881–7890 | UDP | WebRTC media (ICE host candidates) |
+| 7880 | TCP | LiveKit signalling (`ws://127.0.0.1:7880`) |
+| 7881 | TCP | WebRTC ICE/TCP fallback |
+| 7882–7901 | UDP | WebRTC media (ICE host candidates) |
 
 Porthole expose uses **per-port** targets (`udp/127.0.0.1:N`), not a range string.
+Voice and Open-to-LAN share **one** Porthole host process: when both are active the lobby backends include LiveKit + the Minecraft LAN TCP port.
 
 ## Host flow (`VoicePanel.onCreate`)
 

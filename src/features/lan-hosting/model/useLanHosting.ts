@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { MSG } from "@/shared/config/messages";
 import { TIMING } from "@/shared/config/timings";
 import {
+  portholeCurrentHost,
   portholeStartHost,
   portholeStopAll,
   portholeStopHost,
@@ -13,11 +14,19 @@ import { useGameStore } from "@/entities/game";
 import { setStatus } from "@/entities/install";
 import { useCurrentPackId } from "@/entities/pack";
 import { useSessionStore } from "@/entities/session";
+import {
+  setVoiceRoomShareCode,
+  useVoiceStatusStore,
+} from "@/entities/voice-room";
+import { voiceStartPorthole } from "@/features/voice/api/voiceNative";
 
 /**
  * While the game runs, watches for Open-to-LAN, exposes the port through
  * Porthole and publishes a share code. Tears the tunnel down when LAN closes
  * or the game exits.
+ *
+ * Shares one Porthole host with voice: when the local user is a voice host,
+ * LAN is merged into the voice lobby instead of replacing it.
  */
 export function useLanHosting(): void {
   const appActive = useSessionStore((s) => s.gate === "app");
@@ -33,10 +42,23 @@ export function useLanHosting(): void {
     const game = useGameStore.getState;
     if (!appActive || phase !== "running" || !packId) {
       if (phase === "idle") {
+        const hadLan = game().hostingLan != null;
         game().setRunningPackId(null);
         game().setHostingLan(null);
         busy.current = false;
-        void portholeStopAll().catch(() => undefined);
+        const voiceHost = useVoiceStatusStore.getState().hostRoomId;
+        if (voiceHost && hadLan) {
+          // Drop LAN backends; keep voice lobby (new share code → sync room).
+          void voiceStartPorthole(null)
+            .then(async (ready) => {
+              await setVoiceRoomShareCode(voiceHost, ready.share_code).catch(
+                () => undefined,
+              );
+            })
+            .catch(() => undefined);
+        } else if (!voiceHost) {
+          void portholeStopAll().catch(() => undefined);
+        }
       }
       return;
     }
@@ -55,13 +77,36 @@ export function useLanHosting(): void {
             if (publishedPort() !== null) {
               fail.current = null;
               game().setHostingLan(null);
-              await portholeStopHost().catch(() => undefined);
+              const voiceHost = useVoiceStatusStore.getState().hostRoomId;
+              if (voiceHost) {
+                // Drop LAN from the lobby; keep voice expose.
+                const ready = await voiceStartPorthole(null).catch(() => null);
+                if (ready?.share_code) {
+                  await setVoiceRoomShareCode(voiceHost, ready.share_code).catch(
+                    () => undefined,
+                  );
+                }
+              } else {
+                await portholeStopHost().catch(() => undefined);
+              }
               if (!cancelled) toast(MSG.lan.hostingStopped);
             }
             return;
           }
 
-          if (publishedPort() === port) return;
+          const voiceHost = useVoiceStatusStore.getState().hostRoomId;
+          const live = await portholeCurrentHost().catch(() => null);
+          // When voice+LAN share a lobby, primary port is LiveKit 7880 — still OK if code exists.
+          const tunnelOk = live != null && Boolean(live.share_code);
+          const sameLanAlone =
+            !voiceHost && live != null && live.port === port && tunnelOk;
+          const sameMerged =
+            Boolean(voiceHost) &&
+            tunnelOk &&
+            publishedPort() === port &&
+            Boolean(game().hostingLan?.shareCode);
+          if (sameLanAlone || sameMerged) return;
+
           const last = fail.current;
           if (last && last.port === port && Date.now() - last.at < TIMING.lanHostRetryCooldown) {
             return;
@@ -69,19 +114,32 @@ export function useLanHosting(): void {
           busy.current = true;
           setStatus(MSG.lan.openingTunnel);
           try {
-            if (publishedPort() && publishedPort() !== port) {
-              await portholeStopHost();
+            let shareCode: string;
+            let gamePort = port;
+            if (voiceHost) {
+              const ready = await voiceStartPorthole(port);
+              shareCode = ready.share_code;
+              gamePort = port;
+              await setVoiceRoomShareCode(voiceHost, shareCode).catch(
+                () => undefined,
+              );
+            } else {
+              if (live && live.port !== port) {
+                await portholeStopHost();
+              }
+              const info = await portholeStartHost(port);
+              shareCode = info.share_code;
+              gamePort = info.port;
             }
-            const info = await portholeStartHost(port);
             if (cancelled) {
-              await portholeStopHost();
+              if (!voiceHost) await portholeStopHost();
               return;
             }
             fail.current = null;
             game().setHostingLan({
               packId,
-              shareCode: info.share_code,
-              gamePort: info.port,
+              shareCode,
+              gamePort,
             });
             toast(MSG.lan.hosting);
             setStatus("", "ok");

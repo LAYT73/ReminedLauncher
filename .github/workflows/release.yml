@@ -82,10 +82,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v0.6.4
-          releaseName: Remined v0.6.4
+          tagName: v0.7.0
+          releaseName: Remined v0.7.0
           releaseBody: |
-            Remined launcher v0.6.4 — voice UI (cam/share icons, leave sync, audio resume, volume slider), screenshot lightbox fix; Steam friends required for Porthole voice.
+            Remined launcher v0.7.0 — voice/LAN shared Porthole, click-to-hear audio unlock, Warden themes, Settings tabs (Network/Runtime/Updates), screenshot viewer + install guard, friends status badges, enchant SGA font, update confirm before download.
             macOS (arm64 + x64) and Windows builds.
           releaseDraft: false
           prerelease: false

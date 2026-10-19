@@ -2,9 +2,10 @@
  * Route model of the launcher. The router (`app/router`) is built from this;
  * widgets and features use the helpers to build links and read the location.
  *
- *   /home[/friends|network|voice]
- *   /java|vanilla|remined-vanilla[/screenshots|friends|network|voice]
+ *   /home[/friends|voice]
+ *   /java|vanilla|remined-vanilla[/screenshots|friends|voice]
  *   /installations  /settings  /profile
+ * Network Play lives under Settings (legacy `/…/network` redirects there).
  */
 export const RAIL = {
   home: "home",
@@ -41,7 +42,7 @@ export const TAB_LABEL: Record<Tab, string> = {
   voice: "Voice",
 };
 
-const SOCIAL_TABS: readonly Tab[] = [TAB.friends, TAB.network, TAB.voice];
+const SOCIAL_TABS: readonly Tab[] = [TAB.friends, TAB.voice];
 
 /** Tabs shown in the top nav per rail (empty = no tab strip). */
 export const RAIL_TABS: Record<Rail, readonly Tab[]> = {

@@ -14,9 +14,11 @@ import {
   sendMessage,
   setVoiceRoomShareCode,
   subscribeVoiceRoom,
+  useVoiceStatusStore,
   type VoiceInvite,
   type VoiceRoom,
 } from "@/entities/voice-room";
+import { useGameStore } from "@/entities/game";
 import { portholeStopJoin } from "@/shared/api/porthole";
 import {
   voiceEnsureRuntime,
@@ -31,6 +33,17 @@ import type { useRoomData } from "./useRoomData";
 import type { useRuntimeModal } from "./useRuntimeModal";
 import type { useVoiceLists } from "./useVoiceLists";
 import { MSG } from "@/shared/config/messages";
+
+function lanPortNow(): number | null {
+  return useGameStore.getState().hostingLan?.gamePort ?? null;
+}
+
+function syncLanShareCode(shareCode: string, gamePort: number) {
+  const game = useGameStore.getState();
+  const prev = game.hostingLan;
+  if (!prev || prev.gamePort !== gamePort) return;
+  game.setHostingLan({ ...prev, shareCode });
+}
 
 type Args = {
   userId: string;
@@ -67,7 +80,14 @@ export function useVoiceActions({
   function resetActiveUi() {
     room.reset();
     live.resetLiveUi();
+    useVoiceStatusStore.getState().setHostRoomId(null);
     onRoomStatusChange?.(false);
+  }
+
+  async function stopHostKeepingLan() {
+    const lan = lanPortNow();
+    const restored = await voiceStopHost(lan).catch(() => null);
+    if (restored && lan) syncLanShareCode(restored.share_code, lan);
   }
 
   // Guest: when host Ends room, leave UI + Porthole (membership may linger until delete).
@@ -113,7 +133,8 @@ export function useVoiceActions({
       onRoomStatusChange?.(true);
     } catch (err) {
       await live.disconnect();
-      if (!asGuest) await voiceStopHost().catch(() => undefined);
+      if (!asGuest) await stopHostKeepingLan();
+      else await portholeStopJoin().catch(() => undefined);
       resetActiveUi();
       throw err;
     }
@@ -121,7 +142,7 @@ export function useVoiceActions({
 
   async function teardownFailedCreate(roomId: string | null) {
     await live.disconnect();
-    await voiceStopHost().catch(() => undefined);
+    await stopHostKeepingLan();
     if (roomId) await closeVoiceRoom(roomId).catch(() => undefined);
     resetActiveUi();
     await lists.refreshLists().catch(() => undefined);
@@ -193,10 +214,14 @@ export function useVoiceActions({
       createdRoomId = created.id;
       step(MSG.voice.connectingVoice, 93);
       await openRoomSession(created, false);
+      useVoiceStatusStore.getState().setHostRoomId(created.id);
       step(MSG.voice.openingPorthole, 96);
       live.setStatus(MSG.voice.openingPorthole);
-      const ready = await voiceStartPorthole();
+      // Merge Open-to-LAN into the same Steam lobby when already hosting.
+      const lan = lanPortNow();
+      const ready = await voiceStartPorthole(lan);
       await setVoiceRoomShareCode(created.id, ready.share_code);
+      if (lan) syncLanShareCode(ready.share_code, lan);
       room.setActive((prev) => ({
         ...(prev ?? created),
         portholeShareCode: ready.share_code,
@@ -232,9 +257,10 @@ export function useVoiceActions({
         if (active && active.id !== inv.roomId) {
           if (active.hostId === userId) {
             await closeVoiceRoom(active.id).catch(() => undefined);
-            voiceStopHost().catch(() => undefined);
+            await stopHostKeepingLan();
           } else {
             await leaveVoiceRoom(active.id, userId).catch(() => undefined);
+            await portholeStopJoin().catch(() => undefined);
           }
           await live.disconnect();
           resetActiveUi();
@@ -287,7 +313,7 @@ export function useVoiceActions({
       await live.sessionRef.current?.disconnect().catch(() => undefined);
       live.sessionRef.current = null;
       if (active && isHost) {
-        await voiceStopHost().catch(() => undefined);
+        await stopHostKeepingLan();
       }
       resetActiveUi();
       await lists.refreshLists();
@@ -340,16 +366,35 @@ export function useVoiceActions({
   }
 
   const onRejoin = (target: VoiceRoom) =>
-    guarded(() => openRoomSession(target, target.hostId !== userId));
+    guarded(async () => {
+      const asGuest = target.hostId !== userId;
+      await openRoomSession(target, asGuest);
+      if (!asGuest) {
+        useVoiceStatusStore.getState().setHostRoomId(target.id);
+        // Host rejoin: ensure lobby is up (and still merged with LAN if needed).
+        if (!target.portholeShareCode) {
+          const lan = lanPortNow();
+          const ready = await voiceStartPorthole(lan);
+          await setVoiceRoomShareCode(target.id, ready.share_code);
+          if (lan) syncLanShareCode(ready.share_code, lan);
+          room.setActive((prev) =>
+            prev
+              ? { ...prev, portholeShareCode: ready.share_code }
+              : { ...target, portholeShareCode: ready.share_code },
+          );
+        }
+      }
+    });
 
   const onCloseListedRoom = (target: VoiceRoom) =>
     guarded(async () => {
       if (target.hostId === userId) {
         await closeVoiceRoom(target.id);
-        void voiceStopHost();
+        await stopHostKeepingLan();
         onToast("Room closed", "ok");
       } else {
         await leaveVoiceRoom(target.id, userId);
+        await portholeStopJoin().catch(() => undefined);
         onToast("Left room", "ok");
       }
       if (active?.id === target.id) {

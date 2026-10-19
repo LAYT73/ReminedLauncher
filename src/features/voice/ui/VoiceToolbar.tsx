@@ -1,4 +1,3 @@
-import { PTT_KEYS, type PttConfig } from "../lib/pushToTalk";
 import type { VoiceSession } from "../lib/voiceSession";
 import { CamIcon, HearIcon, MicIcon, ScreenIcon } from "./VoiceBits";
 import { MSG } from "@/shared/config/messages";
@@ -11,18 +10,17 @@ type Props = {
   setMuted: (v: boolean) => void;
   deafened: boolean;
   setDeafened: (v: boolean) => void;
-  ptt: PttConfig;
-  setPtt: (update: (prev: PttConfig) => PttConfig) => void;
-  pttDown: boolean;
   camOn: boolean;
   screenOn: boolean;
+  needsAudioUnlock: boolean;
+  unlockAudio: () => void;
   toggleCamera: () => Promise<void>;
   toggleScreen: () => Promise<void>;
   setDevicesOpen: (open: boolean) => void;
   onLeave: () => Promise<void>;
 };
 
-/** Mic / deafen / PTT / camera / share / devices + leave controls. */
+/** Mic / deafen / camera / share / devices + leave controls. */
 export function VoiceToolbar({
   session,
   isHost,
@@ -31,11 +29,10 @@ export function VoiceToolbar({
   setMuted,
   deafened,
   setDeafened,
-  ptt,
-  setPtt,
-  pttDown,
   camOn,
   screenOn,
+  needsAudioUnlock,
+  unlockAudio,
   toggleCamera,
   toggleScreen,
   setDevicesOpen,
@@ -74,33 +71,6 @@ export function VoiceToolbar({
         </button>
         <button
           type="button"
-          className={`voice-icon-btn voice-ptt-btn ${ptt.enabled ? (pttDown ? "is-on is-talking" : "is-on") : "is-neutral"}`}
-          aria-pressed={ptt.enabled}
-          title={
-            ptt.enabled
-              ? `Push-to-talk on - hold ${PTT_KEYS.find((k) => k.id === ptt.key)?.label ?? ptt.key}`
-              : "Enable push-to-talk"
-          }
-          onClick={() => setPtt((p) => ({ ...p, enabled: !p.enabled }))}
-        >
-          PTT
-        </button>
-        {ptt.enabled ? (
-          <select
-            className="voice-ptt-key"
-            aria-label="Push-to-talk key"
-            value={ptt.key}
-            onChange={(e) => setPtt((p) => ({ ...p, key: e.target.value }))}
-          >
-            {PTT_KEYS.map((k) => (
-              <option key={k.id} value={k.id}>
-                {k.label}
-              </option>
-            ))}
-          </select>
-        ) : null}
-        <button
-          type="button"
           className={`voice-icon-btn ${camOn ? "is-on" : "is-neutral"}`}
           aria-pressed={camOn}
           title={camOn ? "Turn camera off" : "Turn camera on"}
@@ -133,6 +103,17 @@ export function VoiceToolbar({
             />
           </svg>
         </button>
+        {needsAudioUnlock ? (
+          <button
+            type="button"
+            className="voice-icon-btn voice-text-btn voice-unlock-audio"
+            title={MSG.voice.clickToHearHint}
+            aria-label={MSG.voice.clickToHearHint}
+            onClick={unlockAudio}
+          >
+            {MSG.voice.clickToHear}
+          </button>
+        ) : null}
       </div>
       <div className="voice-room-actions">
         <button

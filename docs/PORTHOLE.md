@@ -32,7 +32,7 @@ Launcher looks for the Steam install of `porthole` (override with `REMINED_PORTH
 
 Full detail: **[VOICE.md](./VOICE.md)**.
 
-Voice tab hosts a local **LiveKit** server and exposes `tcp/7880` + `udp/7881-7890` through the same Porthole lobby. Guests accept invite → Porthole connect → `ws://localhost:7880`. Chat/history live in Supabase (`008_voice_rooms.sql` + `009` RLS). Steam + Porthole required on every PC.
+Voice tab hosts a local **LiveKit** server and exposes `tcp/7880`, `tcp/7881`, and `udp/7882-7901` through Porthole. When Open-to-LAN is also active, that game port is merged into the **same** lobby so voice End/Leave does not kill Network Play (and vice versa). Guests accept invite → Porthole connect → `ws://127.0.0.1:7880`. Chat/history live in Supabase (`008_voice_rooms.sql` + `009` RLS). Steam + Porthole required on every PC.
 
 - **macOS / Windows host:** LiveKit binary is downloaded into `.remined/voice/` on first Create room (progress modal; no Terminal required). Homebrew bottle used as a source on macOS when needed.
 - Diagnostics: `.remined/voice/voice.log`

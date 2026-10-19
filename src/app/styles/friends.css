@@ -104,9 +104,9 @@
 }
 
 .skel-status {
-  width: 70px;
-  height: 12px;
-  justify-self: end;
+  width: 72px;
+  height: 18px;
+  border-radius: 2px;
 }
 
 @keyframes friends-skel {
@@ -136,7 +136,7 @@
 
 .friend-row {
   display: grid;
-  grid-template-columns: 40px 1fr auto auto;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   padding: 10px 12px;
@@ -147,7 +147,7 @@
 }
 
 .friend-row.has-join {
-  grid-template-columns: 40px 1fr auto auto auto;
+  grid-template-columns: 40px minmax(0, 1fr) auto auto;
 }
 
 .friends-info-block {
@@ -270,6 +270,18 @@
 
 .network-panel {
   max-width: 720px;
+}
+
+.network-panel.is-embedded {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.network-embedded-badges {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
 }
 
 .network-status-badges {
@@ -450,6 +462,22 @@
   min-width: 0;
 }
 
+.friend-name-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
+}
+
+.friend-nick {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
 /* Steam-like playtime chips (profile + friends) */
 .playtime-badges {
   display: flex;
@@ -494,7 +522,8 @@
   margin: 8px 0 0;
 }
 
-.friend-copy strong {
+.friend-copy strong,
+.friend-nick {
   font-family: var(--font-display);
   font-size: 14px;
   font-weight: 400;
@@ -529,37 +558,67 @@
   gap: 6px;
 }
 
-.friend-status {
+.friend-status-badge {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  height: 40px;
-  min-width: 88px;
-  max-width: 160px;
-  padding: 0 12px;
+  gap: 5px;
+  min-width: 0;
+  max-width: min(100%, 280px);
+  padding: 3px 8px;
   background: var(--bg-input);
-  border: 3px solid #000;
-  box-shadow: var(--bevel-inset);
+  border: 2px solid #000;
+  box-shadow: var(--bevel-panel);
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 400;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  line-height: 1.2;
   color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  justify-self: end;
 }
 
-.friend-status.is-online,
-.friend-status.is-in_game,
-.friend-status.is-hosting {
+.friend-status-kind {
+  flex-shrink: 0;
+}
+
+.friend-status-detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  opacity: 0.95;
+}
+
+.friend-status-voice {
+  flex-shrink: 0;
+  padding-left: 5px;
+  border-left: 1px solid rgba(0, 0, 0, 0.35);
+  opacity: 0.9;
+}
+
+.friend-status-badge.is-online,
+.friend-status-badge.is-in_game,
+.friend-status-badge.is-hosting {
   color: var(--text-on-accent);
   background: var(--mc-green);
   box-shadow: var(--bevel-btn);
   text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.45);
+}
+
+.friend-status-badge.is-online .friend-status-voice,
+.friend-status-badge.is-in_game .friend-status-voice,
+.friend-status-badge.is-hosting .friend-status-voice {
+  border-left-color: rgba(255, 255, 255, 0.35);
+}
+
+.friend-status-badge.is-pending,
+.friend-status-badge.is-offline {
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-input) 80%, #000 8%);
 }
 
 .friend-remove {
@@ -569,15 +628,22 @@
 @media (max-width: 700px) {
   .friend-row,
   .friend-row.has-join {
-    grid-template-columns: 40px 1fr;
+    grid-template-columns: 40px minmax(0, 1fr);
     grid-template-rows: auto auto;
   }
 
   .friend-actions,
-  .friend-status,
   .friend-join,
   .friend-join-slot,
   .friend-remove {
     grid-column: 2;
+  }
+
+  .friend-status-badge {
+    max-width: 100%;
+  }
+
+  .friend-status-detail {
+    max-width: 140px;
   }
 }

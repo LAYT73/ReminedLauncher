@@ -728,10 +728,11 @@ async fn voice_start_livekit(
 async fn voice_start_porthole(
     app: AppHandle,
     porthole: State<'_, porthole::PortholeState>,
+    lan_port: Option<u16>,
 ) -> Result<voice_runtime::VoiceHostReady, String> {
     let porthole = porthole.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        voice_runtime::start_voice_porthole(app, porthole)
+        voice_runtime::start_voice_porthole(app, porthole, lan_port)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -755,10 +756,12 @@ async fn voice_start_host(
 
 #[tauri::command]
 fn voice_stop_host(
+    app: AppHandle,
     voice: State<'_, voice_runtime::VoiceRuntimeState>,
     porthole: State<'_, porthole::PortholeState>,
-) {
-    voice_runtime::stop_voice_host(&voice, &porthole);
+    keep_lan_port: Option<u16>,
+) -> Option<porthole::PortholeHostInfo> {
+    voice_runtime::stop_voice_host(&app, &voice, &porthole, keep_lan_port)
 }
 
 #[tauri::command]

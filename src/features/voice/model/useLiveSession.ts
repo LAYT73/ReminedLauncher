@@ -4,6 +4,7 @@ import {
   type VoiceMember,
   type VoiceRoom,
 } from "@/entities/voice-room";
+import { portholeStopJoin } from "@/shared/api/porthole";
 import { voiceGuestConnect } from "../api/voiceNative";
 import { VoiceSession, type VoiceVideoTile } from "../lib/voiceSession";
 import { errorMessage, type ToastFn } from "./types";
@@ -36,11 +37,14 @@ export function useLiveSession({
   const [screenOn, setScreenOn] = useState(false);
   const [micId, setMicId] = useState("");
   const [outputId, setOutputId] = useState("");
+  const [needsAudioUnlock, setNeedsAudioUnlock] = useState(false);
+  const audioUnlockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [, setStateTick] = useState(0);
 
   // Leaving the panel (sign-out) must drop the session.
   useEffect(
     () => () => {
+      if (audioUnlockTimer.current) clearTimeout(audioUnlockTimer.current);
       void sessionRef.current?.disconnect();
       sessionRef.current = null;
     },
@@ -53,6 +57,10 @@ export function useLiveSession({
   }, []);
 
   const resetLiveUi = useCallback(() => {
+    if (audioUnlockTimer.current) {
+      clearTimeout(audioUnlockTimer.current);
+      audioUnlockTimer.current = null;
+    }
     setSpeaking({});
     setStatus("");
     setMuted(false);
@@ -61,6 +69,23 @@ export function useLiveSession({
     setCamOn(false);
     setScreenOn(false);
     setVolumes({});
+    setNeedsAudioUnlock(false);
+  }, []);
+
+  const onAudioPlayback = useCallback((canPlay: boolean) => {
+    if (audioUnlockTimer.current) {
+      clearTimeout(audioUnlockTimer.current);
+      audioUnlockTimer.current = null;
+    }
+    if (canPlay) {
+      setNeedsAudioUnlock(false);
+      return;
+    }
+    // Wait for scheduleResume bursts (0/200/600/1500) before offering a click.
+    audioUnlockTimer.current = setTimeout(() => {
+      const room = sessionRef.current?.room;
+      if (room && !room.canPlaybackAudio) setNeedsAudioUnlock(true);
+    }, 1800);
   }, []);
 
   /** Connect Porthole (guests) and LiveKit for `room`. */
@@ -68,7 +93,11 @@ export function useLiveSession({
     setStatus(asGuest ? "Connecting Porthole…" : MSG.voice.connectingVoice);
     if (asGuest) {
       if (!room.portholeShareCode) throw new Error("Room has no share code yet — ask the host to wait for the lobby code");
+      // Drop a stale join tunnel before binding the new lobby.
+      await portholeStopJoin().catch(() => undefined);
       await voiceGuestConnect(room.portholeShareCode);
+      // Brief settle — WS can race the bind even after TCP accept.
+      await new Promise((r) => setTimeout(r, 250));
       setStatus(MSG.voice.connectingVoice);
     }
     const session = new VoiceSession({
@@ -83,10 +112,12 @@ export function useLiveSession({
         setScreenOn(sess?.isScreenSharing() ?? false);
       },
       onSpeaking: (id, on) => setSpeaking((prev) => ({ ...prev, [id]: on })),
+      onAudioPlayback,
       onDisconnected: () => {
         // Keep the room UI; host may still be exposing Porthole. User leaves explicitly.
         setStatus("Voice disconnected — try Leave, then Create again if needed");
         onRoomStatusChange?.(false);
+        setNeedsAudioUnlock(false);
       },
       onError: (m) => onToast(m, "err"),
     });
@@ -128,7 +159,9 @@ export function useLiveSession({
     sessionRef.current = session;
     setMuted(false);
     setDeafened(false);
+    setNeedsAudioUnlock(false);
     setStatus("In voice");
+    onAudioPlayback(session.room?.canPlaybackAudio ?? true);
   }
 
   async function toggleCamera() {
@@ -146,6 +179,24 @@ export function useLiveSession({
       onToast(`Screen share unavailable: ${errorMessage(err)}`, "err");
     }
   }
+
+  const unlockAudio = useCallback(() => {
+    // Must call startAudio inside the click stack (autoplay gate).
+    const room = sessionRef.current?.room;
+    if (room) {
+      void room
+        .startAudio()
+        .then(() => sessionRef.current?.resumePlayback())
+        .then(() => {
+          if (sessionRef.current?.room?.canPlaybackAudio) {
+            setNeedsAudioUnlock(false);
+          }
+        })
+        .catch(() => undefined);
+      return;
+    }
+    void sessionRef.current?.resumePlayback();
+  }, []);
 
   return {
     sessionRef,
@@ -165,6 +216,8 @@ export function useLiveSession({
     setMicId,
     outputId,
     setOutputId,
+    needsAudioUnlock,
+    unlockAudio,
     connect,
     disconnect,
     resetLiveUi,

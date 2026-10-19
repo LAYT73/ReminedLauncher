@@ -9,12 +9,14 @@ export function FriendsSkeletonList() {
         <li key={i} className="friend-row has-join is-skeleton">
           <span className="skel skel-avatar" />
           <div className="friend-copy">
-            <span className="skel skel-line skel-name" />
+            <div className="friend-name-row">
+              <span className="skel skel-line skel-name" />
+              <span className="skel skel-status" />
+            </div>
             <span className="skel skel-line skel-id" />
           </div>
           <span className="skel skel-chip" />
           <span className="skel skel-chip skel-chip-narrow" />
-          <span className="skel skel-status" />
         </li>
       ))}
     </ul>

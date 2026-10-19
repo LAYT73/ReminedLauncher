@@ -24,8 +24,8 @@ function mapRoom(r: RoomRow): VoiceRoom {
     portholeShareCode: r.porthole_share_code,
     lkWsUrl: r.lk_ws_url || "ws://127.0.0.1:7880",
     lkTcpPort: r.lk_tcp_port ?? 7880,
-    lkUdpStart: r.lk_udp_start ?? 7881,
-    lkUdpEnd: r.lk_udp_end ?? 7890,
+    lkUdpStart: r.lk_udp_start ?? 7882,
+    lkUdpEnd: r.lk_udp_end ?? 7901,
     createdAt: r.created_at,
   };
 }
@@ -79,6 +79,12 @@ export async function closeVoiceRoom(roomId: string): Promise<void> {
     .update({ status: "closed", updated_at: new Date().toISOString() })
     .eq("id", roomId);
   if (error) throw new Error(error.message || "Could not close room");
+  // Purge membership so closed rooms never resurrect ghost members in lists.
+  const { error: mErr } = await supabase
+    .from(TABLE.voiceRoomMembers)
+    .delete()
+    .eq("room_id", roomId);
+  if (mErr) throw new Error(mErr.message || "Could not clear room members");
 }
 
 export async function setVoiceRoomShareCode(

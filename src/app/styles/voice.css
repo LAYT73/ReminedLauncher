@@ -374,6 +374,23 @@
   letter-spacing: 0.04em;
 }
 
+.voice-icon-btn.voice-unlock-audio {
+  background: var(--mc-gold, #e6b422);
+  color: #1a1200;
+  text-shadow: none;
+  animation: voice-unlock-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes voice-unlock-pulse {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.12);
+  }
+}
+
 .voice-icon-btn.voice-ptt-btn.is-talking {
   filter: brightness(1.25);
   box-shadow: var(--bevel-btn), 0 0 0 2px rgba(125, 206, 85, 0.8);

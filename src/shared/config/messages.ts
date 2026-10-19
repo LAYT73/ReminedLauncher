@@ -86,6 +86,7 @@ export const MSG = {
   update: {
     checking: "Checking for launcher updates…",
     latest: "Already on the latest launcher",
+    available: (v: string) => `Launcher ${v} is available`,
     downloading: (v: string) => `Downloading ${v}…`,
     restarting: "Restarting…",
   },
@@ -102,6 +103,8 @@ export const MSG = {
     copiedShareCode: "Copied share code",
     mute: "Mute microphone",
     unmute: "Unmute microphone",
+    clickToHear: "Click to hear",
+    clickToHearHint: "Browser blocked voice audio — click to restore sound",
   },
   friends: {
     openingSteam: "Opening Steam — install Porthole, then Refresh",

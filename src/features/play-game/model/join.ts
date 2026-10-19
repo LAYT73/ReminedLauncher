@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { portholeStartJoin, portholeStatus, portholeStopJoin } from "@/shared/api/porthole";
 import { MSG } from "@/shared/config/messages";
-import { TAB, routeFor, RAIL } from "@/shared/config/routes";
+import { RAIL } from "@/shared/config/routes";
 import { navigateTo } from "@/shared/lib/navigator";
 import { toast } from "@/shared/lib/toast";
 import { canJoinFriend, type FriendRow } from "@/entities/friend";
@@ -26,7 +26,7 @@ export async function joinFriendSession(row: FriendRow): Promise<void> {
     if (!st.installed) {
       setStatus(st.message, "error");
       toast(MSG.launch.installPorthole);
-      navigateTo(routeFor(RAIL.home, TAB.network));
+      navigateTo(`/${RAIL.settings}#network`);
       return;
     }
     await portholeStartJoin(shareCode, port);
