@@ -16,6 +16,7 @@ import { SkinHead } from "@/entities/skin";
 import { VoiceChat } from "./VoiceChat";
 import { VoiceMembers } from "./VoiceMembers";
 import { VoiceToolbar } from "./VoiceToolbar";
+import { VoiceVideoStage } from "./VoiceVideoStage";
 import { MSG } from "@/shared/config/messages";
 
 type Props = {
@@ -152,6 +153,8 @@ export function VoiceRoomView(props: Props) {
         </p>
       ) : null}
 
+      <VoiceVideoStage tiles={props.videoTiles} members={props.members} />
+
       <VoiceToolbar
         session={session}
         isHost={isHost}
@@ -177,7 +180,6 @@ export function VoiceRoomView(props: Props) {
           isHost={isHost}
           lobbyReady={Boolean(active.portholeShareCode)}
           members={props.members}
-          videoTiles={props.videoTiles}
           speaking={props.speaking}
           volumes={props.volumes}
           setVolumes={props.setVolumes}

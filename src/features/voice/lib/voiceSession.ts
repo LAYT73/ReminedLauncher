@@ -22,6 +22,10 @@ export type VoiceSessionCallbacks = {
   onVideo?: () => void;
   /** LiveKit autoplay gate — false means UI should offer a click-to-hear fallback. */
   onAudioPlayback?: (canPlay: boolean) => void;
+  /** Remote peer left LiveKit — host may prune stale Supabase membership. */
+  onRemoteLeft?: (identity: string) => void;
+  /** Remote peer (re)joined LiveKit — cancel a pending membership prune. */
+  onRemoteJoined?: (identity: string) => void;
 };
 
 export type VoiceVideoTile = {
@@ -238,14 +242,24 @@ export class VoiceSession {
     });
 
     this.outputDeviceId = opts.outputDeviceId;
-    room.on(RoomEvent.ParticipantConnected, () => this.cbs.onParticipants?.());
+    room.on(RoomEvent.ParticipantConnected, (p) => {
+      this.cbs.onRemoteJoined?.(p.identity);
+      this.cbs.onParticipants?.();
+    });
     room.on(RoomEvent.ParticipantDisconnected, (p) => {
       this.cbs.onSpeaking?.(p.identity, false);
       this.cbs.onParticipants?.();
       this.cbs.onVideo?.();
+      this.cbs.onRemoteLeft?.(p.identity);
     });
-    room.on(RoomEvent.TrackMuted, () => this.cbs.onParticipants?.());
-    room.on(RoomEvent.TrackUnmuted, () => this.cbs.onParticipants?.());
+    room.on(RoomEvent.TrackMuted, (pub) => {
+      this.cbs.onParticipants?.();
+      if (pub.kind === Track.Kind.Video) this.cbs.onVideo?.();
+    });
+    room.on(RoomEvent.TrackUnmuted, (pub) => {
+      this.cbs.onParticipants?.();
+      if (pub.kind === Track.Kind.Video) this.cbs.onVideo?.();
+    });
     room.on(RoomEvent.ParticipantAttributesChanged, () => this.cbs.onParticipants?.());
     room.on(RoomEvent.LocalTrackPublished, () => {
       this.cbs.onVideo?.();
@@ -254,6 +268,12 @@ export class VoiceSession {
     room.on(RoomEvent.LocalTrackUnpublished, () => {
       this.cbs.onVideo?.();
       this.scheduleResume();
+    });
+    room.on(RoomEvent.TrackUnpublished, (pub) => {
+      if (pub.kind === Track.Kind.Video) this.cbs.onVideo?.();
+    });
+    room.on(RoomEvent.TrackPublished, (pub) => {
+      if (pub.kind === Track.Kind.Video) this.cbs.onVideo?.();
     });
     room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
       this.cbs.onAudioPlayback?.(room.canPlaybackAudio);
@@ -349,6 +369,11 @@ export class VoiceSession {
       if (/could not establish pc connection/i.test(msg)) {
         throw new Error(
           "Voice WebRTC failed (no ICE to local LiveKit). Retry once; if it persists with a VPN/TUN, exclude 127.0.0.1 or bypass Remined.",
+        );
+      }
+      if (/not valid yet|invalid claims|invalid authorization token/i.test(msg)) {
+        throw new Error(
+          "Voice token rejected (clock skew between PCs). Sync date/time on both machines, then retry.",
         );
       }
       if (/timeout|timed out/i.test(msg)) {
@@ -507,14 +532,21 @@ export class VoiceSession {
     const add = (
       identity: string,
       local: boolean,
-      pubs: Iterable<{ track?: Track; source: Track.Source; isMuted?: boolean }>,
+      pubs: Iterable<{
+        track?: Track | null;
+        source: Track.Source;
+        isMuted?: boolean;
+        isSubscribed?: boolean;
+      }>,
     ) => {
       for (const pub of pubs) {
         const track = pub.track;
         if (!track || track.kind !== Track.Kind.Video) continue;
-        if (pub.isMuted) continue;
+        if (pub.isMuted || track.isMuted) continue;
+        // Remote pubs may linger after unpublish until detach — require a live MST.
+        if (pub.isSubscribed === false) continue;
         const media = track.mediaStreamTrack;
-        if (!media || media.readyState === "ended") continue;
+        if (!media || media.readyState !== "live") continue;
         out.push({
           identity,
           local,

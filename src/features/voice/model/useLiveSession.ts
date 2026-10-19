@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  leaveVoiceRoom,
   listRoomMembers,
   type VoiceMember,
   type VoiceRoom,
@@ -9,6 +10,8 @@ import { voiceGuestConnect } from "../api/voiceNative";
 import { VoiceSession, type VoiceVideoTile } from "../lib/voiceSession";
 import { errorMessage, type ToastFn } from "./types";
 import { MSG } from "@/shared/config/messages";
+
+const REMOTE_LEAVE_GRACE_MS = 4000;
 
 type Args = {
   userId: string;
@@ -39,28 +42,44 @@ export function useLiveSession({
   const [outputId, setOutputId] = useState("");
   const [needsAudioUnlock, setNeedsAudioUnlock] = useState(false);
   const audioUnlockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pruneTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const [, setStateTick] = useState(0);
+
+  const clearPruneTimers = useCallback(() => {
+    for (const t of pruneTimers.current.values()) clearTimeout(t);
+    pruneTimers.current.clear();
+  }, []);
+
+  const refreshVideo = useCallback(() => {
+    const sess = sessionRef.current;
+    setVideoTiles(sess ? sess.videoTiles() : []);
+    setCamOn(sess?.isCameraOn() ?? false);
+    setScreenOn(sess?.isScreenSharing() ?? false);
+  }, []);
 
   // Leaving the panel (sign-out) must drop the session.
   useEffect(
     () => () => {
       if (audioUnlockTimer.current) clearTimeout(audioUnlockTimer.current);
+      clearPruneTimers();
       void sessionRef.current?.disconnect();
       sessionRef.current = null;
     },
-    [],
+    [clearPruneTimers],
   );
 
   const disconnect = useCallback(async () => {
+    clearPruneTimers();
     await sessionRef.current?.disconnect().catch(() => undefined);
     sessionRef.current = null;
-  }, []);
+  }, [clearPruneTimers]);
 
   const resetLiveUi = useCallback(() => {
     if (audioUnlockTimer.current) {
       clearTimeout(audioUnlockTimer.current);
       audioUnlockTimer.current = null;
     }
+    clearPruneTimers();
     setSpeaking({});
     setStatus("");
     setMuted(false);
@@ -70,7 +89,7 @@ export function useLiveSession({
     setScreenOn(false);
     setVolumes({});
     setNeedsAudioUnlock(false);
-  }, []);
+  }, [clearPruneTimers]);
 
   const onAudioPlayback = useCallback((canPlay: boolean) => {
     if (audioUnlockTimer.current) {
@@ -106,18 +125,49 @@ export function useLiveSession({
         void listRoomMembers(room.id).then(setMembers);
       },
       onVideo: () => {
-        const sess = sessionRef.current;
-        setVideoTiles(sess ? sess.videoTiles() : []);
-        setCamOn(sess?.isCameraOn() ?? false);
-        setScreenOn(sess?.isScreenSharing() ?? false);
+        refreshVideo();
       },
       onSpeaking: (id, on) => setSpeaking((prev) => ({ ...prev, [id]: on })),
       onAudioPlayback,
+      onRemoteJoined: (identity) => {
+        const pending = pruneTimers.current.get(identity);
+        if (pending) {
+          clearTimeout(pending);
+          pruneTimers.current.delete(identity);
+        }
+      },
+      onRemoteLeft: (identity) => {
+        const prev = pruneTimers.current.get(identity);
+        if (prev) clearTimeout(prev);
+        // Host (or self) can delete membership — clears ghost avatars after a drop.
+        const timer = setTimeout(() => {
+          pruneTimers.current.delete(identity);
+          const sess = sessionRef.current;
+          if (sess?.participantIds().includes(identity)) return;
+          void leaveVoiceRoom(room.id, identity)
+            .then(() => listRoomMembers(room.id).then(setMembers))
+            .catch(() => undefined);
+        }, REMOTE_LEAVE_GRACE_MS);
+        pruneTimers.current.set(identity, timer);
+      },
       onDisconnected: () => {
-        // Keep the room UI; host may still be exposing Porthole. User leaves explicitly.
-        setStatus("Voice disconnected — try Leave, then Create again if needed");
-        onRoomStatusChange?.(false);
+        clearPruneTimers();
+        setVideoTiles([]);
+        setCamOn(false);
+        setScreenOn(false);
+        setSpeaking({});
         setNeedsAudioUnlock(false);
+        onRoomStatusChange?.(false);
+        // Drop Supabase membership so hosts don't keep a ghost tile.
+        // Host keeps membership for rejoin / room ownership.
+        if (asGuest) {
+          void leaveVoiceRoom(room.id, userId)
+            .then(() => listRoomMembers(room.id).then(setMembers))
+            .catch(() => undefined);
+          setStatus("Disconnected — Leave or rejoin from the lobby");
+        } else {
+          setStatus("Voice disconnected — try Leave, then Create again if needed");
+        }
       },
       onError: (m) => onToast(m, "err"),
     });
@@ -161,6 +211,8 @@ export function useLiveSession({
     setDeafened(false);
     setNeedsAudioUnlock(false);
     setStatus("In voice");
+    refreshVideo();
+    setStateTick((t) => t + 1);
     onAudioPlayback(session.room?.canPlaybackAudio ?? true);
   }
 

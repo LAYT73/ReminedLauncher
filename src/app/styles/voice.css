@@ -521,33 +521,45 @@
   border: 2px solid #000;
 }
 
-.voice-video-row {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-@media (min-width: 720px) {
-  .voice-video-row {
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  }
+/* Discord-style stage: above members/chat, does not steal chat height. */
+.voice-video-stage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel);
+  max-height: min(38vh, 320px);
+  overflow: auto;
 }
 
 .voice-video-tile {
   position: relative;
+  flex: 1 1 200px;
+  max-width: 420px;
   background: #111;
   border: 3px solid #000;
   box-shadow: var(--bevel-panel);
   aspect-ratio: 16 / 9;
-  min-height: 180px;
+  min-height: 120px;
+  max-height: min(34vh, 280px);
   overflow: hidden;
 }
 
 .voice-video-tile.is-screen {
-  grid-column: 1 / -1;
-  min-height: 240px;
-  aspect-ratio: 16 / 9;
+  flex: 1 1 100%;
+  max-width: none;
+}
+
+.voice-video-tile:fullscreen {
+  max-width: none;
+  max-height: none;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  background: #000;
 }
 
 .voice-video-tile video {
@@ -558,7 +570,8 @@
   background: #111;
 }
 
-.voice-video-tile.is-screen video {
+.voice-video-tile.is-screen video,
+.voice-video-tile:fullscreen video {
   object-fit: contain;
 }
 
@@ -574,4 +587,43 @@
   letter-spacing: 0.03em;
   text-transform: uppercase;
   border: 2px solid #000;
+  z-index: 1;
+}
+
+.voice-video-fs {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 2px solid #000;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: var(--bevel-btn);
+}
+
+.voice-video-fs:hover {
+  background: rgba(40, 40, 40, 0.85);
+}
+
+.voice-video-fs .voice-icon-svg {
+  width: 16px;
+  height: 16px;
+}
+
+.voice-tile.is-connecting {
+  opacity: 0.72;
+}
+
+.voice-tile.is-connecting .voice-tile-skin {
+  filter: grayscale(0.35);
+}
+
+.voice-tile.is-connecting .friend-id-static {
+  color: #e0b84a;
 }

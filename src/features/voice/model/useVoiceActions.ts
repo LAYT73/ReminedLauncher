@@ -27,6 +27,7 @@ import {
   voiceStartPorthole,
   voiceStopHost,
 } from "../api/voiceNative";
+import { randomVoiceRoomTitle } from "../lib/roomName";
 import { errorMessage, type ToastFn } from "./types";
 import type { LiveSession } from "./useLiveSession";
 import type { useRoomData } from "./useRoomData";
@@ -68,7 +69,7 @@ export function useVoiceActions({
   runtime,
 }: Args) {
   const [busy, setBusy] = useState(false);
-  const [title, setTitle] = useState("Squad");
+  const [title, setTitle] = useState(() => randomVoiceRoomTitle());
   const [draft, setDraft] = useState("");
   const [invitePick, setInvitePick] = useState("");
   /** Sync lock — React `busy` can lag one frame and allow a double Create. */
@@ -228,6 +229,7 @@ export function useVoiceActions({
       }));
       live.setStatus("In voice");
       runtime.close();
+      setTitle(randomVoiceRoomTitle());
       onToast("Voice room live", "ok");
       unlockAchievement("first-voice-room", onToast);
     } catch (err) {

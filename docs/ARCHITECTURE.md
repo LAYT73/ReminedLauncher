@@ -1,6 +1,6 @@
 # Architecture
 
-**Version:** `0.7.0` · **Stack:** Tauri 2 (Rust) + React 19 / Vite (TypeScript) + Supabase (Auth, Realtime, Postgres)
+**Version:** `0.7.1` · **Stack:** Tauri 2 (Rust) + React 19 / Vite (TypeScript) + Supabase (Auth, Realtime, Postgres)
 
 ## Product surfaces
 

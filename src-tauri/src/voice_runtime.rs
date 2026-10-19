@@ -763,10 +763,13 @@ pub fn mint_token(room: &str, identity: &str, name: &str) -> Result<String, Stri
         return Err("room and identity required".into());
     }
     let now = Utc::now();
+    // Guest mints locally; host LiveKit validates. Clocks often skew a few
+    // minutes (esp. Windows vs macOS) → "token is not valid yet" if nbf=now.
+    let nbf = (now - Duration::minutes(5)).timestamp();
     let claims = LkClaims {
         iss: LK_API_KEY.into(),
         sub: identity.into(),
-        nbf: now.timestamp(),
+        nbf,
         exp: (now + Duration::hours(6)).timestamp(),
         name: if name.trim().is_empty() {
             identity.into()

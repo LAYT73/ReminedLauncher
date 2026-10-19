@@ -1,9 +1,9 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { VoiceMember } from "@/entities/voice-room";
-import type { VoiceSession, VoiceVideoTile } from "../lib/voiceSession";
+import type { VoiceSession } from "../lib/voiceSession";
 import { McSelect } from "@/shared/ui/McSelect";
 import { SkinHead } from "@/entities/skin";
-import { StateBadge, VideoTileView } from "./VoiceBits";
+import { StateBadge } from "./VoiceBits";
 import { FALLBACK_USERNAME } from "@/shared/config/limits";
 
 type Props = {
@@ -13,7 +13,6 @@ type Props = {
   /** Host has published a Porthole share code — invite only after this. */
   lobbyReady: boolean;
   members: VoiceMember[];
-  videoTiles: VoiceVideoTile[];
   speaking: Record<string, boolean>;
   volumes: Record<string, number>;
   setVolumes: Dispatch<SetStateAction<Record<string, number>>>;
@@ -23,14 +22,13 @@ type Props = {
   onInvite: () => Promise<void>;
 };
 
-/** Video tiles, member grid (with per-person volume) and the host's invite box. */
+/** Member grid (with per-person volume) and the host's invite box. */
 export function VoiceMembers({
   userId,
   session,
   isHost,
   lobbyReady,
   members,
-  videoTiles,
   speaking,
   volumes,
   setVolumes,
@@ -39,22 +37,9 @@ export function VoiceMembers({
   setInvitePick,
   onInvite,
 }: Props) {
+  const liveIds = new Set(session?.participantIds() ?? []);
   return (
     <div className="voice-col">
-      {videoTiles.length > 0 ? (
-        <div className="voice-video-row">
-          {videoTiles.map((t) => (
-            <VideoTileView
-              key={`${t.identity}-${t.source}`}
-              tile={t}
-              label={
-                members.find((m) => m.userId === t.identity)?.username ||
-                FALLBACK_USERNAME
-              }
-            />
-          ))}
-        </div>
-      ) : null}
       <h3 className="settings-heading">In room</h3>
       {members.length === 0 ? (
         <p className="friends-muted">Waiting for members…</p>
@@ -66,12 +51,13 @@ export function VoiceMembers({
               deafened: false,
             };
             const isMe = m.userId === userId;
+            const inVoice = liveIds.has(m.userId);
             return (
               <div
                 key={m.userId}
                 className={`voice-tile ${
-                  speaking[m.userId] ? "is-speaking" : ""
-                }`}
+                  speaking[m.userId] && inVoice ? "is-speaking" : ""
+                } ${inVoice ? "" : "is-connecting"}`}
               >
                 <div className="voice-tile-avatar">
                   <SkinHead
@@ -80,8 +66,10 @@ export function VoiceMembers({
                     size={64}
                   />
                   <div className="voice-tile-badges">
-                    {st.muted ? <StateBadge kind="muted" /> : null}
-                    {st.deafened ? <StateBadge kind="deafened" /> : null}
+                    {inVoice && st.muted ? <StateBadge kind="muted" /> : null}
+                    {inVoice && st.deafened ? (
+                      <StateBadge kind="deafened" />
+                    ) : null}
                   </div>
                 </div>
                 <strong className="voice-tile-name">
@@ -89,9 +77,13 @@ export function VoiceMembers({
                   {isMe ? " (you)" : ""}
                 </strong>
                 <span className="friend-id-static">
-                  {m.role === "host" ? "Host" : "Member"}
+                  {!inVoice
+                    ? "Connecting…"
+                    : m.role === "host"
+                      ? "Host · In voice"
+                      : "In voice"}
                 </span>
-                {!isMe ? (
+                {!isMe && inVoice ? (
                   <label className="voice-vol" title="Volume for this person">
                     <input
                       type="range"

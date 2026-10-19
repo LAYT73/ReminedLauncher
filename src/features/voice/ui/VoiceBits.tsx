@@ -99,25 +99,58 @@ export function ScreenIcon({ slashed }: { slashed?: boolean }) {
 }
 
 export function VideoTileView({ tile, label }: { tile: VoiceVideoTile; label: string }) {
+  const wrapRef = useRef<HTMLDivElement | null>(null);
   const ref = useRef<HTMLVideoElement | null>(null);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     const media = tile.track.mediaStreamTrack;
-    if (!media || media.readyState === "ended") return;
+    if (!media || media.readyState !== "live") return;
     tile.track.attach(el);
     return () => {
       tile.track.detach(el);
       el.srcObject = null;
     };
   }, [tile.track]);
+
+  async function toggleFullscreen() {
+    const node = wrapRef.current;
+    if (!node) return;
+    try {
+      if (document.fullscreenElement === node) {
+        await document.exitFullscreen();
+      } else {
+        await node.requestFullscreen();
+      }
+    } catch {
+      /* fullscreen may be blocked */
+    }
+  }
+
   return (
-    <div className={`voice-video-tile ${tile.source === "screen" ? "is-screen" : ""}`}>
+    <div
+      ref={wrapRef}
+      className={`voice-video-tile ${tile.source === "screen" ? "is-screen" : ""}`}
+    >
       <video ref={ref} autoPlay playsInline muted={tile.local} />
       <span className="voice-video-label">
         {label}
         {tile.source === "screen" ? " — screen" : ""}
       </span>
+      <button
+        type="button"
+        className="voice-video-fs"
+        title="Fullscreen"
+        aria-label="Fullscreen"
+        onClick={() => void toggleFullscreen()}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden className="voice-icon-svg">
+          <path
+            fill="currentColor"
+            d="M4 4h6v2H6v4H4V4zm10 0h6v6h-2V6h-4V4zM4 14h2v4h4v2H4v-6zm14 0h2v6h-6v-2h4v-4z"
+          />
+        </svg>
+      </button>
     </div>
   );
 }
