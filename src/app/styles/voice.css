@@ -521,41 +521,49 @@
   border: 2px solid #000;
 }
 
-/* Discord-style stage: above members/chat, does not steal chat height. */
+/* Stage above members/chat: cameras row, then screen-share row. */
 .voice-video-stage {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 8px;
   margin: 0 0 14px;
-  padding: 10px;
+  min-width: 0;
+}
+
+.voice-video-strip {
+  display: flex;
+  flex-flow: row nowrap;
+  gap: 8px;
+  padding: 8px;
   background: rgba(0, 0, 0, 0.35);
   border: 3px solid #000;
   box-shadow: var(--bevel-panel);
-  max-height: min(38vh, 320px);
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-width: 0;
+  scrollbar-width: thin;
+}
+
+.voice-video-strip.is-screens {
+  background: rgba(0, 0, 0, 0.45);
 }
 
 .voice-video-tile {
   position: relative;
-  flex: 1 1 200px;
-  max-width: 420px;
+  flex: 0 0 auto;
+  width: min(280px, 72vw);
   background: #111;
   border: 3px solid #000;
   box-shadow: var(--bevel-panel);
   aspect-ratio: 16 / 9;
-  min-height: 120px;
-  max-height: min(34vh, 280px);
   overflow: hidden;
 }
 
-.voice-video-tile.is-screen {
-  flex: 1 1 100%;
-  max-width: none;
+.voice-video-strip.is-screens .voice-video-tile {
+  width: min(420px, 85vw);
 }
 
 .voice-video-tile:fullscreen {
-  max-width: none;
-  max-height: none;
   width: 100%;
   height: 100%;
   aspect-ratio: auto;
@@ -570,7 +578,7 @@
   background: #111;
 }
 
-.voice-video-tile.is-screen video,
+.voice-video-strip.is-screens .voice-video-tile video,
 .voice-video-tile:fullscreen video {
   object-fit: contain;
 }

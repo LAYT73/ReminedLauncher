@@ -17,6 +17,8 @@ export type PortholeStatus = {
 export type PortholeHostInfo = {
   share_code: string;
   port: number;
+  /** Minecraft Open-to-LAN port when the lobby exposes it. */
+  lan_port?: number | null;
 };
 
 export type PortholeCheckResult = {

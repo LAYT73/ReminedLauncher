@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { netLog } from "@/shared/api/netLog";
 import { TIMING } from "@/shared/config/timings";
 import { useRail } from "@/shared/lib/useRoute";
 import { useGameStore } from "@/entities/game";
@@ -23,12 +24,22 @@ export function usePresenceHeartbeat(): void {
   const selectedPackId = useProfileStore((s) => s.profile.selected_pack);
   const playingPackId =
     (runningPackId ?? railPackId) ?? activePackId ?? (selectedPackId || null);
+  /** Avoid spamming net log on every 40s heartbeat — only on change. */
+  const lastHostLog = useRef<string>("");
 
   useEffect(() => {
     if (!userId || !enabled) return;
 
     const push = () => {
       if (hostingLan) {
+        const key = `${hostingLan.shareCode}|${hostingLan.gamePort}|${hostingLan.packId}`;
+        if (lastHostLog.current !== key) {
+          lastHostLog.current = key;
+          void netLog(
+            "presence",
+            `push hosting pack=${hostingLan.packId} code=${hostingLan.shareCode} port=${hostingLan.gamePort} voice=${voiceInRoom ? 1 : 0}`,
+          );
+        }
         void setPresence({
           userId,
           status: "hosting",
@@ -38,6 +49,10 @@ export function usePresenceHeartbeat(): void {
           inVoice: voiceInRoom,
         });
         return;
+      }
+      if (lastHostLog.current) {
+        lastHostLog.current = "";
+        void netLog("presence", "push clear hosting");
       }
       const playing = phase === "running" || phase === "launching";
       void setPresence({

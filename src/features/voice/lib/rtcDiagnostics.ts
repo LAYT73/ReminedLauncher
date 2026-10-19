@@ -1,6 +1,7 @@
 import { voiceLog } from "../api/voiceNative";
 
 let rtcDiagInstalled = false;
+let iceLogBudget = 40;
 
 /** Happ / Clash TUN fake-IP ranges — host ICE over these never reaches 127.0.0.1 LiveKit. */
 function isVpnFakeIp(ip: string): boolean {
@@ -23,6 +24,13 @@ function candidateIp(c: string): string | null {
   return m?.[1] ?? null;
 }
 
+function iceLog(msg: string) {
+  // Cap IPC during peer join — flooding voice_log_append mid-ICE stresses WKWebView.
+  if (iceLogBudget <= 0) return;
+  iceLogBudget -= 1;
+  void voiceLog("ice", msg);
+}
+
 async function logSelectedPair(pc: RTCPeerConnection, why: string) {
   try {
     const stats = await pc.getStats();
@@ -36,19 +44,18 @@ async function logSelectedPair(pc: RTCPeerConnection, why: string) {
       const l = byId.get(String(rec.localCandidateId));
       const rm = byId.get(String(rec.remoteCandidateId));
       logged = true;
-      void voiceLog(
-        "ice",
+      iceLog(
         `${why} pair state=${String(rec.state)} local=${String(l?.candidateType)}/${String(l?.protocol)} ${String(l?.address ?? l?.ip)}:${String(l?.port)} remote=${String(rm?.candidateType)}/${String(rm?.protocol)} ${String(rm?.address ?? rm?.ip)}:${String(rm?.port)}`,
       );
     });
-    if (!logged) void voiceLog("ice", `${why} no successful candidate pair`);
+    if (!logged) iceLog(`${why} no successful candidate pair`);
   } catch (e) {
-    void voiceLog("ice", `${why} getStats failed: ${String(e)}`);
+    iceLog(`${why} getStats failed: ${String(e)}`);
   }
 }
 
 /**
- * Log ICE candidates / states into voice.log.
+ * Log ICE candidates / states into voice.log (budgeted).
  * Also drop local VPN fake-IP host candidates so WKWebView prefers LAN/loopback
  * when the SFU is on 127.0.0.1 (BUG-001).
  */
@@ -57,6 +64,7 @@ export function installRtcDiagnostics() {
   const Orig = window.RTCPeerConnection;
   if (!Orig) return;
   rtcDiagInstalled = true;
+  iceLogBudget = 40;
   const Wrapped = function (
     this: unknown,
     ...args: ConstructorParameters<typeof RTCPeerConnection>
@@ -68,12 +76,11 @@ export function installRtcDiagnostics() {
       if (!c) return;
       const ip = candidateIp(c);
       if (ip && isVpnFakeIp(ip)) {
-        void voiceLog(
-          "ice",
+        iceLog(
           `[${tag}] WARN VPN fake-IP local ${candidateSummary(c)} (will not reach 127.0.0.1 LiveKit)`,
         );
       } else {
-        void voiceLog("ice", `[${tag}] local candidate ${candidateSummary(c)}`);
+        iceLog(`[${tag}] local candidate ${candidateSummary(c)}`);
       }
     });
     const origAdd = pc.addIceCandidate.bind(pc);
@@ -84,20 +91,20 @@ export function installRtcDiagnostics() {
           : candidate instanceof RTCIceCandidate
             ? candidate.candidate
             : "";
-      if (c) void voiceLog("ice", `[${tag}] remote candidate ${candidateSummary(c)}`);
+      if (c) iceLog(`[${tag}] remote candidate ${candidateSummary(c)}`);
       return origAdd(candidate as RTCIceCandidateInit);
     };
     pc.addEventListener("icegatheringstatechange", () => {
-      void voiceLog("ice", `[${tag}] gathering=${pc.iceGatheringState}`);
+      iceLog(`[${tag}] gathering=${pc.iceGatheringState}`);
     });
     pc.addEventListener("iceconnectionstatechange", () => {
       const st = pc.iceConnectionState;
-      void voiceLog("ice", `[${tag}] iceConnection=${st}`);
+      iceLog(`[${tag}] iceConnection=${st}`);
       if (st === "connected" || st === "completed") void logSelectedPair(pc, `[${tag}] ${st}`);
       if (st === "failed") void logSelectedPair(pc, `[${tag}] failed`);
     });
     pc.addEventListener("connectionstatechange", () => {
-      void voiceLog("ice", `[${tag}] pc=${pc.connectionState}`);
+      iceLog(`[${tag}] pc=${pc.connectionState}`);
     });
     return pc;
   } as unknown as typeof RTCPeerConnection;

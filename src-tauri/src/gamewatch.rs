@@ -205,7 +205,7 @@ pub fn parse_game_log(text: &str) -> GameLogStatus {
             let rest = line[i + "Connecting to ".len()..].trim();
             // Ignore noise like "Connecting to 0.0.0.0" from some mods.
             if !rest.is_empty() && !rest.starts_with("0.0.0.0") {
-                st.server = Some(rest.replace(", ", ":"));
+                st.server = Some(normalize_connecting_target(rest));
                 st.phase = "server".into();
                 st.world = None;
             }
@@ -213,6 +213,19 @@ pub fn parse_game_log(text: &str) -> GameLogStatus {
             if let Ok(p) = line[i + "Started serving on ".len()..].trim().parse::<u16>() {
                 st.lan_port = Some(p);
                 st.phase = "lan".into();
+            }
+        } else if let Some(i) = line.find("Published LAN server on port ") {
+            // Minecraft 1.20.5+ / 26.x Open-to-LAN wording.
+            let rest = line[i + "Published LAN server on port ".len()..].trim();
+            let digits: String = rest
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
+            if let Ok(p) = digits.parse::<u16>() {
+                if p > 0 {
+                    st.lan_port = Some(p);
+                    st.phase = "lan".into();
+                }
             }
         } else if line.contains("Stopping singleplayer server as player logged out")
             || line.contains("Disconnected from the server")
@@ -226,6 +239,71 @@ pub fn parse_game_log(text: &str) -> GameLogStatus {
         // Deliberately ignore bare "Stopping server" — too many false positives.
     }
     st
+}
+
+/// `host, port` / `'127.0.0.1', 25565` / junk around an IP → `host:port`.
+fn normalize_connecting_target(raw: &str) -> String {
+    let s = raw.trim();
+    if let Some(addr) = find_ipv4_port(s) {
+        return addr;
+    }
+    let cleaned = s.replace('\'', "").replace('"', "");
+    let parts: Vec<&str> = cleaned.split(',').map(str::trim).collect();
+    if parts.len() >= 2 {
+        if let Ok(port) = parts[1].parse::<u16>() {
+            if port > 0 {
+                return format!("{}:{port}", parts[0]);
+            }
+        }
+    }
+    cleaned.replace(", ", ":")
+}
+
+fn find_ipv4_port(s: &str) -> Option<String> {
+    let b = s.as_bytes();
+    let mut i = 0usize;
+    while i < b.len() {
+        if b[i].is_ascii_digit() {
+            if let Some(addr) = try_parse_ipv4_port(&s[i..]) {
+                return Some(addr);
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+fn try_parse_ipv4_port(s: &str) -> Option<String> {
+    let b = s.as_bytes();
+    let mut dots = 0usize;
+    let mut i = 0usize;
+    while i < b.len() {
+        let c = b[i];
+        if c.is_ascii_digit() {
+            i += 1;
+            continue;
+        }
+        if c == b'.' {
+            dots += 1;
+            i += 1;
+            continue;
+        }
+        break;
+    }
+    if dots != 3 || i == 0 || i >= b.len() || b[i] != b':' {
+        return None;
+    }
+    let host = &s[..i];
+    i += 1;
+    let port_start = i;
+    while i < b.len() && b[i].is_ascii_digit() {
+        i += 1;
+    }
+    if i == port_start {
+        return None;
+    }
+    let port: u16 = s[port_start..i].parse().ok()?;
+    (port > 0).then(|| format!("{host}:{port}"))
 }
 
 #[tauri::command]
@@ -329,9 +407,17 @@ mod tests {
         let s = parse_game_log("Setting user: A\nConnecting to play.example.com, 25565\n");
         assert_eq!(s.phase, "server");
         assert_eq!(s.server.as_deref(), Some("play.example.com:25565"));
+        let s = parse_game_log("Setting user: A\nConnecting to '127.0.0.1', 53333\n");
+        assert_eq!(s.server.as_deref(), Some("127.0.0.1:53333"));
         let s = parse_game_log("Setting user: A\nPreparing level \"W\"\nStarted serving on 54321\n");
         assert_eq!(s.phase, "lan");
         assert_eq!(s.lan_port, Some(54321));
+        let s = parse_game_log(
+            "Setting user: A\nPreparing level \"W\"\n\
+             [Render thread/INFO]: Published LAN server on port 55678\n",
+        );
+        assert_eq!(s.phase, "lan");
+        assert_eq!(s.lan_port, Some(55678));
     }
 
     #[test]

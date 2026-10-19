@@ -105,6 +105,19 @@ export async function resolveGate(next: Session | null): Promise<void> {
   // Deliberate offline session — ignore auth callbacks until user leaves it.
   if (session().offlineMode) return;
 
+  // Already signed in as this user in the app — do not re-bootstrap / leaveBoot
+  // (that remounts chrome and kills an active voice session).
+  const cur = session();
+  if (
+    next &&
+    cur.gate === "app" &&
+    cur.session?.user?.id &&
+    cur.session.user.id === next.user.id
+  ) {
+    cur.setSession(next);
+    return;
+  }
+
   session().setSession(next);
   const profile = useProfileStore.getState();
   if (!next) {

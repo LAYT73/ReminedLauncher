@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { portholeStartJoin, portholeStatus, portholeStopJoin } from "@/shared/api/porthole";
+import { netLog } from "@/shared/api/netLog";
+import { portholeStatus, portholeStopJoin } from "@/shared/api/porthole";
 import { MSG } from "@/shared/config/messages";
 import { RAIL } from "@/shared/config/routes";
 import { navigateTo } from "@/shared/lib/navigator";
@@ -21,19 +22,31 @@ export async function joinFriendSession(row: FriendRow): Promise<void> {
   useJoiningFriend.setState({ id: row.friendshipId });
   toast(MSG.launch.joining(row.profile.username));
   setStatus(MSG.launch.connectingNetwork);
+  void netLog(
+    "ui",
+    `Join friend=${row.profile.username} pack=${packId} code=${shareCode} port=${port}`,
+  );
   try {
     const st = await portholeStatus();
     if (!st.installed) {
+      void netLog("ui", `Join aborted: Porthole not installed (${st.message})`);
       setStatus(st.message, "error");
       toast(MSG.launch.installPorthole);
       navigateTo(`/${RAIL.settings}#network`);
       return;
     }
-    await portholeStartJoin(shareCode, port);
-    await launchWithOpts({ packId, quickPlay: `127.0.0.1:${port}` });
+    // Prepare pack first; open the Steam tunnel only right before MC starts.
+    await launchWithOpts({
+      packId,
+      quickPlay: `127.0.0.1:${port}`,
+      portholeJoin: { shareCode, port },
+    });
+    void netLog("ui", `Join launch issued quickPlay=127.0.0.1:${port}`);
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    void netLog("ui", `Join FAILED: ${msg}`);
     void portholeStopJoin().catch(() => undefined);
-    setStatus(err instanceof Error ? err.message : String(err), "error");
+    setStatus(msg, "error");
     useGameStore.getState().setPhase("idle");
   } finally {
     useJoiningFriend.setState({ id: null });

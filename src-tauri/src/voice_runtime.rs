@@ -647,11 +647,13 @@ pub fn start_voice_porthole(
         "Remined Voice"
     };
     voice_log::append_ok(&app, "porthole", &format!("expose backends={backends}"));
+    let lan = lan_port.filter(|p| *p > 0);
     match porthole::start_host_backends(
         app.clone(),
         porthole,
         &backends,
         LK_TCP_PORT,
+        lan,
         game_name,
     ) {
         Ok(info) => {
@@ -661,8 +663,7 @@ pub fn start_voice_porthole(
                 &format!(
                     "lobby ready code={} lan={}",
                     info.share_code,
-                    lan_port
-                        .filter(|p| *p > 0)
+                    info.lan_port
                         .map(|p| p.to_string())
                         .unwrap_or_else(|| "-".into())
                 ),

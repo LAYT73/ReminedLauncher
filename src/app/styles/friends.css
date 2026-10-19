@@ -307,6 +307,16 @@
   image-rendering: pixelated;
 }
 
+button.network-pill {
+  cursor: pointer;
+  appearance: none;
+  margin: 0;
+}
+
+button.network-pill:hover {
+  filter: brightness(1.06);
+}
+
 .network-pill-dot {
   width: 8px;
   height: 8px;

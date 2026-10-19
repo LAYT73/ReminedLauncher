@@ -7,8 +7,7 @@ import { getVoiceHost } from "../model/host";
 export function VoiceSlot() {
   const { tab } = useRoute();
   const userId = useSessionStore(selectUserId);
-  const offlineMode = useSessionStore((s) => s.offlineMode);
-  if (offlineMode || !userId) return null;
+  if (!userId) return null;
   return (
     <div
       className="voice-slot"

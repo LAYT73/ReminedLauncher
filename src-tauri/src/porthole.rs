@@ -1,5 +1,6 @@
 //! Orchestrate Steam Porthole CLI for Minecraft LAN Join.
 
+use crate::net_log;
 use serde::Serialize;
 use serde_json::Value;
 use std::fs;
@@ -57,7 +58,10 @@ pub struct PortholeStatus {
 #[derive(Debug, Clone, Serialize)]
 pub struct PortholeHostInfo {
     pub share_code: String,
+    /// Primary Porthole port (LiveKit WS when voice, else LAN TCP).
     pub port: u16,
+    /// Open-to-LAN TCP port when this lobby exposes Minecraft (else null).
+    pub lan_port: Option<u16>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -75,6 +79,10 @@ pub struct PortholeRuntime {
     join: Option<Child>,
     share_code: Option<String>,
     host_port: Option<u16>,
+    /// Minecraft LAN port included in the current host expose, if any.
+    host_lan_port: Option<u16>,
+    /// Bumped on each join start/stop so keepalive threads exit.
+    join_epoch: u64,
 }
 
 pub type PortholeState = Arc<Mutex<PortholeRuntime>>;
@@ -673,6 +681,9 @@ fn watch_stdout_for_code(
             let r = BufReader::new(err);
             for line in r.lines().flatten() {
                 eprintln!("[porthole] {line}");
+                if net_log::porthole_line_interesting(&line) {
+                    net_log::append_ok(&app_err, "ph-err", &line);
+                }
                 let _ = app_err.emit("porthole-log", line.clone());
                 // If UI already stopped waiting, just keep draining the pipe.
                 let _ = tx_err.send(LineEvt::Line(line));
@@ -680,9 +691,13 @@ fn watch_stdout_for_code(
         });
     }
 
+    let app_out = app.clone();
     thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines().flatten() {
+            if net_log::porthole_line_interesting(&line) {
+                net_log::append_ok(&app_out, "ph-out", &line);
+            }
             // Ignore send errors (UI finished waiting) — keep draining.
             let _ = tx.send(LineEvt::Line(line));
         }
@@ -704,14 +719,18 @@ fn watch_stdout_for_code(
                 let _ = app.emit("porthole-log", line.clone());
                 if let Some(code) = extract_share_code(&line) {
                     if is_host {
-                        if let Ok(mut guard) = state.lock() {
+                        let lan_port = if let Ok(mut guard) = state.lock() {
                             guard.share_code = Some(code.clone());
-                        }
+                            guard.host_lan_port
+                        } else {
+                            None
+                        };
                         let _ = app.emit(
                             "porthole-host",
                             PortholeHostInfo {
                                 share_code: code.clone(),
                                 port,
+                                lan_port,
                             },
                         );
                         // Leave drain threads running; do not close pipes.
@@ -807,7 +826,7 @@ pub fn start_host(
         return Err("Invalid LAN port".into());
     }
     let backend = format!("tcp/127.0.0.1:{port}");
-    start_host_backends(app, state, &backend, port, "Remined")
+    start_host_backends(app, state, &backend, port, Some(port), "Remined")
 }
 
 /// Expose arbitrary Porthole backends (comma-separated tcp/udp specs).
@@ -816,12 +835,24 @@ pub fn start_host_backends(
     state: PortholeState,
     backends: &str,
     primary_port: u16,
+    lan_port: Option<u16>,
     game_name: &str,
 ) -> Result<PortholeHostInfo, String> {
     let backends = backends.trim();
     if backends.is_empty() {
         return Err("No Porthole backends".into());
     }
+    let lan = lan_port.filter(|p| *p > 0);
+    net_log::begin_chunk(
+        &app,
+        &format!(
+            "host expose primary={primary_port} lan={} name={game_name}",
+            lan.map(|p| p.to_string()).unwrap_or_else(|| "-".into())
+        ),
+    );
+    net_log::append_ok(&app, "host", &format!("backends={backends}"));
+    // Steam Porthole kicks mismatched client builds by default — friends on
+    // older/newer Steam updates would connect then get a dead localhost port.
     let child = spawn_porthole(&[
         "expose",
         backends,
@@ -831,14 +862,41 @@ pub fn start_host_backends(
         game_name,
         "--max-peers",
         "8",
+        "--allow-version-mismatch",
     ])?;
-    let code = watch_stdout_for_code(app, state, child, primary_port, true)?;
+    // Remember LAN before watch — watch_stdout stores the child + primary port.
+    if let Ok(mut guard) = state.lock() {
+        guard.host_lan_port = lan;
+    }
+    let code = match watch_stdout_for_code(app.clone(), state.clone(), child, primary_port, true) {
+        Ok(c) => c,
+        Err(e) => {
+            net_log::append_ok(&app, "host", &format!("expose FAILED: {e}"));
+            if let Ok(mut guard) = state.lock() {
+                guard.host_lan_port = None;
+            }
+            return Err(e);
+        }
+    };
     if code.is_empty() {
+        if let Ok(mut guard) = state.lock() {
+            guard.host_lan_port = None;
+        }
+        net_log::append_ok(&app, "host", "expose FAILED: empty share code");
         return Err("Porthole started but no share code was published".into());
     }
+    net_log::append_ok(
+        &app,
+        "host",
+        &format!(
+            "lobby ready code={code} primary={primary_port} lan={}",
+            lan.map(|p| p.to_string()).unwrap_or_else(|| "-".into())
+        ),
+    );
     Ok(PortholeHostInfo {
         share_code: code,
         port: primary_port,
+        lan_port: lan,
     })
 }
 
@@ -851,7 +909,16 @@ pub fn start_join(
     if port == 0 {
         return Err("Invalid LAN port".into());
     }
-    let approve = format!("tcp/{port}");
+    // Voice+LAN share one lobby — approve LiveKit ports too so a guest already
+    // in voice (or joining a merged host) gets every offered forward.
+    // Keep the string here (not voice_runtime) to avoid a module cycle.
+    let approve = format!(
+        "tcp/{port},tcp/{},tcp/{},udp/{}-{}",
+        crate::voice_runtime::LK_TCP_PORT,
+        crate::voice_runtime::LK_RTC_TCP_PORT,
+        crate::voice_runtime::LK_UDP_START,
+        crate::voice_runtime::LK_UDP_END,
+    );
     start_join_approve(app, state, share_code, &approve, port)
 }
 
@@ -871,6 +938,15 @@ pub fn start_join_approve(
     if approve.is_empty() {
         return Err("No ports to approve".into());
     }
+    net_log::begin_chunk(
+        &app,
+        &format!("join code={code} primary={primary_port}"),
+    );
+    net_log::append_ok(
+        &app,
+        "join",
+        &format!("approve={approve} bind=127.0.0.1"),
+    );
     let child = spawn_porthole(&[
         "connect",
         code,
@@ -879,25 +955,85 @@ pub fn start_join_approve(
         "--bind",
         "127.0.0.1",
     ])?;
-    let _ = watch_stdout_for_code(app, state.clone(), child, primary_port, false)?;
+    if let Err(e) = watch_stdout_for_code(app.clone(), state.clone(), child, primary_port, false) {
+        net_log::append_ok(&app, "join", &format!("connect FAILED: {e}"));
+        return Err(e);
+    }
     // Belt-and-suspenders: never hand control back until signaling port is up.
     if !port_listening(primary_port)
         && !wait_port_listening(primary_port, Duration::from_secs(12))
     {
         stop_join(&state);
+        net_log::append_ok(
+            &app,
+            "join",
+            &format!("localhost:{primary_port} never opened"),
+        );
         return Err(format!(
             "Porthole join finished but localhost:{primary_port} never opened"
         ));
     }
+    net_log::append_ok(
+        &app,
+        "join",
+        &format!("ready localhost:{primary_port} listening"),
+    );
+    let epoch = {
+        let mut guard = state.lock().map_err(|e| e.to_string())?;
+        guard.join_epoch = guard.join_epoch.wrapping_add(1);
+        guard.join_epoch
+    };
+    // Steam drops idle peers (~20s MiscTimeout) while Minecraft is still
+    // booting — poke the forward so the tunnel stays warm until MC connects.
+    spawn_join_keepalive(app, state, primary_port, epoch);
     Ok(())
+}
+
+fn spawn_join_keepalive(app: AppHandle, state: PortholeState, port: u16, epoch: u64) {
+    thread::spawn(move || {
+        let mut ticks = 0u32;
+        loop {
+            thread::sleep(Duration::from_secs(3));
+            let alive = state
+                .lock()
+                .ok()
+                .is_some_and(|g| g.join.is_some() && g.join_epoch == epoch);
+            if !alive {
+                break;
+            }
+            let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+            match TcpStream::connect_timeout(&addr, Duration::from_millis(500)) {
+                Ok(stream) => {
+                    ticks = ticks.saturating_add(1);
+                    if ticks == 1 || ticks % 10 == 0 {
+                        net_log::append_ok(
+                            &app,
+                            "join",
+                            &format!("keepalive ok localhost:{port} n={ticks}"),
+                        );
+                    }
+                    drop(stream);
+                }
+                Err(e) => {
+                    net_log::append_ok(
+                        &app,
+                        "join",
+                        &format!("keepalive MISS localhost:{port}: {e}"),
+                    );
+                }
+            }
+        }
+    });
 }
 
 pub fn stop_all(state: &PortholeState) {
     if let Ok(mut guard) = state.lock() {
         kill_child(&mut guard.host);
         kill_child(&mut guard.join);
+        guard.join_epoch = guard.join_epoch.wrapping_add(1);
         guard.share_code = None;
         guard.host_port = None;
+        guard.host_lan_port = None;
     }
 }
 
@@ -906,12 +1042,14 @@ pub fn stop_host(state: &PortholeState) {
         kill_child(&mut guard.host);
         guard.share_code = None;
         guard.host_port = None;
+        guard.host_lan_port = None;
     }
 }
 
 pub fn stop_join(state: &PortholeState) {
     if let Ok(mut guard) = state.lock() {
         kill_child(&mut guard.join);
+        guard.join_epoch = guard.join_epoch.wrapping_add(1);
     }
 }
 
@@ -920,6 +1058,7 @@ pub fn current_host(state: &PortholeState) -> Option<PortholeHostInfo> {
     Some(PortholeHostInfo {
         share_code: guard.share_code.clone()?,
         port: guard.host_port?,
+        lan_port: guard.host_lan_port,
     })
 }
 

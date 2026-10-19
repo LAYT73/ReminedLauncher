@@ -46,6 +46,11 @@ export const CMD = {
   portholeStopJoin: "porthole_stop_join",
   portholeStopAll: "porthole_stop_all",
   portholeCurrentHost: "porthole_current_host",
+  // network / LAN / Porthole diagnostics (chunked under .remined/network/)
+  netLogDir: "net_log_dir",
+  netLogAppend: "net_log_append",
+  netLogTail: "net_log_tail",
+  netLogList: "net_log_list",
   // voice
   voiceLogPath: "voice_log_path",
   voiceLogAppend: "voice_log_append",

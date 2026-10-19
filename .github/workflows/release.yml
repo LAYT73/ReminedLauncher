@@ -82,10 +82,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v0.7.1
-          releaseName: Remined v0.7.1
+          tagName: v0.7.2
+          releaseName: Remined v0.7.2
           releaseBody: |
-            Remined launcher v0.7.1 — Minecraft-style room names, Discord video stage + fullscreen, cam/share tile cleanup, connecting/ghost member presence, LiveKit token nbf skew fix for Windows guests.
+            Remined launcher v0.7.2 — LAN Join: open Porthole tunnel after pack prep, Steam idle keepalive, allow Porthole version mismatch, fix voice lobby dropping LAN, chunked network diagnostics logs, public IP:port host chip.
             macOS (arm64 + x64) and Windows builds.
           releaseDraft: false
           prerelease: false

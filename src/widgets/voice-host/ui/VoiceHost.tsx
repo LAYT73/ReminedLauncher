@@ -9,16 +9,18 @@ import { selectUserId, useSessionStore } from "@/entities/session";
 import { useVoiceStatusStore } from "@/entities/voice-room";
 import { getVoiceHost } from "../model/host";
 
-/** Keeps the voice session alive for the whole signed-in, online app lifetime. */
+/** Keeps the voice session alive for the whole signed-in app lifetime. */
 export function VoiceHost() {
   const navigate = useNavigate();
   const userId = useSessionStore(selectUserId);
-  const offlineMode = useSessionStore((s) => s.offlineMode);
   const username = useProfileStore((s) => s.profile.username);
   const draft = useProfileStore((s) => s.usernameDraft);
   const { setInRoom, setPendingInvites } = useVoiceStatusStore.getState();
 
-  if (offlineMode || !userId) return null;
+  // Never gate on offlineMode: a brief navigator.onLine blip (common when a
+  // peer joins via WebRTC/Porthole) used to unmount this portal, disconnect
+  // LiveKit, and look like a full launcher reload.
+  if (!userId) return null;
   return createPortal(
     <VoicePanel
       userId={userId}

@@ -17,6 +17,7 @@ mod skinshuffle_patch;
 mod smoke;
 mod vanilla;
 mod vanilla_skin_pack;
+mod net_log;
 mod voice_log;
 mod voice_runtime;
 
@@ -666,17 +667,20 @@ async fn porthole_start_join(
 }
 
 #[tauri::command]
-fn porthole_stop_host(state: State<'_, porthole::PortholeState>) {
+fn porthole_stop_host(app: AppHandle, state: State<'_, porthole::PortholeState>) {
+    net_log::append_ok(&app, "host", "stop_host");
     porthole::stop_host(&state);
 }
 
 #[tauri::command]
-fn porthole_stop_join(state: State<'_, porthole::PortholeState>) {
+fn porthole_stop_join(app: AppHandle, state: State<'_, porthole::PortholeState>) {
+    net_log::append_ok(&app, "join", "stop_join");
     porthole::stop_join(&state);
 }
 
 #[tauri::command]
-fn porthole_stop_all(state: State<'_, porthole::PortholeState>) {
+fn porthole_stop_all(app: AppHandle, state: State<'_, porthole::PortholeState>) {
+    net_log::append_ok(&app, "host", "stop_all");
     porthole::stop_all(&state);
 }
 
@@ -788,7 +792,29 @@ fn voice_mint_token(room: String, identity: String, name: String) -> Result<Stri
 fn read_lan_port(app: AppHandle, pack_id: String) -> Result<Option<u16>, String> {
     let root = paths::remined_root(&app)?;
     let log = paths::pack_dir(&root, &pack_id).join("logs").join("latest.log");
-    Ok(porthole::read_lan_port(&log))
+    let port = porthole::read_lan_port(&log);
+    net_log::lan_poll(&app, &pack_id, port);
+    Ok(port)
+}
+
+#[tauri::command]
+fn net_log_dir(app: AppHandle) -> Result<String, String> {
+    net_log::dir(&app).map(|p| p.display().to_string())
+}
+
+#[tauri::command]
+fn net_log_append(app: AppHandle, source: String, message: String) -> Result<(), String> {
+    net_log::append(&app, &source, &message)
+}
+
+#[tauri::command]
+fn net_log_tail(app: AppHandle, max_bytes: Option<usize>) -> Result<String, String> {
+    net_log::read_tail(&app, max_bytes.unwrap_or(64_000))
+}
+
+#[tauri::command]
+fn net_log_list(app: AppHandle) -> Result<Vec<String>, String> {
+    net_log::list_chunks(&app)
 }
 
 #[tauri::command]
@@ -1098,6 +1124,10 @@ pub fn run() {
             porthole_stop_join,
             porthole_stop_all,
             porthole_current_host,
+            net_log_dir,
+            net_log_append,
+            net_log_tail,
+            net_log_list,
             voice_log_path,
             voice_log_append,
             voice_log_tail,

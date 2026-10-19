@@ -1,4 +1,6 @@
+import { netLog } from "@/shared/api/netLog";
 import {
+  portholeStartJoin,
   portholeStopAll,
   portholeStopHost,
   portholeStopJoin,
@@ -36,7 +38,12 @@ import { downloadPack, ensurePackUpToDate } from "./pack-install";
 import { getPlayState } from "./play-state";
 import { installVersion } from "./versions";
 
-type LaunchOpts = { packId?: string; quickPlay?: string | null };
+type LaunchOpts = {
+  packId?: string;
+  quickPlay?: string | null;
+  /** Open the Steam tunnel after install prep, immediately before the game process. */
+  portholeJoin?: { shareCode: string; port: number };
+};
 
 /** Make sure `packId` is on disk before launching (never throws; returns ready). */
 async function prepareInstall(packId: string, quickPlay: boolean): Promise<boolean> {
@@ -131,6 +138,21 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
       setStatus(MSG.launch.usernameLength, "error");
       return;
     }
+    // Tunnel last — Steam forwards die if we open them before a long prepare.
+    if (opts.portholeJoin) {
+      setStatus(MSG.launch.connectingNetwork);
+      void netLog(
+        "ui",
+        `portholeJoin before MC code=${opts.portholeJoin.shareCode} port=${opts.portholeJoin.port}`,
+      );
+      await portholeStartJoin(
+        opts.portholeJoin.shareCode,
+        opts.portholeJoin.port,
+      );
+    }
+    if (opts.quickPlay) {
+      void netLog("ui", `game.launch quickPlay=${opts.quickPlay}`);
+    }
     const result = await gameApi.launch({
       packId,
       username: name,
@@ -142,6 +164,7 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
     if (!result.ok) {
       game.setRunningPackId(null);
       if (quick) void portholeStopJoin().catch(() => undefined);
+      void netLog("ui", `game.launch FAILED: ${result.message}`);
       setStatus(result.message, "error");
       return;
     }

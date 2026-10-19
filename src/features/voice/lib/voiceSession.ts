@@ -42,9 +42,6 @@ export class VoiceSession {
   localTrack: LocalAudioTrack | null = null;
   private muted = false;
   private deafened = false;
-  private levelCtx: AudioContext | null = null;
-  private levelAnalyser: AnalyserNode | null = null;
-  private levelSource: MediaStreamAudioSourceNode | null = null;
   private cbs: VoiceSessionCallbacks;
   private volumes = new Map<string, number>();
   private outputDeviceId: string | undefined;
@@ -66,7 +63,11 @@ export class VoiceSession {
     }
   }
 
-  /** Force-reattach remote audio after cam/share/focus steals the WebView path. */
+  /**
+   * Unlock playback and ensure each remote audio track is attached once.
+   * Never detach/reattach here — that races WKWebView WebRTC and crashes
+   * WebContent (PAC) when a guest joins.
+   */
   async resumePlayback() {
     const room = this.room;
     if (!room) return;
@@ -75,38 +76,34 @@ export class VoiceSession {
     } catch {
       /* autoplay policies vary */
     }
-    try {
-      if (this.levelCtx && this.levelCtx.state === "suspended") {
-        await this.levelCtx.resume();
-      }
-    } catch {
-      /* meter optional */
-    }
-
-    // Drop stale <audio> nodes — WebView leaves them paused after renegotiation.
-    document.querySelectorAll("audio[data-identity]").forEach((el) => el.remove());
-
     for (const p of room.remoteParticipants.values()) {
-      for (const pub of p.audioTrackPublications.values()) {
-        const track = pub.track;
-        if (!track || track.kind !== Track.Kind.Audio) continue;
-        try {
-          const detached = track.detach();
-          const old = Array.isArray(detached) ? detached : [detached];
-          for (const el of old) el.remove();
-        } catch {
-          /* ignore */
-        }
+      this.ensureRemoteAudioAttached(p);
+    }
+    this.applyAllVolumes();
+    this.cbs.onAudioPlayback?.(room.canPlaybackAudio);
+  }
+
+  /**
+   * webAudioMix still needs one HTMLMediaElement attach to wire GainNode →
+   * speakers. Without attach, speaking indicators work but you hear silence.
+   */
+  private ensureRemoteAudioAttached(participant: RemoteParticipant) {
+    for (const pub of participant.audioTrackPublications.values()) {
+      const track = pub.track;
+      if (!track || track.kind !== Track.Kind.Audio) continue;
+      const already = track.attachedElements?.some(
+        (el) => el instanceof HTMLAudioElement,
+      );
+      if (already) continue;
+      try {
         const attached = track.attach();
         const els = Array.isArray(attached) ? attached : [attached];
         for (const el of els) {
           if (!(el instanceof HTMLAudioElement)) continue;
-          el.dataset.identity = p.identity;
+          el.dataset.identity = participant.identity;
           el.autoplay = true;
           el.style.display = "none";
-          el.muted = this.deafened;
-          el.volume = this.volumes.get(p.identity) ?? 1;
-          document.body.appendChild(el);
+          if (!el.isConnected) document.body.appendChild(el);
           if (this.outputDeviceId && "setSinkId" in el) {
             void (
               el as HTMLAudioElement & { setSinkId: (id: string) => Promise<void> }
@@ -116,9 +113,30 @@ export class VoiceSession {
           }
           void el.play().catch(() => undefined);
         }
+      } catch {
+        /* attach optional per track */
       }
     }
-    this.cbs.onAudioPlayback?.(room.canPlaybackAudio);
+    this.applyRemoteVolume(participant.identity);
+  }
+
+  private applyRemoteVolume(identity: string) {
+    const p = this.room?.remoteParticipants.get(identity);
+    if (!p) return;
+    const v = this.deafened ? 0 : (this.volumes.get(identity) ?? 1);
+    try {
+      p.setVolume(v);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private applyAllVolumes() {
+    const room = this.room;
+    if (!room) return;
+    for (const p of room.remoteParticipants.values()) {
+      this.applyRemoteVolume(p.identity);
+    }
   }
 
   private wireResumeHooks() {
@@ -140,18 +158,7 @@ export class VoiceSession {
     this.watchdog = setInterval(() => {
       const room = this.room;
       if (!room || room.state !== ConnectionState.Connected) return;
-      let remoteAudio = 0;
-      for (const p of room.remoteParticipants.values()) {
-        for (const pub of p.audioTrackPublications.values()) {
-          if (pub.track?.kind === Track.Kind.Audio) remoteAudio += 1;
-        }
-      }
-      if (remoteAudio === 0) return;
-      const nodes = document.querySelectorAll<HTMLAudioElement>("audio[data-identity]");
-      const dead =
-        nodes.length < remoteAudio ||
-        [...nodes].some((el) => el.paused || el.ended || el.readyState === 0);
-      if (dead || !room.canPlaybackAudio) void this.resumePlayback();
+      if (!room.canPlaybackAudio) void this.resumePlayback();
     }, 3500);
   }
 
@@ -232,7 +239,9 @@ export class VoiceSession {
       dynacast: true,
       // Keep the session when the WebView fires pagehide (tab/rail switches).
       disconnectOnPageLeave: false,
-      webAudioMix: false,
+      // WKWebView: HTMLAudioElement attach/detach of remote tracks crashes
+      // WebContent (RealtimeIncomingAudioSourceCocoa PAC). Mix via WebAudio.
+      webAudioMix: true,
       audioCaptureDefaults: {
         deviceId: opts.micDeviceId,
         echoCancellation: true,
@@ -306,33 +315,26 @@ export class VoiceSession {
           return;
         }
         if (trackRemote.kind !== Track.Kind.Audio) return;
-        const el = trackRemote.attach();
-        el.dataset.identity = participant.identity;
-        el.autoplay = true;
-        el.style.display = "none";
-        el.volume = this.volumes.get(participant.identity) ?? 1;
-        document.body.appendChild(el);
-        if (this.outputDeviceId && "setSinkId" in el) {
-          void (el as HTMLAudioElement & { setSinkId: (id: string) => Promise<void> })
-            .setSinkId(this.outputDeviceId)
-            .catch(() => undefined);
-        }
-        if (this.deafened) el.muted = true;
-        void el.play().catch(() => undefined);
+        this.ensureRemoteAudioAttached(participant);
         this.scheduleResume();
       },
     );
     room.on(RoomEvent.TrackUnsubscribed, (trackRemote) => {
-      const detached = trackRemote.detach();
-      const els = Array.isArray(detached) ? detached : [detached];
-      if (trackRemote.kind === Track.Kind.Video) {
-        for (const el of els) {
-          if (el instanceof HTMLVideoElement) el.srcObject = null;
+      // Detach only when the track is actually gone (safe). Never detach on resume.
+      try {
+        const detached = trackRemote.detach();
+        const els = Array.isArray(detached) ? detached : [detached];
+        if (trackRemote.kind === Track.Kind.Video) {
+          for (const el of els) {
+            if (el instanceof HTMLVideoElement) el.srcObject = null;
+          }
+          this.cbs.onVideo?.();
+          return;
         }
-        this.cbs.onVideo?.();
-        return;
+        for (const el of els) el.remove();
+      } catch {
+        if (trackRemote.kind === Track.Kind.Video) this.cbs.onVideo?.();
       }
-      for (const el of els) el.remove();
     });
 
     try {
@@ -393,55 +395,17 @@ export class VoiceSession {
       await voiceLog("webrtc", `publishTrack FAILED: ${msg}`);
       throw err instanceof Error ? err : new Error(msg);
     }
-    this.wireLevelMeter(track);
+    if (this.outputDeviceId) {
+      await this.switchOutput(this.outputDeviceId);
+    }
     this.wireResumeHooks();
     this.scheduleResume();
     this.cbs.onParticipants?.();
   }
 
-  private wireLevelMeter(track: LocalAudioTrack) {
-    this.teardownLevelMeter();
-    try {
-      const stream = new MediaStream([track.mediaStreamTrack]);
-      const ctx = new AudioContext();
-      const source = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
-      source.connect(analyser);
-      this.levelCtx = ctx;
-      this.levelSource = source;
-      this.levelAnalyser = analyser;
-    } catch {
-      /* mic meter optional */
-    }
-  }
-
-  /** 0..1 instantaneous mic level for UI meter */
+  /** 0..1 instantaneous mic level for UI meter (disabled on WKWebView). */
   getMicLevel(): number {
-    const analyser = this.levelAnalyser;
-    if (!analyser) return 0;
-    const data = new Uint8Array(analyser.frequencyBinCount);
-    analyser.getByteTimeDomainData(data);
-    let sum = 0;
-    for (let i = 0; i < data.length; i++) {
-      const v = (data[i]! - 128) / 128;
-      sum += v * v;
-    }
-    const rms = Math.sqrt(sum / data.length);
-    return Math.min(1, rms * 3.2);
-  }
-
-  private teardownLevelMeter() {
-    try {
-      this.levelSource?.disconnect();
-      this.levelAnalyser?.disconnect();
-      void this.levelCtx?.close();
-    } catch {
-      /* ignore */
-    }
-    this.levelSource = null;
-    this.levelAnalyser = null;
-    this.levelCtx = null;
+    return 0;
   }
 
   async setMuted(muted: boolean) {
@@ -458,11 +422,7 @@ export class VoiceSession {
 
   setDeafened(deafened: boolean) {
     this.deafened = deafened;
-    document
-      .querySelectorAll<HTMLAudioElement>("audio[data-identity]")
-      .forEach((el) => {
-        el.muted = deafened;
-      });
+    this.applyAllVolumes();
     // Sync to the room so others see the deafen icon.
     void this.room?.localParticipant
       .setAttributes({ deafened: deafened ? "1" : "0" })
@@ -474,11 +434,7 @@ export class VoiceSession {
   setParticipantVolume(identity: string, volume: number) {
     const v = Math.max(0, Math.min(1, volume));
     this.volumes.set(identity, v);
-    document
-      .querySelectorAll<HTMLAudioElement>("audio[data-identity]")
-      .forEach((el) => {
-        if (el.dataset.identity === identity) el.volume = v;
-      });
+    this.applyRemoteVolume(identity);
   }
 
   getParticipantVolume(identity: string): number {
@@ -582,25 +538,41 @@ export class VoiceSession {
   async switchMic(deviceId: string) {
     if (!this.room || !this.localTrack) return;
     await this.localTrack.restartTrack({ deviceId });
-    this.wireLevelMeter(this.localTrack);
   }
 
   async switchOutput(deviceId: string) {
-    this.outputDeviceId = deviceId;
+    this.outputDeviceId = deviceId || undefined;
+    const room = this.room;
+    if (!room) return;
+    // Empty id = system default. Prefer per-element setSinkId; WKWebView often
+    // lacks AudioContext.setSinkId, and switchActiveDevice can mute playback.
+    const sink = deviceId || "default";
+    for (const p of room.remoteParticipants.values()) {
+      for (const pub of p.audioTrackPublications.values()) {
+        const track = pub.track;
+        if (!track || track.kind !== Track.Kind.Audio) continue;
+        if ("setSinkId" in track && typeof track.setSinkId === "function") {
+          void track.setSinkId(sink).catch(() => undefined);
+        }
+      }
+    }
     document
       .querySelectorAll<HTMLAudioElement>("audio[data-identity]")
       .forEach((el) => {
         if ("setSinkId" in el) {
-          void (el as HTMLAudioElement & { setSinkId: (id: string) => Promise<void> })
-            .setSinkId(deviceId)
+          void (
+            el as HTMLAudioElement & { setSinkId: (id: string) => Promise<void> }
+          )
+            .setSinkId(sink)
             .catch(() => undefined);
         }
+        void el.play().catch(() => undefined);
       });
+    void this.resumePlayback();
   }
 
   async disconnect() {
     this.unwireResumeHooks();
-    this.teardownLevelMeter();
     try {
       this.localTrack?.stop();
       this.localTrack = null;

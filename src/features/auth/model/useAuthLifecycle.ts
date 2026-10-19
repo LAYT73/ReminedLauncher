@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { supabase } from "@/shared/api/supabase";
 import { MSG } from "@/shared/config/messages";
-import { subscribeConnectivity } from "@/shared/lib/network";
+import { isBrowserOnline, subscribeConnectivity } from "@/shared/lib/network";
 import { toast } from "@/shared/lib/toast";
 import { applyTheme, DEFAULT_THEME } from "@/entities/theme";
 import { loadLocalProfile } from "@/entities/profile";
@@ -22,24 +22,49 @@ export function useAuthLifecycle(): void {
       // Boot already handles getSession; INITIAL_SESSION would race / re-enter cloud.
       if (event === "INITIAL_SESSION") return;
       if (useSessionStore.getState().offlineMode) return;
+      // Token refresh must NOT re-run bootstrap/leaveBoot — that remounts the
+      // shell (and tears down LiveKit) and feels like a full launcher reload.
+      if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
+        useSessionStore.getState().setSession(next);
+        return;
+      }
       void resolveGate(next);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  useEffect(
-    () =>
-      subscribeConnectivity((online) => {
-        const s = useSessionStore.getState();
-        if (!online) {
-          if (s.gate === "app" && !s.offlineMode) {
-            s.setOfflineMode(true);
+  useEffect(() => {
+    let offlineTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearOfflineTimer = () => {
+      if (offlineTimer) {
+        clearTimeout(offlineTimer);
+        offlineTimer = null;
+      }
+    };
+
+    const unsub = subscribeConnectivity((online) => {
+      const s = useSessionStore.getState();
+      if (!online) {
+        // WebRTC / Porthole ICE can briefly flip navigator.onLine when a peer
+        // joins. Debounce so we don't tear down cloud state mid-call.
+        if (s.gate !== "app" || s.offlineMode || offlineTimer) return;
+        offlineTimer = setTimeout(() => {
+          offlineTimer = null;
+          if (isBrowserOnline()) return;
+          const cur = useSessionStore.getState();
+          if (cur.gate === "app" && !cur.offlineMode) {
+            cur.setOfflineMode(true);
             toast(MSG.boot.connectionLost, "err");
           }
-          return;
-        }
-        if (s.offlineMode && s.gate === "app") toast(MSG.boot.backOnlineSignIn);
-      }),
-    [],
-  );
+        }, 2500);
+        return;
+      }
+      clearOfflineTimer();
+      if (s.offlineMode && s.gate === "app") toast(MSG.boot.backOnlineSignIn);
+    });
+    return () => {
+      clearOfflineTimer();
+      unsub();
+    };
+  }, []);
 }
