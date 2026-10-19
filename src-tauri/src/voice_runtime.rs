@@ -387,21 +387,12 @@ pub fn ensure_runtime(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(bin)
 }
 
-/// Restrict ICE candidates to the loopback interface so VPN TUN adapters (Happ, etc.)
-/// never contribute host candidates / source addresses (BUG-001).
-fn loopback_iface_yaml() -> &'static str {
-    if cfg!(target_os = "macos") {
-        "\n  interfaces:\n    includes:\n      - lo0"
-    } else if cfg!(target_os = "linux") {
-        "\n  interfaces:\n    includes:\n      - lo"
-    } else {
-        ""
-    }
-}
-
 fn write_config(dir: &Path) -> Result<PathBuf, String> {
     let path = dir.join("livekit.yaml");
-    // Loopback-only SFU for host WebView + Porthole tunnel. No public STUN.
+    // Loopback-only SFU for host WebView + Porthole tunnel.
+    // `enable_loopback_candidate` is required: without it, `ips/interfaces`
+    // filters that only leave 127.0.0.1 produce ZERO server ICE candidates
+    // (voice fails even with VPN off — only the client's LAN IP appears).
     let yaml = format!(
         r#"port: {tcp}
 bind_addresses:
@@ -412,7 +403,11 @@ rtc:
   port_range_end: {udp_end}
   use_external_ip: false
   node_ip: 127.0.0.1
-  stun_servers: []{ifaces}
+  enable_loopback_candidate: true
+  stun_servers: []
+  ips:
+    includes:
+      - 127.0.0.1/32
 room:
   auto_create: true
 keys:
@@ -420,7 +415,6 @@ keys:
 logging:
   level: info
 "#,
-        ifaces = loopback_iface_yaml(),
         tcp = LK_TCP_PORT,
         rtc_tcp = LK_RTC_TCP_PORT,
         udp_start = LK_UDP_START,
@@ -471,8 +465,20 @@ pub fn stop_host(state: &VoiceRuntimeState) {
     }
 }
 
+/// After kill, sockets can linger briefly — wait so the next bind doesn't race.
+fn wait_ports_free(timeout: StdDuration) {
+    let start = Instant::now();
+    while start.elapsed() < timeout {
+        if !tcp_open(LK_TCP_PORT) && !tcp_open(LK_RTC_TCP_PORT) {
+            return;
+        }
+        thread::sleep(StdDuration::from_millis(50));
+    }
+}
+
 pub fn start_host_server(app: &AppHandle, state: &VoiceRuntimeState) -> Result<(), String> {
     stop_host(state);
+    wait_ports_free(StdDuration::from_secs(3));
     let bin = ensure_runtime(app)?;
     // Re-apply exec bit + ad-hoc sign for cached downloads under Hardened Runtime.
     let _ = set_executable(&bin);

@@ -71,7 +71,7 @@ HTTP `NO_PROXY` / spawn env stripping helps **HTTP(S) proxy** mode.
 
 ## Happ / TUN VPN (best effort — not testable without Happ)
 
-What the code does: LiveKit on loopback binds only the loopback interface (`lo0`/`lo`) and advertises no STUN servers, so a TUN VPN that hijacks the default route cannot capture loopback traffic. The remaining failure mode is the **browser-side** WebRTC (WKWebView) choosing a candidate through the tunnel.
+What the code does: LiveKit binds `127.0.0.1` only, sets `enable_loopback_candidate: true` + `ips.includes: 127.0.0.1/32`, and advertises no public STUN — so the SFU only offers loopback ICE. (Without `enable_loopback_candidate`, the IP filter yields **zero** server candidates and host join fails even with VPN off.) WKWebView may still pick a TUN fake-IP (`198.18.x`) as its local candidate; those are dropped in `rtcDiagnostics`.
 
 If voice still fails with Happ on:
 1. Add the Remined bundle id / `127.0.0.0/8` to Happ's bypass list (or switch Happ to “proxy” mode instead of TUN).

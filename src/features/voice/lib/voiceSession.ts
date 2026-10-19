@@ -193,7 +193,7 @@ export class VoiceSession {
       }
       if (/could not establish pc connection/i.test(msg)) {
         throw new Error(
-          "Voice WebRTC failed. If you're using a VPN (e.g. Happ TUN), exclude 127.0.0.1 or enable per-app bypass for Remined.",
+          "Voice WebRTC failed (no ICE to local LiveKit). Retry once; if it persists with a VPN/TUN, exclude 127.0.0.1 or bypass Remined.",
         );
       }
       if (/timeout|timed out/i.test(msg)) {

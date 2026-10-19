@@ -2,9 +2,25 @@ import { voiceLog } from "../api/voiceNative";
 
 let rtcDiagInstalled = false;
 
+/** Happ / Clash TUN fake-IP ranges — host ICE over these never reaches 127.0.0.1 LiveKit. */
+function isVpnFakeIp(ip: string): boolean {
+  const m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(ip);
+  if (!m) return false;
+  const a = Number(m[1]);
+  const b = Number(m[2]);
+  // 198.18.0.0/15 (RFC 2544 benchmarking / common TUN fake-IP)
+  if (a === 198 && (b === 18 || b === 19)) return true;
+  return false;
+}
+
 function candidateSummary(c: string): string {
   const m = c.match(/candidate:\S+ \d+ (\w+) \d+ (\S+) (\d+) typ (\w+)/);
   return m ? `${m[4]}/${m[1]} ${m[2]}:${m[3]}` : c.slice(0, 80);
+}
+
+function candidateIp(c: string): string | null {
+  const m = c.match(/candidate:\S+ \d+ \w+ \d+ (\S+) \d+ typ/);
+  return m?.[1] ?? null;
 }
 
 async function logSelectedPair(pc: RTCPeerConnection, why: string) {
@@ -31,7 +47,11 @@ async function logSelectedPair(pc: RTCPeerConnection, why: string) {
   }
 }
 
-/** Log ICE candidates / states of every RTCPeerConnection into voice.log (BUG-001 diagnosis). */
+/**
+ * Log ICE candidates / states into voice.log.
+ * Also drop local VPN fake-IP host candidates so WKWebView prefers LAN/loopback
+ * when the SFU is on 127.0.0.1 (BUG-001).
+ */
 export function installRtcDiagnostics() {
   if (rtcDiagInstalled || typeof window === "undefined") return;
   const Orig = window.RTCPeerConnection;
@@ -45,8 +65,28 @@ export function installRtcDiagnostics() {
     const tag = Math.random().toString(36).slice(2, 6);
     pc.addEventListener("icecandidate", (ev) => {
       const c = ev.candidate?.candidate;
-      if (c) void voiceLog("ice", `[${tag}] local candidate ${candidateSummary(c)}`);
+      if (!c) return;
+      const ip = candidateIp(c);
+      if (ip && isVpnFakeIp(ip)) {
+        void voiceLog(
+          "ice",
+          `[${tag}] WARN VPN fake-IP local ${candidateSummary(c)} (will not reach 127.0.0.1 LiveKit)`,
+        );
+      } else {
+        void voiceLog("ice", `[${tag}] local candidate ${candidateSummary(c)}`);
+      }
     });
+    const origAdd = pc.addIceCandidate.bind(pc);
+    pc.addIceCandidate = (candidate?: RTCIceCandidateInit | null) => {
+      const c =
+        typeof candidate?.candidate === "string"
+          ? candidate.candidate
+          : candidate instanceof RTCIceCandidate
+            ? candidate.candidate
+            : "";
+      if (c) void voiceLog("ice", `[${tag}] remote candidate ${candidateSummary(c)}`);
+      return origAdd(candidate as RTCIceCandidateInit);
+    };
     pc.addEventListener("icegatheringstatechange", () => {
       void voiceLog("ice", `[${tag}] gathering=${pc.iceGatheringState}`);
     });
