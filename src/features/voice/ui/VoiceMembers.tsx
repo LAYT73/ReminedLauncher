@@ -10,6 +10,8 @@ type Props = {
   userId: string;
   session: VoiceSession | null;
   isHost: boolean;
+  /** Host has published a Porthole share code — invite only after this. */
+  lobbyReady: boolean;
   members: VoiceMember[];
   videoTiles: VoiceVideoTile[];
   speaking: Record<string, boolean>;
@@ -26,6 +28,7 @@ export function VoiceMembers({
   userId,
   session,
   isHost,
+  lobbyReady,
   members,
   videoTiles,
   speaking,
@@ -116,11 +119,13 @@ export function VoiceMembers({
             className="pack-select--full"
             label="Invite friend"
             menuPlacement="down"
-            disabled={inviteOptions.length === 0}
+            disabled={inviteOptions.length === 0 || !lobbyReady}
             placeholder={
-              inviteOptions.length === 0
-                ? "No friends yet"
-                : "Choose a friend…"
+              !lobbyReady
+                ? "Lobby code loading…"
+                : inviteOptions.length === 0
+                  ? "No friends yet"
+                  : "Choose a friend…"
             }
             options={inviteOptions}
             value={invitePick}
@@ -129,7 +134,7 @@ export function VoiceMembers({
           <button
             type="button"
             className="btn-mc ok"
-            disabled={!invitePick}
+            disabled={!invitePick || !lobbyReady}
             onClick={() => void onInvite()}
           >
             Invite

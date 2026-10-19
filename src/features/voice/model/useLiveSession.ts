@@ -67,8 +67,9 @@ export function useLiveSession({
   async function connect(room: VoiceRoom, asGuest: boolean) {
     setStatus(asGuest ? "Connecting Porthole…" : MSG.voice.connectingVoice);
     if (asGuest) {
-      if (!room.portholeShareCode) throw new Error("Room has no share code");
+      if (!room.portholeShareCode) throw new Error("Room has no share code yet — ask the host to wait for the lobby code");
       await voiceGuestConnect(room.portholeShareCode);
+      setStatus(MSG.voice.connectingVoice);
     }
     const session = new VoiceSession({
       onParticipants: () => {
@@ -88,14 +89,41 @@ export function useLiveSession({
       },
       onError: (m) => onToast(m, "err"),
     });
-    await session.connect({
-      wsUrl: room.lkWsUrl || "ws://127.0.0.1:7880",
+    // Prefer 127.0.0.1 — Porthole binds loopback; `localhost` can hit ::1 first.
+    const wsUrl = (room.lkWsUrl || "ws://127.0.0.1:7880").replace(
+      "ws://localhost:",
+      "ws://127.0.0.1:",
+    );
+    const connectOpts = {
+      wsUrl,
       roomId: room.id,
       identity: userId,
       name: displayName,
       micDeviceId: micId || undefined,
       outputDeviceId: outputId || undefined,
-    });
+    };
+    // Guests: tunnel may need a beat after the TCP probe before WKWebView WS works.
+    let lastErr: unknown;
+    const attempts = asGuest ? 4 : 1;
+    for (let i = 0; i < attempts; i++) {
+      try {
+        if (i > 0) {
+          setStatus(`Connecting voice… (retry ${i + 1}/${attempts})`);
+          await new Promise((r) => setTimeout(r, 700 * i));
+        }
+        await session.connect(connectOpts);
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = err;
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!asGuest || i === attempts - 1) throw err;
+        if (!/signal|unreachable|Load failed|timeout|refused|WebRTC/i.test(msg)) {
+          throw err;
+        }
+      }
+    }
+    if (lastErr) throw lastErr;
     sessionRef.current = session;
     setMuted(false);
     setDeafened(false);

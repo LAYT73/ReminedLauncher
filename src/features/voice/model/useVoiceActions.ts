@@ -5,6 +5,7 @@ import { unlockAchievement } from "@/shared/lib/achievements";
 import {
   closeVoiceRoom,
   createVoiceRoom,
+  getVoiceRoom,
   inviteFriendToRoom,
   leaveVoiceRoom,
   listMessages,
@@ -15,6 +16,7 @@ import {
   type VoiceInvite,
   type VoiceRoom,
 } from "@/entities/voice-room";
+import { portholeStopJoin } from "@/shared/api/porthole";
 import {
   voiceEnsureRuntime,
   voiceLog,
@@ -200,10 +202,23 @@ export function useVoiceActions({
         }
         const joined = await respondVoiceInvite(inv.id, true, userId);
         if (!joined) throw new Error("Room unavailable");
-        await openRoomSession(joined, true);
+        // Host may still be publishing the Porthole code after create — poll briefly.
+        let room = joined;
+        for (let i = 0; i < 10 && !room.portholeShareCode; i++) {
+          live.setStatus("Waiting for host lobby code…");
+          await new Promise((r) => setTimeout(r, 500));
+          room = (await getVoiceRoom(joined.id)) ?? room;
+        }
+        if (!room.portholeShareCode) {
+          throw new Error(
+            "Host lobby code is not ready yet — ask them to wait until the code appears, then re-accept",
+          );
+        }
+        await openRoomSession(room, true);
         onToast("Joined voice room", "ok");
         unlockAchievement("first-voice-room", onToast);
       } catch (err) {
+        void portholeStopJoin().catch(() => undefined);
         resetActiveUi();
         throw err;
       }
@@ -226,6 +241,9 @@ export function useVoiceActions({
       if (active && isHost) {
         await closeVoiceRoom(active.id);
         void voiceStopHost();
+      } else if (active) {
+        await leaveVoiceRoom(active.id, userId).catch(() => undefined);
+        void portholeStopJoin().catch(() => undefined);
       }
       resetActiveUi();
       await lists.refreshLists();
@@ -238,6 +256,10 @@ export function useVoiceActions({
 
   async function onInvite() {
     if (!active || !invitePick) return;
+    if (!active.portholeShareCode) {
+      onToast("Wait until the lobby code appears before inviting", "err");
+      return;
+    }
     try {
       await inviteFriendToRoom({ roomId: active.id, fromId: userId, toId: invitePick });
       setInvitePick("");

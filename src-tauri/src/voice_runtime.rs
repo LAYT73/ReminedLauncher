@@ -593,10 +593,10 @@ pub fn start_voice_livekit(app: &AppHandle, voice: &VoiceRuntimeState) -> Result
                     "LiveKit up ws=127.0.0.1:{LK_TCP_PORT} rtc_tcp={LK_RTC_TCP_PORT} udp={LK_UDP_START}-{LK_UDP_END}"
                 ),
             );
-                    // Prefer hostname `localhost` — many VPNs proxy 127.0.0.1 but bypass localhost.
+            // Prefer 127.0.0.1 — Porthole binds loopback IPv4; `localhost` can resolve to ::1.
             Ok(VoiceHostReady {
                 share_code: String::new(),
-                ws_url: format!("ws://localhost:{LK_TCP_PORT}"),
+                ws_url: format!("ws://127.0.0.1:{LK_TCP_PORT}"),
                 tcp_port: LK_TCP_PORT,
                 udp_start: LK_UDP_START,
                 udp_end: LK_UDP_END,
@@ -632,7 +632,7 @@ pub fn start_voice_porthole(
             );
             Ok(VoiceHostReady {
                 share_code: info.share_code,
-                ws_url: format!("ws://localhost:{LK_TCP_PORT}"),
+                ws_url: format!("ws://127.0.0.1:{LK_TCP_PORT}"),
                 tcp_port: LK_TCP_PORT,
                 udp_start: LK_UDP_START,
                 udp_end: LK_UDP_END,

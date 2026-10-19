@@ -63,6 +63,10 @@ HTTP `NO_PROXY` / spawn env stripping helps **HTTP(S) proxy** mode.
 - **Rich presence** — `sessions.in_voice` (migration `010_sessions_voice.sql`). Friends see “· in voice”. If the migration is not applied the client falls back silently (no column → no voice flag).
 - **No media uploads** — chat is text only (free-tier storage). Screenshots are viewed locally from the game's `screenshots/` folder (Shots tab), never uploaded.
 
+## Guest join
+
+Guests run `porthole connect <code> --bind 127.0.0.1` and then LiveKit at `ws://127.0.0.1:7880`. Join waits until **TCP :7880 accepts** on the guest (not just a Porthole log line) — early “ready” without a bind used to cause `ServerUnreachable` / `Load failed`. Invite is disabled until the host has a share code.
+
 ## Diagnostics
 
 - `voice.log` — runtime/LiveKit/Porthole log (see the debug-log path in the Voice runtime modal).

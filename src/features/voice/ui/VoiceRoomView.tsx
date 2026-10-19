@@ -180,6 +180,7 @@ export function VoiceRoomView(props: Props) {
           userId={userId}
           session={session}
           isHost={isHost}
+          lobbyReady={Boolean(active.portholeShareCode)}
           members={props.members}
           videoTiles={props.videoTiles}
           speaking={props.speaking}

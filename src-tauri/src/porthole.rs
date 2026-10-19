@@ -4,12 +4,36 @@ use serde::Serialize;
 use serde_json::Value;
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
+use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
+
+/// True when something accepts TCP on `127.0.0.1:port` (Porthole bind or LiveKit).
+fn port_listening(port: u16) -> bool {
+    if port == 0 {
+        return false;
+    }
+    TcpStream::connect_timeout(
+        &std::net::SocketAddr::from(([127, 0, 0, 1], port)),
+        Duration::from_millis(200),
+    )
+    .is_ok()
+}
+
+fn wait_port_listening(port: u16, timeout: Duration) -> bool {
+    let start = Instant::now();
+    while start.elapsed() < timeout {
+        if port_listening(port) {
+            return true;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    false
+}
 
 pub const STEAM_APP_ID: &str = "4963920";
 pub const STEAM_STORE_URL: &str =
@@ -665,10 +689,15 @@ fn watch_stdout_for_code(
         let _ = tx.send(LineEvt::Eof);
     });
 
-    let deadline = Instant::now() + Duration::from_secs(30);
+    let deadline = Instant::now() + Duration::from_secs(45);
     let mut last_err = String::new();
+    let mut guest_hint = false;
 
     while Instant::now() < deadline {
+        // Guest: local bind is the only reliable "ready" signal.
+        if !is_host && port_listening(port) {
+            return Ok(String::new());
+        }
         let remaining = deadline.saturating_duration_since(Instant::now());
         match rx.recv_timeout(remaining.min(Duration::from_millis(400))) {
             Ok(LineEvt::Line(line)) => {
@@ -685,9 +714,13 @@ fn watch_stdout_for_code(
                                 port,
                             },
                         );
+                        // Leave drain threads running; do not close pipes.
+                        return Ok(code);
                     }
-                    // Leave drain threads running; do not close pipes.
-                    return Ok(code);
+                    // Guest logs often echo the lobby share code before the
+                    // local bind exists — ignore and keep waiting for :port.
+                    guest_hint = true;
+                    continue;
                 }
                 let lower = line.to_ascii_lowercase();
                 let hard_fail = lower.contains("steam init failed")
@@ -707,7 +740,11 @@ fn watch_stdout_for_code(
                         || lower.contains("\"event\":\"ready\"")
                         || lower.contains("lobby_ready"))
                 {
-                    return Ok(String::new());
+                    guest_hint = true;
+                    // Soft signal only — wait until localhost:port accepts TCP.
+                    if port_listening(port) || wait_port_listening(port, Duration::from_secs(8)) {
+                        return Ok(String::new());
+                    }
                 }
             }
             Ok(LineEvt::Eof) => break,
@@ -738,6 +775,8 @@ fn watch_stdout_for_code(
     if is_host {
         stop_host(&state);
         Err("Timed out waiting for Porthole share code — is Steam running and logged in?".into())
+    } else if port_listening(port) || wait_port_listening(port, Duration::from_secs(3)) {
+        Ok(String::new())
     } else {
         let alive = state
             .lock()
@@ -745,8 +784,14 @@ fn watch_stdout_for_code(
             .and_then(|mut g| g.join.as_mut().and_then(|c| c.try_wait().ok()))
             .flatten()
             .is_none();
-        if alive {
-            Ok(String::new())
+        if alive && guest_hint {
+            Err(format!(
+                "Porthole connected but localhost:{port} is not open yet — is Steam online and the host still in the room?"
+            ))
+        } else if alive {
+            Err(format!(
+                "Timed out waiting for Porthole tunnel on localhost:{port}"
+            ))
         } else {
             Err("Porthole connect exited before the tunnel was ready".into())
         }
@@ -834,7 +879,16 @@ pub fn start_join_approve(
         "--bind",
         "127.0.0.1",
     ])?;
-    let _ = watch_stdout_for_code(app, state, child, primary_port, false)?;
+    let _ = watch_stdout_for_code(app, state.clone(), child, primary_port, false)?;
+    // Belt-and-suspenders: never hand control back until signaling port is up.
+    if !port_listening(primary_port)
+        && !wait_port_listening(primary_port, Duration::from_secs(12))
+    {
+        stop_join(&state);
+        return Err(format!(
+            "Porthole join finished but localhost:{primary_port} never opened"
+        ));
+    }
     Ok(())
 }
 
