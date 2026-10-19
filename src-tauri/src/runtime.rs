@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use tauri::AppHandle;
+use crate::progress::Ctx as AppHandle;
 use uuid::Uuid;
 use zip::ZipArchive;
 
@@ -234,6 +234,56 @@ pub struct LaunchOpts {
     pub launch_label_suffix: Option<String>,
 }
 
+const JNA_MIN: (u32, u32) = (5, 13);
+const JNA_REPLACEMENT: &str = "5.14.0";
+
+/// JNA < 5.13 aborts the JVM (`LOAD_ERROR` snprintf assert) on recent macOS when Sodium /
+/// Iris probe IOKit via oshi (Minecraft 1.20 / 1.20.1 ship JNA 5.12.1). Swap in 5.14.0.
+/// Returns true when the version JSON was modified.
+fn upgrade_old_jna(version: &mut Value) -> bool {
+    if !cfg!(target_os = "macos") {
+        return false;
+    }
+    let Some(libs) = version.get_mut("libraries").and_then(|l| l.as_array_mut()) else {
+        return false;
+    };
+    let mut changed = false;
+    for lib in libs.iter_mut() {
+        let Some(name) = lib.get("name").and_then(|n| n.as_str()).map(String::from) else {
+            continue;
+        };
+        let parts: Vec<&str> = name.split(':').collect();
+        if parts.len() != 3 || parts[0] != "net.java.dev.jna" {
+            continue;
+        }
+        let artifact = parts[1];
+        if artifact != "jna" && artifact != "jna-platform" {
+            continue;
+        }
+        let mut it = parts[2].split('.');
+        let maj: u32 = it.next().and_then(|x| x.parse().ok()).unwrap_or(0);
+        let min: u32 = it.next().and_then(|x| x.parse().ok()).unwrap_or(0);
+        if (maj, min) >= JNA_MIN {
+            continue;
+        }
+        let rel = format!(
+            "net/java/dev/jna/{artifact}/{JNA_REPLACEMENT}/{artifact}-{JNA_REPLACEMENT}.jar"
+        );
+        lib["name"] = Value::String(format!("net.java.dev.jna:{artifact}:{JNA_REPLACEMENT}"));
+        lib["downloads"] = serde_json::json!({
+            "artifact": {
+                "path": rel,
+                "url": format!("https://repo1.maven.org/maven2/{rel}"),
+            }
+        });
+        if let Some(o) = lib.as_object_mut() {
+            o.remove("artifact");
+        }
+        changed = true;
+    }
+    changed
+}
+
 /// Ensure libraries + assets for the pack version JSON. Emits progress events.
 pub async fn prepare_runtime(app: &AppHandle, root: &Path, instance: &Path) -> Result<(), String> {
     let meta = instance::read_meta(instance);
@@ -241,9 +291,15 @@ pub async fn prepare_runtime(app: &AppHandle, root: &Path, instance: &Path) -> R
         instance,
         meta.as_ref().and_then(|m| m.version_json.as_deref()),
     )?;
-    let version: Value =
+    let mut version: Value =
         serde_json::from_str(&fs::read_to_string(&version_path).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
+    if upgrade_old_jna(&mut version) {
+        // Persist so spawn_game() (which re-reads the JSON) sees the same classpath.
+        if let Ok(bytes) = serde_json::to_vec_pretty(&version) {
+            let _ = fs::write(&version_path, bytes);
+        }
+    }
 
     progress::emit(app, "fabric", 5, "Resolving Fabric libraries…");
     let jar_hint = meta.as_ref().and_then(|m| m.client_jar.as_deref());
@@ -595,18 +651,16 @@ fn prepare_jna_boot_library(jars: &[PathBuf], dest_dir: &Path) -> Result<Option<
 
     fs::create_dir_all(dest_dir).map_err(|e| e.to_string())?;
     let out = dest_dir.join("libjnidispatch.jnilib");
-    let need_extract = match (out.metadata(), jar_path.metadata()) {
-        (Ok(out_m), Ok(jar_m)) => {
-            out_m.len() == 0
-                || out_m
-                    .modified()
-                    .ok()
-                    .zip(jar_m.modified().ok())
-                    .map(|(o, j)| o < j)
-                    .unwrap_or(true)
-        }
-        _ => true,
-    };
+    // Key the extracted dylib on the source jar (path + size). mtime is unreliable: a shared
+    // global jar can be older than a stale dylib left from a previous JNA version.
+    let stamp = dest_dir.join("source.stamp");
+    let want_stamp = format!(
+        "{}|{}",
+        jar_path.display(),
+        jar_path.metadata().map(|m| m.len()).unwrap_or(0)
+    );
+    let need_extract = out.metadata().map(|m| m.len() == 0).unwrap_or(true)
+        || fs::read_to_string(&stamp).ok().as_deref() != Some(want_stamp.as_str());
     if need_extract {
         let file = File::open(jar_path).map_err(|e| format!("open JNA jar: {e}"))?;
         let mut zip = ZipArchive::new(file).map_err(|e| format!("JNA jar zip: {e}"))?;
@@ -618,6 +672,7 @@ fn prepare_jna_boot_library(jars: &[PathBuf], dest_dir: &Path) -> Result<Option<
             .read_to_end(&mut bytes)
             .map_err(|e| format!("read JNA native: {e}"))?;
         fs::write(&out, bytes).map_err(|e| format!("write JNA native: {e}"))?;
+        let _ = fs::write(&stamp, &want_stamp);
     }
 
     // Ad-hoc sign so hardened-runtime Java accepts the dylib.
@@ -1084,6 +1139,35 @@ pub async fn spawn_game(opts: LaunchOpts) -> Result<LaunchedGame, String> {
         .map_err(|e| format!("Failed to start Java: {e}"))
 }
 
+/// `org/ow2/asm/asm/9.6/asm-9.6.jar` -> (`org/ow2/asm/asm|`, `9.6`);
+/// classifier jars (natives-macos) get their own key.
+fn maven_key_and_version(rel: &str) -> Option<(String, String)> {
+    let parts: Vec<&str> = rel.split('/').collect();
+    if parts.len() < 4 {
+        return None;
+    }
+    let file = parts[parts.len() - 1];
+    let version = parts[parts.len() - 2];
+    let artifact = parts[parts.len() - 3];
+    let stem = file.strip_suffix(".jar")?;
+    let prefix = format!("{artifact}-{version}");
+    let classifier = stem.strip_prefix(&prefix).unwrap_or("");
+    Some((
+        format!("{}|{}", parts[..parts.len() - 2].join("/"), classifier),
+        version.to_string(),
+    ))
+}
+
+fn version_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    let nums = |s: &str| -> Vec<u64> {
+        s.split(|c: char| !c.is_ascii_digit())
+            .filter(|p| !p.is_empty())
+            .map(|p| p.parse().unwrap_or(0))
+            .collect()
+    };
+    nums(a).cmp(&nums(b))
+}
+
 fn collect_classpath_paths(
     root: &Path,
     instance: &Path,
@@ -1094,7 +1178,11 @@ fn collect_classpath_paths(
         .get("libraries")
         .and_then(|v| v.as_array())
         .ok_or("missing libraries")?;
-    let mut jars = Vec::new();
+    let mut jars: Vec<PathBuf> = Vec::new();
+    // group/artifact[:classifier] -> (index in `jars`, version) so a Fabric profile's newer
+    // ASM replaces Mojang's older one (Fabric Loader aborts on duplicate ASM classes).
+    let mut seen: std::collections::HashMap<String, (usize, String)> =
+        std::collections::HashMap::new();
     for entry in libs {
         if !rule_allows(entry.get("rules")) {
             continue;
@@ -1109,6 +1197,16 @@ fn collect_classpath_paths(
         let rel = normalize_lib_path(path);
         let jar = resolve_existing_library(root, &rel)
             .ok_or_else(|| format!("Missing library after prepare: {rel}"))?;
+        if let Some((key, ver)) = maven_key_and_version(&rel) {
+            if let Some((idx, old_ver)) = seen.get(&key).cloned() {
+                if version_cmp(&ver, &old_ver) == std::cmp::Ordering::Greater {
+                    jars[idx] = jar;
+                    seen.insert(key, (idx, ver));
+                }
+                continue;
+            }
+            seen.insert(key, (jars.len(), ver));
+        }
         jars.push(jar);
     }
     let client = instance::find_client_jar(instance, version, client_jar_hint)?;

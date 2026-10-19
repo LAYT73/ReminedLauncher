@@ -1,0 +1,583 @@
+/* Friends */
+.friends-lead {
+  margin: 0 0 18px;
+  max-width: 36rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.friends-id-inline {
+  color: var(--text-muted);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-weight: 700;
+}
+
+.friends-add {
+  display: flex;
+  gap: 10px;
+  max-width: 420px;
+  margin-bottom: 16px;
+}
+
+.friends-add input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  background: var(--bg-input);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-inset);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  image-rendering: pixelated;
+}
+
+.friends-add input:focus {
+  outline: none;
+  box-shadow:
+    var(--bevel-inset),
+    0 0 0 2px var(--mc-green-hi);
+}
+
+.friends-error {
+  color: var(--danger-text);
+  margin: 0 0 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.friends-muted {
+  color: var(--text-muted);
+  margin: 0 0 12px;
+}
+
+.friends-block {
+  margin-top: 22px;
+  max-width: 640px;
+  min-height: 4.5rem;
+}
+
+.friend-row.is-skeleton {
+  pointer-events: none;
+}
+
+.skel {
+  display: block;
+  background: color-mix(in srgb, var(--text-on-stone, #bbb) 14%, transparent);
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  animation: friends-skel 1.15s ease-in-out infinite;
+}
+
+.skel-avatar {
+  width: 40px;
+  height: 40px;
+}
+
+.skel-line {
+  height: 10px;
+  border-radius: 0;
+}
+
+.skel-name {
+  width: 48%;
+  max-width: 140px;
+  margin-bottom: 6px;
+}
+
+.skel-id {
+  width: 28%;
+  max-width: 72px;
+  height: 8px;
+  opacity: 0.85;
+}
+
+.skel-chip {
+  width: 72px;
+  height: 28px;
+  justify-self: end;
+}
+
+.skel-chip-narrow {
+  width: 64px;
+}
+
+.skel-status {
+  width: 70px;
+  height: 12px;
+  justify-self: end;
+}
+
+@keyframes friends-skel {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skel {
+    animation: none;
+  }
+}
+
+.friends-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.friend-row {
+  display: grid;
+  grid-template-columns: 40px 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--mc-stone);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel);
+  image-rendering: pixelated;
+}
+
+.friend-row.has-join {
+  grid-template-columns: 40px 1fr auto auto auto;
+}
+
+.friends-info-block {
+  max-width: 640px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  background: var(--bg-panel);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel);
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.friends-info-block p {
+  margin: 0;
+}
+
+/* Dismissible info note: body + × button on the right. */
+.info-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.info-note-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.info-note-body p {
+  margin: 0;
+}
+
+.info-note-close {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: var(--mc-stone);
+  color: var(--text-on-stone);
+  border: 2px solid #000;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.28),
+    inset 2px 0 0 rgba(255, 255, 255, 0.1),
+    inset -2px 0 0 rgba(0, 0, 0, 0.16);
+  image-rendering: pixelated;
+  cursor: pointer;
+  opacity: 0.75;
+  transition:
+    opacity 0.15s ease,
+    filter 0.15s ease,
+    transform 0.1s ease;
+}
+
+.info-note-close:hover:not(:disabled) {
+  opacity: 1;
+  filter: brightness(1.12);
+}
+
+.info-note-close:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.info-note-close-icon {
+  width: 11px;
+  height: 11px;
+  display: block;
+  overflow: visible;
+  shape-rendering: crispEdges;
+}
+
+.friends-hosting-banner,
+.friends-zt-banner {
+  max-width: 640px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  background: var(--accent-deep);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel);
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.friends-zt-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.friends-zt-banner p {
+  margin: 0;
+  flex: 1;
+  min-width: 12rem;
+}
+
+.friends-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.friends-inline-link {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.network-panel {
+  max-width: 720px;
+}
+
+.network-status-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.network-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px 4px;
+  border: 2px solid #000;
+  background: var(--mc-stone);
+  box-shadow: var(--bevel-panel);
+  color: var(--text-on-stone);
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  image-rendering: pixelated;
+}
+
+.network-pill-dot {
+  width: 8px;
+  height: 8px;
+  border: 1px solid #000;
+  background: #777;
+  flex-shrink: 0;
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.network-pill-label {
+  opacity: 0.78;
+}
+
+.network-pill-value {
+  font-weight: 400;
+}
+
+.network-pill.is-ok {
+  background: #3c8527;
+  color: #fff;
+  text-shadow: 1px 1px 0 #1a4a12;
+}
+
+.network-pill.is-ok .network-pill-dot {
+  background: #7dce55;
+}
+
+.network-pill.is-warn {
+  background: #8a6a18;
+  color: #fff8d8;
+  text-shadow: 1px 1px 0 #3a2a08;
+}
+
+.network-pill.is-warn .network-pill-dot {
+  background: #e2c15a;
+}
+
+.network-pill.is-bad {
+  background: #7a2e2e;
+  color: #ffe4e4;
+  text-shadow: 1px 1px 0 #3a1212;
+}
+
+.network-pill.is-bad .network-pill-dot {
+  background: #e07070;
+}
+
+.network-pill.is-idle .network-pill-dot {
+  background: #9a9a9a;
+}
+
+.network-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 640px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel);
+  background: var(--bg-panel);
+}
+
+.network-status.is-ready {
+  background: var(--accent-deep);
+}
+
+.network-status.is-missing {
+  background: color-mix(in srgb, var(--bg-panel) 88%, #c44 12%);
+}
+
+.network-status-copy {
+  flex: 1;
+  min-width: 14rem;
+}
+
+.network-status-copy strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.network-status-copy p {
+  margin: 0;
+  line-height: 1.4;
+  color: var(--muted, var(--text));
+  opacity: 0.9;
+}
+
+.network-status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.network-check-detail {
+  max-width: 640px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+  max-height: 10rem;
+}
+
+.network-steps {
+  display: grid;
+  gap: 18px;
+  max-width: 640px;
+  margin-top: 8px;
+}
+
+.network-step ol {
+  margin: 0;
+  padding-left: 1.25rem;
+  line-height: 1.55;
+}
+
+.network-step li + li {
+  margin-top: 6px;
+}
+
+
+.friend-join {
+  justify-self: end;
+  min-width: 88px;
+}
+
+.friend-join-slot {
+  width: 88px;
+  justify-self: end;
+}
+
+.friend-avatar {
+  display: block;
+  border: 2px solid #000;
+  image-rendering: pixelated;
+  background: #2a2a2a;
+}
+
+.friend-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* Steam-like playtime chips (profile + friends) */
+.playtime-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.playtime-badges.is-compact {
+  margin: 4px 0 0;
+  gap: 6px;
+}
+
+.playtime-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg-panel, #2a2a2a) 88%, #000);
+  border: 2px solid #000;
+  box-shadow: var(--bevel-panel);
+}
+
+.playtime-badges.is-compact .playtime-badge {
+  padding: 2px 6px;
+  font-size: 10px;
+  gap: 4px;
+}
+
+.playtime-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.pack-playtime {
+  margin: 8px 0 0;
+}
+
+.friend-copy strong {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  color: var(--text-on-stone);
+  text-shadow: 1px 1px 0 var(--shadow-soft);
+}
+
+.friend-id,
+.friend-id-static {
+  align-self: flex-start;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  letter-spacing: 0.04em;
+}
+
+.friend-id {
+  cursor: pointer;
+}
+
+.friend-id:hover {
+  color: var(--text-secondary);
+}
+
+.friend-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.friend-status {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  min-width: 88px;
+  max-width: 160px;
+  padding: 0 12px;
+  background: var(--bg-input);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-inset);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  justify-self: end;
+}
+
+.friend-status.is-online,
+.friend-status.is-in_game,
+.friend-status.is-hosting {
+  color: var(--text-on-accent);
+  background: var(--mc-green);
+  box-shadow: var(--bevel-btn);
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.45);
+}
+
+.friend-remove {
+  justify-self: end;
+}
+
+@media (max-width: 700px) {
+  .friend-row,
+  .friend-row.has-join {
+    grid-template-columns: 40px 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  .friend-actions,
+  .friend-status,
+  .friend-join,
+  .friend-join-slot,
+  .friend-remove {
+    grid-column: 2;
+  }
+}

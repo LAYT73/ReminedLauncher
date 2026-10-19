@@ -1,0 +1,228 @@
+/* Rail */
+.rail {
+  background: var(--bg-sidebar);
+  border-right: 1px solid #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 0;
+  gap: 10px;
+  z-index: 3;
+}
+
+.rail-home,
+.rail-game {
+  --rail-slot: 44px;
+  box-sizing: border-box;
+  width: var(--rail-slot);
+  height: var(--rail-slot);
+  padding: 0;
+  border-radius: 10px;
+  border: 2px solid color-mix(in srgb, var(--text-muted) 45%, transparent);
+  background: color-mix(in srgb, var(--bg) 70%, #000 30%);
+  display: block;
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    filter 0.18s ease,
+    transform 0.12s ease;
+}
+
+.rail-home {
+  margin-bottom: 2px;
+  color: var(--text-secondary);
+}
+
+.rail-home:hover,
+.rail-game:hover {
+  border-color: color-mix(in srgb, var(--accent-text) 55%, var(--text-muted));
+  filter: brightness(1.06);
+}
+
+.rail-home.active,
+.rail-game.active {
+  border-color: var(--accent-text);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent-text) 35%, transparent),
+    0 0 14px color-mix(in srgb, var(--accent-text) 28%, transparent);
+}
+
+.rail-home svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.rail-brand-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+.rail-game .block {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-text) 55%, #2a2a2a) 0 45%,
+    color-mix(in srgb, var(--accent-shadow) 70%, #1a1a1a) 45% 55%,
+    #1a1a1a 55%
+  );
+}
+
+.rail-game .block.vanilla-block {
+  background: linear-gradient(
+    180deg,
+    #7dbe45 0 28%,
+    #8b6914 28% 42%,
+    #6b4f12 42% 70%,
+    #5a4210 70%
+  );
+}
+
+.rail-pack-logo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+/* Isometric pack cube — same bare treatment as vanilla grass block */
+.rail-game.is-bare-logo {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+  box-shadow: none;
+  display: grid;
+  place-items: center;
+  filter: none;
+  transition: transform 0.12s ease;
+}
+
+.rail-game.is-bare-logo .rail-pack-logo {
+  position: static;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: auto;
+  pointer-events: none;
+  transition: transform 0.12s ease;
+}
+
+.rail-game.is-bare-logo:hover,
+.rail-game.is-bare-logo.active {
+  border: none;
+  box-shadow: none;
+  filter: none;
+  transform: none;
+}
+
+.rail-game.is-bare-logo:hover .rail-pack-logo {
+  transform: scale(1.08);
+}
+
+.rail-game.is-bare-logo:active .rail-pack-logo {
+  transform: scale(0.9);
+}
+
+.rail-game.is-bare-logo.active::before {
+  content: none;
+}
+
+.rail-game.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent-text);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent-text) 55%, transparent);
+  z-index: 2;
+}
+
+.rail-spacer {
+  flex: 1;
+}
+
+/* Bare grass-block cube — no rounded frame */
+.rail-vanilla {
+  --rail-slot: 44px;
+  box-sizing: border-box;
+  width: var(--rail-slot);
+  height: var(--rail-slot);
+  margin-bottom: 6px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  position: relative;
+  overflow: visible;
+  box-shadow: none;
+  filter: none;
+  transition: transform 0.12s ease;
+}
+
+.rail-vanilla-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  display: block;
+  image-rendering: auto;
+  pointer-events: none;
+  transition: transform 0.12s ease;
+}
+
+.rail-vanilla:hover .rail-vanilla-logo {
+  transform: scale(1.08);
+}
+
+.rail-vanilla:active .rail-vanilla-logo {
+  transform: scale(0.9);
+}
+
+.rail-vanilla:hover,
+.rail-vanilla.active {
+  transform: none;
+  filter: none;
+  border: none;
+  box-shadow: none;
+}
+
+.rail-vanilla.active::before {
+  content: none;
+}
+
+.rail-settings {
+  width: 40px;
+  height: 40px;
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+}
+
+.rail-settings:hover,
+.rail-settings.active {
+  color: var(--text);
+  background: var(--overlay-hover);
+}
+
+.rail-settings svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}

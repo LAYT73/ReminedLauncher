@@ -1,12 +1,14 @@
 {
   "name": "remined-launcher",
   "private": true,
-  "version": "0.5.2",
+  "version": "0.6.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "dev:offline": "VITE_FORCE_OFFLINE=1 vite",
     "build": "tsc -b && vite build",
+    "typecheck": "tsc --noEmit",
+    "check:fsd": "node scripts/check-fsd.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
@@ -17,6 +19,7 @@
     "@supabase/supabase-js": "^2.117.3",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",
+    "@tauri-apps/plugin-global-shortcut": "^2.4.1",
     "@tauri-apps/plugin-http": "^2.8.2",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-process": "^2.4.0",
@@ -24,7 +27,9 @@
     "livekit-client": "^2.15.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "skinview3d": "^3.4.2"
+    "react-router": "^8.4.0",
+    "skinview3d": "^3.4.2",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

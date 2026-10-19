@@ -20,6 +20,7 @@ pub async fn run_async() -> ExitCode {
     let cmd = args.first().map(String::as_str).unwrap_or("help");
     let result = match cmd {
         "second-client" | "second" => second_client(&args[1..]).await,
+        "smoke-rv" | "smoke" => crate::smoke::run(&args[1..]).await,
         "help" | "-h" | "--help" => {
             print_help();
             Ok(())
@@ -44,6 +45,7 @@ Remined CLI
 
 Usage:
   remined-cli second-client [options]
+  remined-cli smoke-rv --help   (Remined Vanilla compatibility smoke test)
 
 Copy a Remined Vanilla pack (default 26.3 → 26.3-b) and launch a second
 Minecraft client that does not kill the first (unique launchctl label).

@@ -70,6 +70,8 @@ struct VideoGrant {
     can_publish: bool,
     #[serde(rename = "canSubscribe")]
     can_subscribe: bool,
+    #[serde(rename = "canUpdateOwnMetadata")]
+    can_update_own_metadata: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -385,6 +387,18 @@ pub fn ensure_runtime(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(bin)
 }
 
+/// Restrict ICE candidates to the loopback interface so VPN TUN adapters (Happ, etc.)
+/// never contribute host candidates / source addresses (BUG-001).
+fn loopback_iface_yaml() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "\n  interfaces:\n    includes:\n      - lo0"
+    } else if cfg!(target_os = "linux") {
+        "\n  interfaces:\n    includes:\n      - lo"
+    } else {
+        ""
+    }
+}
+
 fn write_config(dir: &Path) -> Result<PathBuf, String> {
     let path = dir.join("livekit.yaml");
     // Loopback-only SFU for host WebView + Porthole tunnel. No public STUN.
@@ -398,7 +412,7 @@ rtc:
   port_range_end: {udp_end}
   use_external_ip: false
   node_ip: 127.0.0.1
-  stun_servers: []
+  stun_servers: []{ifaces}
 room:
   auto_create: true
 keys:
@@ -406,6 +420,7 @@ keys:
 logging:
   level: info
 "#,
+        ifaces = loopback_iface_yaml(),
         tcp = LK_TCP_PORT,
         rtc_tcp = LK_RTC_TCP_PORT,
         udp_start = LK_UDP_START,
@@ -675,6 +690,7 @@ pub fn mint_token(room: &str, identity: &str, name: &str) -> Result<String, Stri
             room_create: true,
             can_publish: true,
             can_subscribe: true,
+            can_update_own_metadata: true,
         },
     };
     let mut header = Header::new(Algorithm::HS256);

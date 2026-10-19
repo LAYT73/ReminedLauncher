@@ -5,5 +5,7 @@
 	<!-- Required so macOS can show a mic prompt for child Java (Simple Voice Chat, etc.) -->
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Remined needs microphone access for voice rooms and in-game voice chat mods.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Remined can share your webcam in voice rooms when you turn it on.</string>
 </dict>
 </plist>

@@ -1,0 +1,412 @@
+/* Pack page — enchant glyphs float over hero + about */
+.pack-stage {
+  position: relative;
+  flex: 1 0 auto;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.pack-enchant {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.enchant-particles-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.enchant-glyph {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  will-change: transform, opacity;
+  transform: translate3d(-9999px, -9999px, 0);
+  opacity: 0;
+  font-family: "Apple Symbols", ui-monospace, "SF Mono", Menlo, sans-serif;
+  font-weight: 500;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+.enchant-glyph-glow,
+.enchant-glyph-core {
+  grid-area: 1 / 1;
+  display: block;
+  line-height: 1;
+}
+
+/* Quiet bloom — separate from the crisp glyph */
+.enchant-glyph-glow {
+  opacity: 0.28;
+  transform: scale(1.05);
+}
+
+.enchant-glyph-core {
+  opacity: 0.92;
+  text-shadow: none;
+}
+
+.pack-stage > .hero,
+.pack-stage > .pack-about {
+  position: relative;
+  z-index: 1;
+}
+
+/* Pack about + gallery */
+.pack-about {
+  flex: 1 1 auto;
+  padding: 28px 32px 40px;
+  border-bottom: 1px solid #000;
+  background:
+    radial-gradient(ellipse at 12% 0%, var(--accent-wash), transparent 45%),
+    linear-gradient(180deg, var(--bg) 0%, var(--pack-about-end) 100%);
+}
+
+.pack-about-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.pack-logo {
+  width: 88px;
+  height: 88px;
+  flex-shrink: 0;
+  border-radius: 0;
+  overflow: hidden;
+  border: 2px solid #000;
+  box-shadow: inset 0 0 0 1px #3a3a3a;
+  background: #1c1c1c;
+  position: relative;
+  display: block;
+}
+
+.pack-logo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+.pack-logo-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.pack-logo.has-art {
+  background: #0e1210;
+}
+
+.pack-logo.is-bare {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  overflow: visible;
+}
+
+.pack-logo.is-bare img {
+  object-fit: contain;
+}
+
+/* Cube logos on pack pages (not the rail) gently bob. */
+.pack-about .pack-logo {
+  animation: pack-logo-bob 3.4s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes pack-logo-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pack-about .pack-logo {
+    animation: none;
+  }
+}
+
+.pack-logo.is-placeholder {
+  background:
+    linear-gradient(145deg, rgba(108, 195, 73, 0.35), rgba(30, 60, 20, 0.9)),
+    #24301c;
+}
+
+.pack-logo-fallback {
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: 0.04em;
+  color: #e8ffe0;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
+}
+
+.pack-about-titles {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0 8px;
+}
+
+.pack-about-titles > .pack-about-title,
+.pack-about-titles > .pack-about-version {
+  width: 100%;
+}
+
+.pack-about-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(26px, 3.4vw, 34px);
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.pack-about-tagline {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.35;
+  max-width: 42rem;
+}
+
+.pack-about-version {
+  margin: 8px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+}
+
+.vanilla-skin-badge {
+  display: inline-block;
+  margin: 10px 0 0;
+  padding: 5px 9px;
+  max-width: 100%;
+  background: var(--mc-stone);
+  border: 2px solid #000;
+  box-shadow: var(--bevel-panel);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-on-stone);
+  text-shadow: 1px 1px 0 var(--shadow-soft);
+  line-height: 1.35;
+  image-rendering: pixelated;
+}
+
+.vanilla-skin-badge.is-ok {
+  background: #3c8527;
+  color: #fff;
+  text-shadow: 1px 1px 0 #1a4a12;
+  box-shadow:
+    inset 1px 1px 0 #6cc349,
+    inset -1px -1px 0 #2a5c1a;
+}
+
+.vanilla-skin-badge.is-beta {
+  background: #8a6a18;
+  color: #fff8d8;
+  text-shadow: 1px 1px 0 #3a2a08;
+  box-shadow:
+    inset 1px 1px 0 #d4b45a,
+    inset -1px -1px 0 #5a4210;
+}
+
+.pack-about-blurb {
+  margin: 0 0 16px;
+  max-width: 46rem;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.pack-highlights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 28px;
+  padding: 0;
+  list-style: none;
+}
+
+.pack-highlights li {
+  padding: 4px 9px;
+  border-radius: 0;
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--chip-text);
+}
+
+.pack-gallery-heading {
+  margin: 36px 0 14px;
+  font-family: var(--font-display);
+  font-size: 20px;
+  letter-spacing: 0.03em;
+  line-height: 1;
+}
+
+.pack-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 920px;
+}
+
+.pack-gallery-stage {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  border-radius: 0;
+  overflow: hidden;
+  background: #0d0d0d;
+  border: 3px solid #000;
+  box-shadow:
+    var(--bevel-panel),
+    0 0 0 1px color-mix(in srgb, var(--accent-text) 14%, transparent),
+    0 0 18px color-mix(in srgb, var(--accent-text) 16%, transparent),
+    0 0 36px color-mix(in srgb, var(--accent-text) 8%, transparent);
+}
+
+.pack-gallery-slide {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.45s ease;
+  pointer-events: none;
+}
+
+.pack-gallery-slide.is-active {
+  opacity: 1;
+}
+
+.pack-gallery-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  box-sizing: border-box;
+  width: 36px;
+  height: 40px;
+  padding: 0;
+  border-radius: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-on-stone);
+  background: var(--mc-stone);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-btn);
+  font-family: var(--font-display);
+  text-shadow: 1px 1px 0 var(--shadow-soft);
+  image-rendering: pixelated;
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    background 0.12s ease,
+    filter 0.12s ease,
+    box-shadow 0.12s ease,
+    transform 0.1s ease;
+  z-index: 2;
+}
+
+.pack-gallery-stage:hover .pack-gallery-nav,
+.pack-gallery-nav:focus-visible {
+  opacity: 1;
+}
+
+.pack-gallery-nav:hover {
+  background: var(--mc-stone-mid);
+  filter: brightness(1.06);
+}
+
+.pack-gallery-nav:active {
+  transform: translateY(calc(-50% + 2px));
+  box-shadow: var(--bevel-btn-press);
+}
+
+.pack-gallery-nav.is-prev {
+  left: 10px;
+}
+
+.pack-gallery-nav.is-next {
+  right: 10px;
+}
+
+.pack-gallery-nav svg {
+  width: 10px;
+  height: 14px;
+}
+
+.pack-gallery-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  image-rendering: pixelated;
+}
+
+.pack-gallery-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 0;
+  background: var(--accent-deep);
+  border: 2px solid var(--accent-shadow);
+  box-shadow:
+    inset 1px 1px 0 var(--mc-green-mid),
+    inset -1px -1px 0 var(--accent-shadow);
+  opacity: 0.55;
+  transition: background 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+}
+
+.pack-gallery-dot.is-active {
+  opacity: 1;
+  background: var(--mc-green);
+  border-color: var(--accent-shadow);
+  box-shadow:
+    inset 1px 1px 0 var(--mc-green-hi),
+    inset -1px -1px 0 var(--accent-shadow);
+}
+
+.pack-gallery-dot:hover:not(.is-active) {
+  opacity: 0.85;
+  background: var(--accent-deep);
+  border-color: var(--mc-green-mid);
+}
+
+@media (max-width: 900px) {
+  .pack-about {
+    padding: 22px 16px 32px;
+  }
+
+  .pack-about-head {
+    align-items: flex-start;
+  }
+
+  .pack-gallery-nav {
+    opacity: 1;
+  }
+}

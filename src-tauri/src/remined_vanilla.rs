@@ -11,7 +11,7 @@ use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
-use tauri::AppHandle;
+use crate::progress::Ctx as AppHandle;
 
 /// Intersection of SkinShuffle + CustomSkinLoader (Fabric), newest first.
 const SUPPORTED_VERSIONS: &[&str] = &[
@@ -170,7 +170,26 @@ fn opti_mod_list(game: &str, java_major: Option<u32>) -> Vec<(&'static str, &'st
         out.push(OPTI_C2ME);
     }
     out.extend_from_slice(OPTI_ADDITIONAL);
+    if moreculling_broken_on(game) {
+        out.retain(|(p, _)| *p != MODRINTH_MORE_CULLING);
+    }
+    if letmedespawn_broken_on(game) {
+        out.retain(|(p, _)| *p != "vE2FN5qn");
+    }
     out
+}
+
+/// Let Me Despawn pulls Almanac 1.21.1, whose `Entity#spawnAtLocation` mixin target changed in
+/// 1.21.2 → "Mixin transformation of Entity failed" (smoke-verified). Optional mod → skip.
+fn letmedespawn_broken_on(game: &str) -> bool {
+    game == "1.21.2"
+}
+
+/// MoreCulling 0.25.0 (the only 1.20.5/1.20.6 build) ships a mixin plugin whose
+/// conditional-mixin library is missing at load time → NoClassDefFoundError; on 1.21.2 only the
+/// 1.21.3 build exists and its Sodium-compat mixin fails to inject (both smoke-verified).
+fn moreculling_broken_on(game: &str) -> bool {
+    matches!(game, "1.20.5" | "1.20.6" | "1.21.2")
 }
 
 /// Hints for picking Modrinth builds that stay compatible with already-chosen Sodium.
@@ -1209,13 +1228,23 @@ async fn install_sodium_iris(
     // Prefer exact MC + release Iris. (Iris 1.8.8 = Sodium 0.6.x; only 1.8.13+ wants 0.8.x,
     // and on 1.21.1 that line is still beta — stay on the stable release pair.)
     iris_versions.sort_by(|a, b| {
-        let exact = |v: &ModrinthVersion| version_mentions_exact_game(&v.version_number, game) as i32;
+        let exact = |v: &ModrinthVersion| {
+            (version_mentions_exact_game(&v.version_number, game)
+                || modrinth_file_mentions_exact_game(v, game)) as i32
+        };
         let release = |v: &ModrinthVersion| (v.version_type == "release") as i32;
         exact(b)
             .cmp(&exact(a))
             .then_with(|| release(b).cmp(&release(a)))
             .then_with(|| b.version_number.cmp(&a.version_number))
     });
+    // Pair search: take the newest Iris whose own `fabric.mod.json` Sodium requirement is
+    // satisfied by a Sodium build that exists for this Minecraft version. (Iris 1.11 wants
+    // Sodium 0.9.x, which only exists for 26.1.2; 26.1.1 needs Iris 1.10.x + Sodium 0.8.9.)
+    if let Some(pair) = find_iris_sodium_pair(client, game, mods_dir, &iris_versions).await {
+        progress::check_cancelled()?;
+        return pair;
+    }
     let iris = iris_versions.swap_remove(0);
     clear_mod_jars_with_markers(mods_dir, &["iris"]);
     download_modrinth_version_file(client, &iris, mods_dir).await?;
@@ -1271,6 +1300,103 @@ async fn install_sodium_iris(
     }
     progress::check_cancelled()?;
     Ok(())
+}
+
+/// Returns `Some(result)` when a consistent Iris + Sodium pair was installed.
+async fn find_iris_sodium_pair(
+    client: &reqwest::Client,
+    game: &str,
+    mods_dir: &Path,
+    iris_versions: &[ModrinthVersion],
+) -> Option<Result<(), String>> {
+    use crate::mod_audit::{read_jar_meta, version_matches};
+    let mut sodium_versions = fetch_modrinth_versions(client, MODRINTH_SODIUM, game)
+        .await
+        .ok()?;
+    sort_modrinth_versions(&mut sodium_versions, game, ModrinthPickHints::default());
+    sodium_versions.retain(|v| !is_prerelease_modrinth(v));
+    if sodium_versions.is_empty() {
+        return None;
+    }
+    let sodium_semver = |v: &ModrinthVersion| -> Option<String> {
+        let f = pick_modrinth_file(v)?;
+        // Drop `mc1.20.2` style Minecraft tokens so the mod's own version is parsed.
+        let lower = f.filename.to_ascii_lowercase();
+        let mut cleaned = String::new();
+        let mut it = lower.chars().peekable();
+        while let Some(c) = it.next() {
+            if c == 'm' && it.peek() == Some(&'c') {
+                let mut look = it.clone();
+                look.next();
+                if look.peek().map(|d| d.is_ascii_digit()).unwrap_or(false) {
+                    it.next();
+                    while it.peek().map(|d| d.is_ascii_digit() || *d == '.').unwrap_or(false) {
+                        it.next();
+                    }
+                    continue;
+                }
+            }
+            cleaned.push(c);
+        }
+        let (a, b, c) = parse_first_semver(&cleaned)?;
+        Some(format!("{a}.{b}.{c}"))
+    };
+    for iris in iris_versions.iter().take(8) {
+        if iris.version_type != "release" {
+            continue;
+        }
+        clear_mod_jars_with_markers(mods_dir, &["iris"]);
+        let Ok(file) = download_modrinth_version_file(client, iris, mods_dir).await else {
+            continue;
+        };
+        let Some(meta) = read_jar_meta(&mods_dir.join(&file)) else {
+            continue;
+        };
+        let preds: Vec<String> = meta
+            .depends
+            .iter()
+            .find(|(id, _)| id == "sodium")
+            .map(|(_, p)| p.clone())
+            .unwrap_or_default();
+        let candidates: Vec<&ModrinthVersion> = sodium_versions
+            .iter()
+            .filter(|sv| {
+                preds.is_empty()
+                    || sodium_semver(sv)
+                        .map(|ver| version_matches(&preds, &ver))
+                        .unwrap_or(false)
+            })
+            .take(4)
+            .collect();
+        for sv in candidates {
+            clear_sodium_jars(mods_dir);
+            let Ok(sfile) = download_modrinth_version_file(client, sv, mods_dir).await else {
+                continue;
+            };
+            // Verify the pair for real: no missing/wrong-version/breaks between iris & sodium.
+            let mods = crate::mod_audit::read_mods_dir(mods_dir);
+            let issues = crate::mod_audit::audit_issues(
+                &mods,
+                &crate::mod_audit::AuditEnv {
+                    minecraft: game,
+                    loader: None,
+                    java_major: None,
+                },
+            );
+            let bad = issues.iter().any(|i| {
+                let involved = |id: &str| id == "iris" || id == "sodium";
+                involved(&i.owner_id) && (involved(&i.dep) || i.dep.is_empty())
+                    && !matches!(i.dep.as_str(), "minecraft" | "fabricloader" | "java")
+            });
+            if !bad {
+                return Some(Ok(()));
+            }
+            let _ = fs::remove_file(mods_dir.join(&sfile));
+        }
+        let _ = fs::remove_file(mods_dir.join(&file));
+    }
+    clear_mod_jars_with_markers(mods_dir, &["iris"]);
+    None
 }
 
 async fn download_optional_mod_list(
@@ -1343,7 +1469,11 @@ async fn download_perf_mods(
     };
     let mods = opti_mod_list(game, java_major);
     download_optional_mod_list(app, client, game, mods_dir, &mods, hints, 58, progress_end)
-        .await
+        .await?;
+    for removed in reconcile_stacks(mods_dir) {
+        progress::emit(app, "pack", progress_end, format!("Dropped conflicting {removed}"));
+    }
+    Ok(())
 }
 
 fn markers_for_perf_project(project: &str) -> &'static [&'static str] {
@@ -1384,7 +1514,20 @@ fn iris_jar_mismatched_for_game(mods_dir: &Path, game: &str) -> bool {
         found = true;
         // e.g. iris-mc1.20.1 on game 1.20 → incompatible Sodium pin risk
         if !version_mentions_exact_game(&name, game) {
-            return true;
+            // Jar name can lag behind (Iris mc26.1.1 also runs on 26.1) — trust the
+            // jar's own `minecraft` dependency range instead.
+            let ok = crate::mod_audit::read_jar_meta(&ent.path())
+                .and_then(|m| {
+                    m.depends
+                        .iter()
+                        .find(|(id, _)| id == "minecraft")
+                        .map(|(_, p)| crate::mod_audit::version_matches(p, game))
+                })
+                // No `minecraft` constraint declared: Modrinth listed this jar for `game`.
+                .unwrap_or(true);
+            if !ok {
+                return true;
+            }
         }
     }
     !found
@@ -1431,10 +1574,270 @@ fn opti_jars_mismatched_for_game(mods_dir: &Path, markers: &[&str], game: &str) 
 /// Strip jars we used to ship but that crash certain MC lines (e.g. Memory Leak Fix on 1.20).
 fn remove_known_bad_opti_jars(mods_dir: &Path, game: &str, java_major: Option<u32>) {
     clear_mod_jars_with_markers(mods_dir, &["memoryleakfix", "memory-leak-fix"]);
+    if moreculling_broken_on(game) {
+        clear_mod_jars_with_markers(mods_dir, &["moreculling", "more-culling"]);
+    }
+    if letmedespawn_broken_on(game) {
+        clear_mod_jars_with_markers(mods_dir, &["letmedespawn", "let-me-despawn", "almanac"]);
+    }
     // C2ME natives-math requires Java 25 — drop on Java 17/21 packs.
     if !allow_c2me(game, java_major) {
         clear_mod_jars_with_markers(mods_dir, &["c2me"]);
     }
+}
+
+fn names_have(names: &[String], markers: &[&str]) -> bool {
+    names
+        .iter()
+        .any(|n| n.ends_with(".jar") && markers.iter().any(|m| n.contains(m)))
+}
+
+/// Marker groups to delete so one consistent stack remains (BUG-005).
+/// Input: lowercase jar file names. Pure → unit-testable.
+fn stack_conflict_removals(names: &[String]) -> Vec<&'static [&'static str]> {
+    const STARLIGHT: &[&str] = &["starlight"];
+    const MODERNFIX: &[&str] = &["modernfix", "modern-fix"];
+    const RESOURCIFY: &[&str] = &["resourcify"];
+    let mut out: Vec<&'static [&'static str]> = Vec::new();
+    let has_scalable = names_have(names, &["scalablelux"]);
+    let has_bad_opt = names_have(names, &["badoptimizations", "bad-optimizations"]);
+    // Two lighting engines never coexist: prefer ScalableLux (modern) over Starlight.
+    if has_scalable && names_have(names, STARLIGHT) {
+        out.push(STARLIGHT);
+    }
+    // ModernFix and BadOptimizations overlap heavily → prefer the modern pick.
+    if has_bad_opt && names_have(names, MODERNFIX) {
+        out.push(MODERNFIX);
+    }
+    // ImmediatelyFast 1.2.x (the only 1.20.1 build) hooks Iris' old `net.coderbot.iris` package;
+    // with Iris 1.7.x (`net.irisshaders`) the JVM dies right after window creation (smoke 1.20.1).
+    if names_have(names, &["immediatelyfast-1.2.", "immediatelyfast-1.1.", "immediatelyfast-1.0."])
+        && names_have(names, &["iris-1.7."])
+    {
+        out.push(&["immediatelyfast"]);
+    }
+    // Resourcify is a Kotlin mod.
+    if names_have(names, RESOURCIFY) && !names_have(names, &["fabric-language-kotlin"]) {
+        out.push(RESOURCIFY);
+    }
+    out
+}
+
+fn lower_jar_names(mods_dir: &Path) -> Vec<String> {
+    fs::read_dir(mods_dir)
+        .map(|rd| {
+            rd.flatten()
+                .map(|e| e.file_name().to_string_lossy().to_ascii_lowercase())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Apply [`stack_conflict_removals`] on disk. Returns removed marker labels.
+fn reconcile_stacks(mods_dir: &Path) -> Vec<String> {
+    let names = lower_jar_names(mods_dir);
+    let mut removed = Vec::new();
+    for markers in stack_conflict_removals(&names) {
+        clear_mod_jars_with_markers(mods_dir, markers);
+        removed.push(markers[0].to_string());
+    }
+    removed
+}
+
+/// Final gate: structural checks on the mods folder. Err = do not ship this install.
+fn validate_mods_dir(mods_dir: &Path, game: &str) -> Result<(), String> {
+    let names = lower_jar_names(mods_dir);
+    let mut errs: Vec<String> = Vec::new();
+    for (label, markers) in [
+        ("Fabric API", &["fabric-api"][..]),
+        ("SkinShuffle", &["skinshuffle"][..]),
+        ("CustomSkinLoader", &["customskinloader"][..]),
+    ] {
+        if !names_have(&names, markers) {
+            errs.push(format!("{label} jar is missing"));
+        }
+    }
+    let has_iris = names_have(&names, &["iris"]);
+    if has_iris && !mods_dir_has_sodium(mods_dir) {
+        errs.push("Iris is installed without Sodium".into());
+    }
+    // Iris/Sodium compatibility is decided by the real dependency audit (fabric.mod.json),
+    // not by jar-name heuristics.
+    if has_iris && iris_jar_mismatched_for_game(mods_dir, game) {
+        errs.push(format!("Iris jar does not target Minecraft {game}"));
+    }
+    if sodium_extra_line_mismatched(mods_dir, detect_sodium_maj_min(mods_dir)) {
+        errs.push("Sodium Extra is on a different line than Sodium".into());
+    }
+    if !stack_conflict_removals(&names).is_empty() {
+        errs.push("conflicting optimization stacks are still present".into());
+    }
+    if errs.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Remined Vanilla {game}: mod set is not safe to launch — {}. Reinstall, or report this version.",
+            errs.join("; ")
+        ))
+    }
+}
+
+fn slug_for_mod_id(id: &str) -> String {
+    match id {
+        "yet_another_config_lib_v3" => "yacl".into(),
+        "cloth-config" | "cloth-config2" => "cloth-config".into(),
+        "owo" => "owo-lib".into(),
+        "fabric" | "fabric-api" => "fabric-api".into(),
+        other => other.replace('_', "-"),
+    }
+}
+
+/// Mods we must never auto-drop (the launcher's identity).
+fn is_core_mod_id(id: &str) -> bool {
+    matches!(
+        id,
+        "fabric-api"
+            | "fabric"
+            | "skinshuffle"
+            | "customskinloader"
+            | "mcwifipnp"
+            | "sodium"
+            | "iris"
+    ) || id.starts_with("fabric-")
+}
+
+/// Read every jar's `fabric.mod.json`, then fetch missing / too-old dependencies from Modrinth
+/// or drop optional (non-core) mods that cannot be satisfied. Returns what was changed.
+async fn repair_with_audit(
+    app: &AppHandle,
+    client: &reqwest::Client,
+    game: &str,
+    mods_dir: &Path,
+    loader: &str,
+    java_major: Option<u32>,
+) -> Vec<String> {
+    use crate::mod_audit::{self, AuditEnv, IssueKind};
+    let mut notes: Vec<String> = Vec::new();
+    let mut tried: HashSet<String> = HashSet::new();
+    let env_loader = if loader.is_empty() { None } else { Some(loader) };
+    for _round in 0..5 {
+        let mods = mod_audit::read_mods_dir(mods_dir);
+        let issues = mod_audit::audit_issues(
+            &mods,
+            &AuditEnv {
+                minecraft: game,
+                loader: env_loader,
+                java_major,
+            },
+        );
+        if issues.is_empty() {
+            break;
+        }
+        let mut changed = false;
+        for issue in issues {
+            let owner_core = is_core_mod_id(&issue.owner_id);
+            let drop_owner = |notes: &mut Vec<String>, why: &str| -> bool {
+                if owner_core {
+                    return false;
+                }
+                let path = mods_dir.join(&issue.owner_top_file);
+                if path.is_file() && fs::remove_file(&path).is_ok() {
+                    let msg = format!("dropped {} ({why})", issue.owner_top_file);
+                    progress::emit(app, "pack", 31, format!("Removing {} — {why}", issue.owner_top_file));
+                    notes.push(msg);
+                    return true;
+                }
+                false
+            };
+            match issue.kind {
+                IssueKind::Missing | IssueKind::WrongVersion => {
+                    let builtin = matches!(
+                        issue.dep.as_str(),
+                        "minecraft" | "fabricloader" | "fabric-loader" | "java"
+                    );
+                    let key = format!("{:?}:{}", issue.kind, issue.dep);
+                    if builtin || !tried.insert(key) {
+                        changed |= drop_owner(&mut notes, &format!("needs {}", issue.dep));
+                        continue;
+                    }
+                    // Sodium is pinned by the Iris pair chosen earlier — never bump it for a
+                    // side mod (Sodium Extra); drop that side mod instead.
+                    if issue.kind == IssueKind::WrongVersion
+                        && matches!(issue.dep.as_str(), "sodium" | "iris")
+                        && !owner_core
+                    {
+                        changed |= drop_owner(
+                            &mut notes,
+                            &format!("needs a different {}", issue.dep),
+                        );
+                        continue;
+                    }
+                    if issue.kind == IssueKind::WrongVersion {
+                        match mods.iter().find(|m| m.id == issue.dep) {
+                            Some(provider) => {
+                                let _ = fs::remove_file(mods_dir.join(&provider.file));
+                            }
+                            None => {
+                                changed |= drop_owner(&mut notes, &format!("needs {}", issue.dep));
+                                continue;
+                            }
+                        }
+                    }
+                    let slug = slug_for_mod_id(&issue.dep);
+                    let mut resolved = new_modrinth_resolved_set();
+                    progress::emit(app, "pack", 31, format!("Resolving dependency {slug}…"));
+                    match try_download_modrinth_mod_with_deps(
+                        client,
+                        &slug,
+                        game,
+                        mods_dir,
+                        &mut resolved,
+                        ModrinthPickHints::default(),
+                        0,
+                    )
+                    .await
+                    {
+                        Ok(Some(name)) => {
+                            notes.push(format!("installed {name} for {}", issue.owner_id));
+                            changed = true;
+                        }
+                        _ => {
+                            changed |=
+                                drop_owner(&mut notes, &format!("{} unavailable for {game}", issue.dep));
+                        }
+                    }
+                }
+                IssueKind::Breaks | IssueKind::Duplicate => {
+                    changed |= drop_owner(&mut notes, &format!("conflicts with {}", issue.dep));
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    notes
+}
+
+fn write_mods_manifest(
+    instance: &Path,
+    game: &str,
+    loader: &str,
+    java_major: Option<u32>,
+) -> Result<(), String> {
+    let mods_dir = instance.join("mods");
+    let mods = crate::mod_audit::read_mods_dir(&mods_dir);
+    let manifest = json!({
+        "game": game,
+        "loader": loader,
+        "java_major": java_major,
+        "mods": crate::mod_audit::manifest_json(&mods, &mods_dir),
+    });
+    fs::write(
+        instance.join("mods-manifest.json"),
+        serde_json::to_vec_pretty(&manifest).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())
 }
 
 fn opti_jars_look_prerelease(mods_dir: &Path, markers: &[&str]) -> bool {
@@ -1542,6 +1945,7 @@ async fn ensure_perf_mods(
         )
         .await;
     }
+    reconcile_stacks(mods_dir);
     Ok(())
 }
 
@@ -1632,6 +2036,33 @@ pub async fn install_version(
     write_mcwifipnp_offline_defaults(&dest)?;
     progress::check_cancelled()?;
 
+    reconcile_stacks(&mods_dir);
+    let repaired = repair_with_audit(app, &client, version_id, &mods_dir, &loader, java_major).await;
+    reconcile_stacks(&mods_dir);
+    for n in &repaired {
+        progress::emit(app, "pack", 38, format!("Dependency fix: {n}"));
+    }
+    let final_issues = crate::mod_audit::audit(
+        &crate::mod_audit::read_mods_dir(&mods_dir),
+        &crate::mod_audit::AuditEnv {
+            minecraft: version_id,
+            loader: Some(&loader),
+            java_major,
+        },
+    );
+    if !final_issues.is_empty() {
+        let _ = clear_managed_mod_jars(&mods_dir);
+        return Err(format!(
+            "Remined Vanilla {version_id}: unresolved mod dependencies — {}",
+            final_issues.join("; ")
+        ));
+    }
+    if let Err(e) = validate_mods_dir(&mods_dir, version_id) {
+        let _ = clear_managed_mod_jars(&mods_dir);
+        return Err(e);
+    }
+    write_mods_manifest(&dest, version_id, &loader, java_major)?;
+
     let meta = PackInstallMeta {
         id: pack_id.clone(),
         name: format!("Remined Vanilla {version_id}"),
@@ -1678,6 +2109,20 @@ pub async fn ensure_installed(
         let _ = download_modrinth_mod(&client, MODRINTH_MCWIFIPNP, game, &mods_dir).await;
     }
     let _ = ensure_perf_mods(app, &client, game, &mods_dir, java_major).await;
+    let loader_name = instance::read_meta(&instance)
+        .and_then(|m| m.version_json)
+        .and_then(|j| {
+            j.strip_prefix("fabric-loader-")
+                .and_then(|r| r.strip_suffix(&format!("-{game}.json")))
+                .map(String::from)
+        })
+        .unwrap_or_default();
+    let _ = repair_with_audit(app, &client, game, &mods_dir, &loader_name, java_major).await;
+    reconcile_stacks(&mods_dir);
+    if let Err(e) = validate_mods_dir(&mods_dir, game) {
+        progress::emit(app, "pack", 50, format!("Warning: {e}"));
+    }
+    let _ = write_mods_manifest(&instance, game, &loader_name, java_major);
     let _ = write_mcwifipnp_offline_defaults(&instance);
     progress::emit(app, "fabric", 1, "Checking Fabric runtime…");
     runtime::prepare_runtime(app, root, &instance).await?;
@@ -1709,4 +2154,68 @@ fn write_mcwifipnp_offline_defaults(instance: &Path) -> Result<(), String> {
     let pretty = serde_json::to_vec_pretty(&value).map_err(|e| e.to_string())?;
     fs::write(&path, pretty).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+pub fn supported_versions() -> &'static [&'static str] {
+    SUPPORTED_VERSIONS
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn names(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn iris_sodium_lines() {
+        assert!(!iris_needs_sodium_08("1.8.8+mc1.21.1"));
+        assert!(iris_needs_sodium_08("1.8.13+mc1.21.1"));
+        assert!(iris_needs_sodium_08("1.9.0"));
+        assert_eq!(parse_zero_maj_min("sodium-fabric-0.6.13+mc1.21.1.jar"), Some((0, 6)));
+        assert_eq!(parse_zero_maj_min("1.21.1"), None);
+    }
+
+    #[test]
+    fn lighting_stack_is_never_doubled() {
+        let n = names(&["starlight-1.1.jar", "scalablelux-0.1.jar"]);
+        assert_eq!(stack_conflict_removals(&n).len(), 1);
+        let n = names(&["modernfix-5.jar", "badoptimizations-2.jar"]);
+        assert_eq!(stack_conflict_removals(&n).len(), 1);
+        let n = names(&["starlight-1.1.jar", "modernfix-5.jar"]);
+        assert!(stack_conflict_removals(&n).is_empty());
+    }
+
+    #[test]
+    fn old_immediatelyfast_dropped_with_iris_17() {
+        let names: Vec<String> = [
+            "immediatelyfast-1.2.4+1.20.1.jar",
+            "iris-1.7.6+mc1.20.1.jar",
+            "sodium-fabric-0.5.13+mc1.20.1.jar",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        assert_eq!(stack_conflict_removals(&names), vec![&["immediatelyfast"][..]]);
+        let ok: Vec<String> = ["immediatelyfast-1.2.4+1.20.1.jar", "iris-mc1.20.1-1.6.17.jar"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert!(stack_conflict_removals(&ok).is_empty());
+    }
+
+    #[test]
+    fn resourcify_needs_flk() {
+        let n = names(&["resourcify-1.jar"]);
+        assert_eq!(stack_conflict_removals(&n).len(), 1);
+        let n = names(&["resourcify-1.jar", "fabric-language-kotlin-1.13.jar"]);
+        assert!(stack_conflict_removals(&n).is_empty());
+    }
+
+    #[test]
+    fn c2me_only_on_java_25() {
+        assert!(!allow_c2me("1.21.1", Some(21)));
+        assert!(allow_c2me("1.21.1", Some(25)));
+    }
 }

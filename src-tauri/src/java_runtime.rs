@@ -6,7 +6,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use tar::Archive;
-use tauri::AppHandle;
+use crate::progress::Ctx as AppHandle;
 use zip::ZipArchive;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

@@ -15,6 +15,9 @@
 	<true/>
 	<key>com.apple.security.device.microphone</key>
 	<true/>
+	<!-- Optional webcam tile in voice rooms -->
+	<key>com.apple.security.device.camera</key>
+	<true/>
 	<!-- WebRTC (UDP) needs both; client-only cannot receive datagrams -->
 	<key>com.apple.security.network.client</key>
 	<true/>

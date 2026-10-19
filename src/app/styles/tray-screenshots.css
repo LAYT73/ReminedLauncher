@@ -1,0 +1,50 @@
+/* Game tray + screenshots */
+.game-tray {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 10px;
+}
+
+.screenshot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.screenshot-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  background: var(--bg-input);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel);
+}
+
+.screenshot-card img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: #000;
+  display: block;
+}
+
+.screenshot-card .screenshot-placeholder {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+}
+
+.screenshot-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 12px;
+  align-items: center;
+}
+
+.screenshot-actions {
+  display: flex;
+  gap: 6px;
+}

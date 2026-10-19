@@ -1,6 +1,9 @@
 mod asset_cache;
 pub mod cli;
 mod config;
+mod diag;
+mod gamewatch;
+pub mod mod_audit;
 mod instance;
 mod java_runtime;
 mod onboarding;
@@ -11,6 +14,7 @@ mod progress;
 mod remined_vanilla;
 mod runtime;
 mod skinshuffle_patch;
+mod smoke;
 mod vanilla;
 mod vanilla_skin_pack;
 mod voice_log;
@@ -481,7 +485,7 @@ fn resolve_media_cache(
 
 #[tauri::command]
 fn get_game_phase(session: State<'_, Mutex<GameSession>>) -> GamePhase {
-    let mut session = session.lock().expect("game session lock");
+    let mut session = diag::lock_session(&session);
     refresh_session(&mut session);
     session.phase
 }
@@ -495,7 +499,7 @@ fn get_runtime_status(app: AppHandle) -> Result<RuntimeStatus, String> {
 #[tauri::command]
 async fn run_onboarding(app: AppHandle) -> Result<OnboardingState, String> {
     let root = paths::remined_root(&app)?;
-    onboarding::run_full(&app, &root).await
+    onboarding::run_full(&app.clone().into(), &root).await
 }
 
 #[tauri::command]
@@ -511,7 +515,7 @@ async fn fetch_pack_release(pack_id: String) -> Result<PackRelease, String> {
 #[tauri::command]
 async fn sync_selected_pack(app: AppHandle, pack_id: String) -> Result<PackStatus, String> {
     let root = paths::remined_root(&app)?;
-    pack_sync::sync_pack(&app, &root, &pack_id).await
+    pack_sync::sync_pack(&app.clone().into(), &root, &pack_id).await
 }
 
 #[tauri::command]
@@ -527,7 +531,7 @@ async fn ensure_pack(app: AppHandle, pack_id: String) -> Result<PackStatus, Stri
     if pack_id.trim().is_empty() {
         return Err("No pack selected".into());
     }
-    onboarding::ensure_pack(&app, &root, pack_id.trim()).await
+    onboarding::ensure_pack(&app.clone().into(), &root, pack_id.trim()).await
 }
 
 #[tauri::command]
@@ -550,7 +554,7 @@ async fn install_vanilla_version(
     version_id: String,
 ) -> Result<PackStatus, String> {
     let root = paths::remined_root(&app)?;
-    vanilla::install_version(&app, &root, version_id.trim()).await
+    vanilla::install_version(&app.clone().into(), &root, version_id.trim()).await
 }
 
 #[tauri::command]
@@ -567,7 +571,7 @@ async fn install_remined_vanilla_version(
     version_id: String,
 ) -> Result<PackStatus, String> {
     let root = paths::remined_root(&app)?;
-    remined_vanilla::install_version(&app, &root, version_id.trim()).await
+    remined_vanilla::install_version(&app.clone().into(), &root, version_id.trim()).await
 }
 
 #[tauri::command]
@@ -795,7 +799,7 @@ async fn launch_pack(
     session: State<'_, Mutex<GameSession>>,
 ) -> Result<LaunchResult, String> {
     {
-        let mut session = session.lock().expect("game session lock");
+        let mut session = diag::lock_session(&session);
         refresh_session(&mut session);
         if session.phase != GamePhase::Idle {
             return Ok(LaunchResult {
@@ -808,7 +812,7 @@ async fn launch_pack(
     }
 
     let fail = |session: &State<'_, Mutex<GameSession>>, msg: String| {
-        session.lock().expect("game session lock").phase = GamePhase::Idle;
+        diag::lock_session(&session).phase = GamePhase::Idle;
         Ok(LaunchResult {
             ok: false,
             message: msg,
@@ -819,7 +823,7 @@ async fn launch_pack(
     let root = match paths::remined_root(&app) {
         Ok(root) => root,
         Err(err) => {
-            session.lock().expect("game session lock").phase = GamePhase::Idle;
+            diag::lock_session(&session).phase = GamePhase::Idle;
             return Err(err);
         }
     };
@@ -844,7 +848,7 @@ async fn launch_pack(
         profile.selected_pack = pack_id.clone();
     }
     if let Err(err) = write_profile(&root, &profile) {
-        session.lock().expect("game session lock").phase = GamePhase::Idle;
+        diag::lock_session(&session).phase = GamePhase::Idle;
         return Err(err);
     }
 
@@ -866,19 +870,19 @@ async fn launch_pack(
             match materialize_skin(&root, skin).await {
                 Ok(local) => local,
                 Err(err) => {
-                    session.lock().expect("game session lock").phase = GamePhase::Idle;
+                    diag::lock_session(&session).phase = GamePhase::Idle;
                     return Err(err);
                 }
             }
         } else {
             let dir = root.join(".remined").join("skins");
             if let Err(err) = fs::create_dir_all(&dir) {
-                session.lock().expect("game session lock").phase = GamePhase::Idle;
+                diag::lock_session(&session).phase = GamePhase::Idle;
                 return Err(err.to_string());
             }
             let dest = dir.join("active.png");
             if let Err(err) = fs::write(&dest, default_steve_png()) {
-                session.lock().expect("game session lock").phase = GamePhase::Idle;
+                diag::lock_session(&session).phase = GamePhase::Idle;
                 return Err(err.to_string());
             }
             dest
@@ -886,12 +890,12 @@ async fn launch_pack(
         if let Err(err) =
             vanilla_skin_pack::apply(&instance, &skin_local, &model, version_id, name)
         {
-            session.lock().expect("game session lock").phase = GamePhase::Idle;
+            diag::lock_session(&session).phase = GamePhase::Idle;
             return Err(err);
         }
     } else {
         if let Err(err) = lock_skinshuffle_ui(&instance) {
-            session.lock().expect("game session lock").phase = GamePhase::Idle;
+            diag::lock_session(&session).phase = GamePhase::Idle;
             return Err(err);
         }
         if let Err(err) = apply_customskinloader_config(&instance) {
@@ -901,19 +905,19 @@ async fn launch_pack(
             match materialize_skin(&root, skin).await {
                 Ok(local) => {
                     if let Err(err) = apply_skinshuffle(&instance, &local, &model) {
-                        session.lock().expect("game session lock").phase = GamePhase::Idle;
+                        diag::lock_session(&session).phase = GamePhase::Idle;
                         return Err(err);
                     }
                 }
                 Err(err) => {
-                    session.lock().expect("game session lock").phase = GamePhase::Idle;
+                    diag::lock_session(&session).phase = GamePhase::Idle;
                     return Err(err);
                 }
             }
         } else if let Err(err) = apply_default_steve_skin(&instance, &model) {
             // No cloud skin → Remined default Steve (same as UI), not vanilla blank preset
             let _ = clear_skinshuffle(&instance);
-            session.lock().expect("game session lock").phase = GamePhase::Idle;
+            diag::lock_session(&session).phase = GamePhase::Idle;
             return Err(err);
         }
     }
@@ -943,12 +947,12 @@ async fn launch_pack(
             // Fresh JDK download — drive the playbar PixelProgress via remined-progress.
             progress::reset();
             progress::emit(
-                &app,
+                &app.clone().into(),
                 "java",
                 1,
                 format!("Java {java_major} required — downloading…"),
             );
-            match java_runtime::ensure_java(&app, &root, java_major).await {
+            match java_runtime::ensure_java(&app.clone().into(), &root, java_major).await {
                 Ok(info) => info,
                 Err(err) => return fail(&session, err),
             }
@@ -974,7 +978,7 @@ async fn launch_pack(
         launch_label_suffix: None,
     };
 
-    let mut child = match runtime::launch_game(&app, opts).await {
+    let mut child = match runtime::launch_game(&app.clone().into(), opts).await {
         Ok(child) => child,
         Err(err) => return fail(&session, err),
     };
@@ -982,7 +986,7 @@ async fn launch_pack(
     // Detached LaunchServices starts are slower to become "alive"; give JNA/mixins time.
     tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
 
-    let mut session = session.lock().expect("game session lock");
+    let mut session = diag::lock_session(&session);
     match child.try_wait() {
         Ok(Some(status)) if !status.success() => {
             let err = child.error_tail();
@@ -1030,15 +1034,27 @@ async fn launch_pack(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    diag::install_panic_hook();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             voice_runtime::apply_loopback_no_proxy();
+            if let Ok(root) = paths::remined_root(app.handle()) {
+                diag::set_log_dir(&root);
+                diag::log(
+                    "app",
+                    &format!("start v{} root={}", env!("CARGO_PKG_VERSION"), root.display()),
+                );
+            }
             #[cfg(desktop)]
-            app.handle()
-                .plugin(tauri_plugin_updater::Builder::new().build())?;
+            {
+                app.handle()
+                    .plugin(tauri_plugin_updater::Builder::new().build())?;
+                app.handle()
+                    .plugin(tauri_plugin_global_shortcut::Builder::new().build())?;
+            }
             Ok(())
         })
         .manage(Mutex::new(GameSession::default()))
@@ -1090,6 +1106,11 @@ pub fn run() {
             voice_guest_connect,
             voice_mint_token,
             read_lan_port,
+            gamewatch::latest_crash_report,
+            gamewatch::game_log_status,
+            gamewatch::list_screenshots,
+            gamewatch::read_screenshot,
+            gamewatch::screenshots_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

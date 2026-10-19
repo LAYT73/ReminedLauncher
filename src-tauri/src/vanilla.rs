@@ -9,7 +9,7 @@ use serde_json::Value;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
-use tauri::AppHandle;
+use crate::progress::Ctx as AppHandle;
 
 const MANIFEST_URL: &str = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json";
 

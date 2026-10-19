@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use tauri::AppHandle;
+use crate::progress::Ctx as AppHandle;
 use zip::ZipArchive;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,0 +1,319 @@
+/* Stage */
+.stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: var(--topnav-h) minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.stage > .topnav {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.stage > .content {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.stage > .playbar {
+  grid-column: 1;
+  grid-row: 3;
+}
+
+.topnav {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 16px 0 16px;
+  background: var(--bg-deep);
+  border-bottom: 1px solid #000;
+}
+
+.topnav-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
+}
+
+.topnav-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: 8px;
+}
+
+/* Square offline chip — same face footprint as SkinHead 36 + 2px border */
+.topnav-offline-btn {
+  box-sizing: border-box;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: var(--mc-stone);
+  color: var(--text-on-stone);
+  border: 2px solid #000;
+  box-shadow: var(--bevel-panel);
+  cursor: pointer;
+  image-rendering: pixelated;
+  transition:
+    background 0.12s ease,
+    filter 0.12s ease,
+    transform 0.1s ease,
+    box-shadow 0.12s ease;
+}
+
+.topnav-offline-btn:hover {
+  background: var(--mc-stone-mid);
+  filter: brightness(1.06);
+}
+
+.topnav-offline-btn:active {
+  transform: translateY(1px);
+  box-shadow: var(--bevel-btn-press);
+}
+
+.topnav-offline-icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.topnav-offline-slash-outline {
+  stroke: var(--mc-stone);
+}
+
+.topnav-offline-btn:hover .topnav-offline-slash-outline {
+  stroke: var(--mc-stone-mid);
+}
+
+.topnav-offline-btn:active .topnav-offline-slash-outline {
+  stroke: var(--mc-stone-mid);
+}
+
+.topnav-avatar-btn {
+  display: block;
+  padding: 0;
+  border: 2px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  line-height: 0;
+  flex-shrink: 0;
+  transition: border-color 0.12s ease, filter 0.12s ease;
+}
+
+.topnav-avatar-btn:hover {
+  filter: brightness(1.08);
+  border-color: color-mix(in srgb, var(--accent-text) 55%, transparent);
+}
+
+.topnav-profile.is-active .topnav-avatar-btn {
+  border-color: var(--accent-text);
+}
+
+.topnav-avatar {
+  display: block;
+  flex-shrink: 0;
+  border: 2px solid #000;
+  image-rendering: pixelated;
+  background: #2a2a2a;
+  box-shadow: var(--bevel-panel);
+  pointer-events: none;
+}
+
+.topnav-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.topnav-nick {
+  font-size: 13px;
+  font-weight: 700;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.topnav-id {
+  align-self: flex-start;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  cursor: pointer;
+}
+
+.topnav-id:hover {
+  color: var(--text-secondary);
+}
+
+.profile-account {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid color-mix(in srgb, var(--text-muted) 28%, transparent);
+  max-width: 320px;
+}
+
+.topnav-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.topnav-tab-icon {
+  display: block;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  opacity: 0.82;
+}
+
+.topnav-tab:hover {
+  color: var(--text);
+}
+
+.topnav-tab:hover .topnav-tab-icon {
+  opacity: 1;
+}
+
+.topnav-tab.active {
+  color: var(--text);
+}
+
+.topnav-tab.active .topnav-tab-icon {
+  opacity: 1;
+}
+
+.topnav-tab.active::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 3px;
+  background: var(--mc-green-hi);
+}
+
+.topnav-tab-badge {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 4px rgba(74, 222, 128, 0.8);
+  animation: pulse-badge 2s ease-in-out infinite;
+}
+
+@keyframes pulse-badge {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.15); }
+}
+
+/* Numeric badge for pending invites — higher priority than the in-room dot. */
+.topnav-tab-count {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #e6b800;
+  color: #1a1a1a;
+  border: 2px solid #000;
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  image-rendering: pixelated;
+  animation: pulse-badge 1.6s ease-in-out infinite;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 0;
+  height: 100%;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/*
+ * Page enter — only UI copy blocks (never heroes / wallpapers / scrims).
+ * Translate only: no opacity, scale, or clip-path (those glitch bitmaps).
+ * Shell is content-sized (not flex-fill) + overflow:hidden so translateY
+ * cannot grow .content scroll height, without trapping tall pages.
+ */
+.page-motion-shell {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.page-motion {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  animation: page-enter-mc 0.62s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes page-enter-mc {
+  from {
+    transform: translate3d(0, 16px, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-motion {
+    animation: none;
+  }
+}
+
+[data-theme^="light"] {
+  color-scheme: light;
+}
+
+[data-theme^="dark"],
+:root {
+  color-scheme: dark;
+}

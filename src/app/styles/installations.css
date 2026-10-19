@@ -1,0 +1,153 @@
+/* Installations */
+.install-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 720px;
+}
+
+.install-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 720px;
+}
+
+.install-divider {
+  width: 100%;
+  height: 0;
+  margin: 2px 0;
+  border: none;
+  border-top: 3px solid #000;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+
+.install-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.install-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-mc.install-folder {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.btn-mc.install-folder svg {
+  width: 16px;
+  height: 13px;
+  display: block;
+  fill: currentColor;
+  flex-shrink: 0;
+}
+
+.install-delete {
+  align-self: center;
+}
+
+.install-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--mc-stone);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel);
+  text-align: left;
+  image-rendering: pixelated;
+  transition:
+    background 0.15s ease,
+    transform 0.1s ease,
+    filter 0.15s ease;
+}
+
+.install-row:hover {
+  background: var(--mc-stone-mid);
+  filter: brightness(1.05);
+}
+
+.install-row:active {
+  transform: translateY(1px);
+  box-shadow: var(--bevel-btn-press);
+}
+
+.install-row.active {
+  background: var(--accent-deep);
+  box-shadow:
+    var(--bevel-panel),
+    inset 0 0 0 2px var(--mc-green-hi);
+}
+
+.install-icon {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  object-fit: cover;
+  display: block;
+  border-radius: 0;
+  background: linear-gradient(135deg, #7dbe45 0 45%, #5a9a2e 45% 55%, #3d6e1c 55%);
+  border: 2px solid #000;
+  box-shadow: inset 0 0 0 1px #3a3a3a;
+}
+
+img.install-icon {
+  background: #121212;
+}
+
+img.install-icon.is-bare {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  object-fit: contain;
+}
+
+.install-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.install-copy strong {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  color: var(--text-on-stone);
+  text-shadow: 1px 1px 0 var(--shadow-soft);
+}
+
+.install-copy span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.install-badge {
+  padding: 5px 10px;
+  background: var(--mc-green);
+  border: 2px solid #000;
+  box-shadow: var(--bevel-btn);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-on-accent);
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.45);
+  image-rendering: pixelated;
+}

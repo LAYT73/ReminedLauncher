@@ -1,0 +1,14 @@
+/* Launcher styles — split by area under ./styles; order matters (cascade). */
+@import "./base.css";
+@import "./rail.css";
+@import "./stage.css";
+@import "./hero-home.css";
+@import "./pack-page.css";
+@import "./installations.css";
+@import "./profile-settings.css";
+@import "./playbar.css";
+@import "./gates.css";
+@import "./friends.css";
+@import "./toast.css";
+@import "./voice.css";
+@import "./tray-screenshots.css";

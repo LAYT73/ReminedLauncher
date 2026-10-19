@@ -1,0 +1,491 @@
+/* Hero — pack wallpaper / title (soft dark scrim; no hard bg wipe) */
+.hero {
+  --hero-base: #121512;
+  --hero-fill: linear-gradient(135deg, #1a2a16 0%, #121512 45%, #0c1014 100%);
+  --hero-scrim-y: linear-gradient(
+    180deg,
+    transparent 46%,
+    rgba(0, 0, 0, 0.22) 78%,
+    rgba(0, 0, 0, 0.4) 100%
+  );
+  --hero-scrim-x: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.55) 0%,
+    rgba(0, 0, 0, 0.22) 38%,
+    transparent 72%
+  );
+  --hero-title: #ffffff;
+  --hero-kicker: #eaeaea;
+  --hero-meta: #d8d8d8;
+
+  position: relative;
+  min-height: 260px;
+  height: 42vh;
+  max-height: 360px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 32px;
+  border-bottom: 1px solid #000;
+  overflow: hidden;
+  color: var(--hero-title);
+  background-color: var(--hero-base);
+  background-image: var(--hero-scrim-y), var(--hero-scrim-x), var(--hero-fill);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.hero.has-art {
+  background-image: var(--hero-scrim-y), var(--hero-scrim-x), var(--hero-image);
+}
+
+.hero.home {
+  justify-content: center;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+[data-theme^="light"] .hero.home {
+  --hero-base: var(--bg-deep);
+  --hero-fill: linear-gradient(
+    145deg,
+    var(--bg-sidebar) 0%,
+    var(--bg-deep) 42%,
+    var(--bg) 100%
+  );
+  --hero-scrim-y: linear-gradient(180deg, transparent 60%, var(--bg) 100%);
+  --hero-scrim-x: linear-gradient(90deg, transparent, transparent);
+  --hero-title: var(--text);
+  --hero-kicker: var(--text-secondary);
+  --hero-meta: var(--text-muted);
+}
+
+/* Splash home — video wallpaper + brand */
+.home-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 36px 36px 28px;
+  overflow: hidden;
+  box-sizing: border-box;
+  background: var(--bg-deep);
+}
+
+/* Persistent wallpaper — lives on .stage so rail changes don't remount it */
+.home-video {
+  grid-column: 1;
+  grid-row: 2;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* First load only — don't size-tween on return visits */
+.home-video.is-live:not(.is-ready) {
+  transition: opacity 0.35s ease;
+}
+
+.home-video.is-live.is-ready {
+  opacity: 1;
+  visibility: visible;
+}
+
+.home-video.is-parked {
+  /* Same geometry as live — resizing to a few px made WebKit flash a tiny frame */
+  opacity: 0;
+  visibility: hidden;
+}
+
+.home-stage.has-video {
+  background: transparent;
+}
+
+.home-stage.has-video:not(.is-video-ready) {
+  background: var(--bg-deep);
+}
+
+.stage > .topnav,
+.stage > .content,
+.stage > .playbar {
+  position: relative;
+  z-index: 1;
+}
+
+.content:has(.home-stage) {
+  background: transparent;
+}
+
+.home-video-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* No top darken — only a soft bottom fade for UI legibility */
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    transparent 55%,
+    rgba(0, 0, 0, 0.45) 82%,
+    rgba(0, 0, 0, 0.72) 100%
+  );
+}
+
+/* Minecraft title-screen wordmark — centered like the in-game menu */
+.home-splash {
+  position: absolute;
+  z-index: 2;
+  top: 8%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(92vw, 630px);
+  pointer-events: none;
+}
+
+.home-mc-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+  transform-origin: center center;
+  animation: home-logo-bob 3.2s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes home-logo-bob {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: translateY(-10px) scale(1.02);
+    filter: brightness(1.05);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-mc-logo {
+    animation: none;
+  }
+}
+
+.home-stage > .pack-enchant {
+  z-index: 1;
+}
+
+.home-body-row {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  display: block;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.home-main {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 24px;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  /* Match .home-player width so feature card doesn’t sit under the skin */
+  padding-right: clamp(220px, 34vh, 380px);
+  box-sizing: border-box;
+}
+
+.home-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(560px, 100%);
+}
+
+/* Absolute slot — width tracks viewport height so fullscreen doesn’t clip arms */
+.home-player {
+  --home-player-w: clamp(220px, 34vh, 380px);
+  position: absolute;
+  top: 8px;
+  right: 0;
+  bottom: 8px;
+  width: var(--home-player-w);
+  z-index: 2;
+  pointer-events: auto;
+}
+
+.home-player-skin {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.home-player-skin canvas {
+  width: 100% !important;
+  height: 100% !important;
+  background: transparent !important;
+}
+
+.home-feature {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 12px 14px;
+  text-align: left;
+  background: color-mix(in srgb, var(--mc-stone) 88%, #000 12%);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel);
+  image-rendering: pixelated;
+  transition:
+    background 0.15s ease,
+    transform 0.1s ease,
+    filter 0.15s ease;
+}
+
+.home-feature:hover {
+  background: var(--accent-deep);
+  filter: brightness(1.04);
+}
+
+.home-feature:active {
+  transform: translateY(2px);
+  box-shadow: var(--bevel-btn-press);
+}
+
+.home-feature-logo {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  object-position: center;
+  display: block;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.home-feature-logo.is-fallback {
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--text-on-stone);
+  border: 2px solid #000;
+  background: var(--mc-stone-mid);
+  box-shadow: inset 0 0 0 1px #3a3a3a;
+}
+
+.home-feature-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.home-feature-copy strong {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  color: var(--text-on-stone);
+  text-shadow: 1px 1px 0 var(--shadow-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-feature-copy span {
+  color: var(--text-on-stone-muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-feature-cta {
+  flex-shrink: 0;
+  min-width: 72px;
+  height: 36px;
+  padding: 0 12px;
+  display: grid;
+  place-items: center;
+  background: var(--mc-green);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-btn);
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.45);
+}
+
+.home-foot {
+  margin: 0;
+  color: color-mix(in srgb, #fff 70%, transparent);
+  font-size: 12px;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.65);
+}
+
+[data-theme^="light"] .home-foot {
+  color: var(--text-muted);
+  text-shadow: none;
+}
+
+@media (max-width: 860px) {
+  .home-main {
+    padding-right: 0;
+    padding-bottom: 220px;
+  }
+
+  .home-player {
+    top: auto;
+    right: 50%;
+    bottom: 0;
+    width: 180px;
+    height: 200px;
+    transform: translateX(50%);
+  }
+}
+
+@media (max-width: 720px) {
+  .home-stage {
+    padding: 24px 16px 20px;
+  }
+
+  .home-splash {
+    top: 5%;
+    width: min(94vw, 780px);
+  }
+
+  .home-feature {
+    grid-template-columns: 52px 1fr;
+  }
+
+  .home-feature-cta {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
+.hero-kicker {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 14px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--hero-kicker);
+  text-transform: uppercase;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.75);
+}
+
+.hero-title {
+  margin: 0;
+  color: var(--hero-title);
+  font-family: var(--font-display);
+  font-size: clamp(40px, 6vw, 64px);
+  line-height: 0.95;
+  letter-spacing: 0.02em;
+  text-shadow:
+    0 3px 0 rgba(0, 0, 0, 0.65),
+    0 8px 24px rgba(0, 0, 0, 0.55);
+}
+
+.hero-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 14px;
+}
+
+.hero-beta-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px 5px;
+  background: #8a6a18;
+  border: 2px solid #000;
+  box-shadow:
+    inset 1px 1px 0 #d4b45a,
+    inset -1px -1px 0 #5a4210,
+    0 3px 0 rgba(0, 0, 0, 0.45);
+  color: #fff8d8;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow: 1px 1px 0 #3a2a08;
+  line-height: 1;
+  image-rendering: pixelated;
+  transform: translateY(2px);
+}
+
+[data-theme^="light"] .hero.home .hero-kicker,
+[data-theme^="light"] .hero.home .hero-title {
+  text-shadow: none;
+}
+
+.hero-meta {
+  margin: 14px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--hero-meta);
+  font-size: 13px;
+  font-weight: 700;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
+}
+
+.hero-meta .dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.section {
+  padding: 24px 32px 32px;
+}
+
+.page-title {
+  margin: 0 0 18px;
+  font-family: var(--font-display);
+  font-size: 28px;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.page-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 0 0 18px;
+}
+
+.page-title-row .page-title {
+  margin: 0;
+}

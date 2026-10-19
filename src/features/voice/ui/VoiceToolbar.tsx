@@ -1,0 +1,159 @@
+import { PTT_KEYS, type PttConfig } from "../lib/pushToTalk";
+import type { VoiceSession } from "../lib/voiceSession";
+import { HearIcon, MicIcon } from "./VoiceBits";
+import { MSG } from "@/shared/config/messages";
+
+type Props = {
+  session: VoiceSession | null;
+  isHost: boolean;
+  busy: boolean;
+  muted: boolean;
+  setMuted: (v: boolean) => void;
+  deafened: boolean;
+  setDeafened: (v: boolean) => void;
+  ptt: PttConfig;
+  setPtt: (update: (prev: PttConfig) => PttConfig) => void;
+  pttDown: boolean;
+  camOn: boolean;
+  screenOn: boolean;
+  toggleCamera: () => Promise<void>;
+  toggleScreen: () => Promise<void>;
+  onOpenNetworkPlay?: () => void;
+  setDevicesOpen: (open: boolean) => void;
+  onLeave: () => Promise<void>;
+};
+
+/** Mic / deafen / PTT / camera / share / devices + leave controls. */
+export function VoiceToolbar({
+  session,
+  isHost,
+  busy,
+  muted,
+  setMuted,
+  deafened,
+  setDeafened,
+  ptt,
+  setPtt,
+  pttDown,
+  camOn,
+  screenOn,
+  toggleCamera,
+  toggleScreen,
+  onOpenNetworkPlay,
+  setDevicesOpen,
+  onLeave,
+}: Props) {
+  return (
+    <div className="voice-room-toolbar">
+      <div className="voice-icon-group" role="group" aria-label="Voice controls">
+        <button
+          type="button"
+          className={`voice-icon-btn ${muted ? "is-off" : "is-on"}`}
+          aria-pressed={!muted}
+          title={muted ? MSG.voice.unmute : MSG.voice.mute}
+          aria-label={muted ? MSG.voice.unmute : MSG.voice.mute}
+          onClick={() => {
+            const next = !muted;
+            setMuted(next);
+            void session?.setMuted(next);
+          }}
+        >
+          <MicIcon slashed={muted} />
+        </button>
+        <button
+          type="button"
+          className={`voice-icon-btn ${deafened ? "is-off" : "is-on"}`}
+          aria-pressed={!deafened}
+          title={deafened ? "Undeafen" : "Deafen"}
+          aria-label={deafened ? "Undeafen" : "Deafen"}
+          onClick={() => {
+            const next = !deafened;
+            setDeafened(next);
+            session?.setDeafened(next);
+          }}
+        >
+          <HearIcon slashed={deafened} />
+        </button>
+        <button
+          type="button"
+          className={`voice-icon-btn voice-ptt-btn ${ptt.enabled ? (pttDown ? "is-on is-talking" : "is-on") : "is-neutral"}`}
+          aria-pressed={ptt.enabled}
+          title={
+            ptt.enabled
+              ? `Push-to-talk on - hold ${PTT_KEYS.find((k) => k.id === ptt.key)?.label ?? ptt.key}`
+              : "Enable push-to-talk"
+          }
+          onClick={() => setPtt((p) => ({ ...p, enabled: !p.enabled }))}
+        >
+          PTT
+        </button>
+        {ptt.enabled ? (
+          <select
+            className="voice-ptt-key"
+            aria-label="Push-to-talk key"
+            value={ptt.key}
+            onChange={(e) => setPtt((p) => ({ ...p, key: e.target.value }))}
+          >
+            {PTT_KEYS.map((k) => (
+              <option key={k.id} value={k.id}>
+                {k.label}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        <button
+          type="button"
+          className={`voice-icon-btn voice-text-btn ${camOn ? "is-on" : "is-neutral"}`}
+          aria-pressed={camOn}
+          title={camOn ? "Turn camera off" : "Turn camera on"}
+          onClick={() => void toggleCamera()}
+        >
+          Cam
+        </button>
+        <button
+          type="button"
+          className={`voice-icon-btn voice-text-btn ${screenOn ? "is-on" : "is-neutral"}`}
+          aria-pressed={screenOn}
+          title={screenOn ? "Stop sharing screen" : "Share screen"}
+          onClick={() => void toggleScreen()}
+        >
+          Share
+        </button>
+        {onOpenNetworkPlay ? (
+          <button
+            type="button"
+            className="voice-icon-btn voice-text-btn is-neutral"
+            title="Open Network Play (same Porthole lobby)"
+            onClick={onOpenNetworkPlay}
+          >
+            Net
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="voice-icon-btn is-neutral"
+          title="Devices"
+          aria-label="Voice devices"
+          onClick={() => setDevicesOpen(true)}
+        >
+          <svg className="voice-icon-svg" viewBox="0 0 24 24" aria-hidden>
+            <path
+              fill="currentColor"
+              d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0-6a1 1 0 0 1 1 1v1.07a7.96 7.96 0 0 1 2.86 1.18l.76-.76a1 1 0 1 1 1.41 1.41l-.76.76A7.96 7.96 0 0 1 18.93 11H20a1 1 0 1 1 0 2h-1.07a7.96 7.96 0 0 1-1.18 2.86l.76.76a1 1 0 1 1-1.41 1.41l-.76-.76A7.96 7.96 0 0 1 13 18.93V20a1 1 0 1 1-2 0v-1.07a7.96 7.96 0 0 1-2.86-1.18l-.76.76a1 1 0 1 1-1.41-1.41l.76-.76A7.96 7.96 0 0 1 5.07 13H4a1 1 0 1 1 0-2h1.07a7.96 7.96 0 0 1 1.18-2.86l-.76-.76a1 1 0 1 1 1.41-1.41l.76.76A7.96 7.96 0 0 1 11 4.07V3a1 1 0 0 1 1-1z"
+            />
+          </svg>
+        </button>
+      </div>
+      <div className="voice-room-actions">
+        <button
+          type="button"
+          className="btn-mc danger"
+          disabled={busy}
+          onClick={() => void onLeave()}
+        >
+          {isHost ? "End room" : "Leave"}
+        </button>
+      </div>
+    </div>
+  );
+}

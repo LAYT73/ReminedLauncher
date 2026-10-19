@@ -70,15 +70,42 @@ pub fn check_cancelled() -> Result<(), String> {
     }
 }
 
-pub fn emit(app: &AppHandle, phase: &str, local_percent: u32, message: impl Into<String>) {
+/// Progress target: a real Tauri app, or headless (CLI / smoke tests).
+#[derive(Clone)]
+pub struct Ctx(Option<AppHandle>);
+
+impl Ctx {
+    /// No UI — progress goes to stderr when `REMINED_PROGRESS=1`.
+    pub fn headless() -> Self {
+        Ctx(None)
+    }
+}
+
+impl From<AppHandle> for Ctx {
+    fn from(h: AppHandle) -> Self {
+        Ctx(Some(h))
+    }
+}
+
+pub fn emit(app: &Ctx, phase: &str, local_percent: u32, message: impl Into<String>) {
     let mapped = map_overall(phase, local_percent);
     let percent = raise_overall(mapped);
-    let _ = app.emit(
-        "remined-progress",
-        ProgressEvent {
-            phase: phase.into(),
-            percent,
-            message: message.into(),
-        },
-    );
+    let message = message.into();
+    match &app.0 {
+        Some(h) => {
+            let _ = h.emit(
+                "remined-progress",
+                ProgressEvent {
+                    phase: phase.into(),
+                    percent,
+                    message,
+                },
+            );
+        }
+        None => {
+            if std::env::var_os("REMINED_PROGRESS").is_some() {
+                eprintln!("[{phase} {percent}%] {message}");
+            }
+        }
+    }
 }

@@ -18,7 +18,44 @@ const TOAST_HELPER_SUFFIX: &str = "skinshuffle/util/ToastHelper.class";
 pub fn prepare_instance(instance: &Path, game: &str) -> Result<usize, String> {
     let patched = prepare_mods_dir(&instance.join("mods"), game)?;
     let _ = disable_offline_toast_config(instance);
+    let _ = seed_default_presets(instance, game);
     Ok(patched)
+}
+
+/// SkinShuffle 2.x for 1.20/1.20.1 builds its default preset at client init, when
+/// `Minecraft.getSkinManager()` is still null (NPE → crash on first launch). A valid
+/// `presets.json` makes it skip that path entirely.
+pub fn seed_default_presets(instance: &Path, game: &str) -> Result<bool, String> {
+    if game != "1.20" && game != "1.20.1" {
+        return Ok(false);
+    }
+    let dir = instance.join("config").join("skinshuffle");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join("presets.json");
+    if path.is_file() {
+        // Replace an earlier seed written with a wrong type id; leave user presets alone.
+        let stale = fs::read_to_string(&path)
+            .map(|t| t.contains("\"type\": \"resource\""))
+            .unwrap_or(false);
+        if !stale {
+            return Ok(false);
+        }
+    }
+    let seed = serde_json::json!({
+        "chosenPreset": 0,
+        "apiPreset": 0,
+        "loadedPresets": [{
+            "name": "Default",
+            "skin": {
+                "type": "skinshuffle:resource",
+                "texture": "minecraft:textures/entity/player/wide/steve.png",
+                "model": "classic"
+            }
+        }]
+    });
+    fs::write(&path, serde_json::to_vec_pretty(&seed).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    Ok(true)
 }
 
 /// Remined is always offline — suppress SkinShuffle's "not authenticated" toast.
@@ -62,6 +99,9 @@ pub fn prepare_mods_dir(mods_dir: &Path, game: &str) -> Result<usize, String> {
             continue;
         }
         let mut changed = false;
+        if widen_top_level_minecraft_dep(&path, game)? {
+            changed = true;
+        }
         if relax_jij_minecraft_deps(&path, game)? {
             changed = true;
         }
@@ -75,13 +115,82 @@ pub fn prepare_mods_dir(mods_dir: &Path, game: &str) -> Result<usize, String> {
     Ok(patched)
 }
 
+/// Modrinth tags some SkinShuffle builds for a Minecraft patch (e.g. 1.20.3) that the jar's
+/// own `depends.minecraft` omits (`1.20.4` only). The builds are protocol-identical, so add
+/// the requested game to the accepted set when Fabric would otherwise refuse the jar.
+fn widen_top_level_minecraft_dep(jar_path: &Path, game: &str) -> Result<bool, String> {
+    let input = fs::read(jar_path).map_err(|e| format!("read {}: {e}", jar_path.display()))?;
+    let mut archive =
+        ZipArchive::new(Cursor::new(&input[..])).map_err(|e| format!("open zip: {e}"))?;
+    let mut json_idx = None;
+    for i in 0..archive.len() {
+        let f = archive.by_index(i).map_err(|e| e.to_string())?;
+        if f.name().map_err(|e| e.to_string())?.as_ref() == "fabric.mod.json" {
+            json_idx = Some(i);
+            break;
+        }
+    }
+    let Some(idx) = json_idx else {
+        return Ok(false);
+    };
+    let mut raw = Vec::new();
+    archive
+        .by_index(idx)
+        .map_err(|e| e.to_string())?
+        .read_to_end(&mut raw)
+        .map_err(|e| e.to_string())?;
+    let mut value: serde_json::Value =
+        serde_json::from_slice(&raw).map_err(|e| format!("fabric.mod.json: {e}"))?;
+    let preds: Vec<String> = match value.pointer("/depends/minecraft") {
+        Some(serde_json::Value::String(s)) => vec![s.clone()],
+        Some(serde_json::Value::Array(a)) => a
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect(),
+        _ => return Ok(false),
+    };
+    if crate::mod_audit::version_matches(&preds, game) {
+        return Ok(false);
+    }
+    let mut widened = preds;
+    widened.push(game.to_string());
+    value["depends"]["minecraft"] = serde_json::json!(widened);
+    let new_json = serde_json::to_vec_pretty(&value).map_err(|e| e.to_string())?;
+
+    let mut archive =
+        ZipArchive::new(Cursor::new(input)).map_err(|e| format!("reopen zip: {e}"))?;
+    let mut out_buf = Cursor::new(Vec::new());
+    {
+        let mut writer = ZipWriter::new(&mut out_buf);
+        let opts = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for i in 0..archive.len() {
+            let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
+            let entry_name = file.name().map_err(|e| e.to_string())?.into_owned();
+            if entry_name.ends_with('/') {
+                continue;
+            }
+            let data = if i == idx {
+                new_json.clone()
+            } else {
+                let mut d = Vec::new();
+                file.read_to_end(&mut d).map_err(|e| e.to_string())?;
+                d
+            };
+            writer
+                .start_file(&entry_name, opts)
+                .map_err(|e| e.to_string())?;
+            writer.write_all(&data).map_err(|e| e.to_string())?;
+        }
+        writer.finish().map_err(|e| e.to_string())?;
+    }
+    fs::write(jar_path, out_buf.into_inner())
+        .map_err(|e| format!("write {}: {e}", jar_path.display()))?;
+    Ok(true)
+}
+
 /// SkinShuffle's 1.20/1.20.1 build jars-in-jar YACL marked `minecraft: 1.20.1` only,
 /// which Fabric rejects on plain 1.20. Widen that dep to match SkinShuffle's own range.
 fn relax_jij_minecraft_deps(jar_path: &Path, game: &str) -> Result<bool, String> {
-    if game != "1.20" {
-        return Ok(false);
-    }
-
     let input = fs::read(jar_path).map_err(|e| format!("read {}: {e}", jar_path.display()))?;
     let mut archive =
         ZipArchive::new(Cursor::new(&input[..])).map_err(|e| format!("open zip: {e}"))?;
@@ -95,7 +204,7 @@ fn relax_jij_minecraft_deps(jar_path: &Path, game: &str) -> Result<bool, String>
         }
         let mut nested = Vec::new();
         file.read_to_end(&mut nested).map_err(|e| e.to_string())?;
-        if let Some(fixed) = relax_nested_fabric_mod_json(&nested)? {
+        if let Some(fixed) = relax_nested_fabric_mod_json(&nested, game)? {
             replacements.push((name, fixed));
         }
     }
@@ -137,7 +246,7 @@ fn relax_jij_minecraft_deps(jar_path: &Path, game: &str) -> Result<bool, String>
     Ok(true)
 }
 
-fn relax_nested_fabric_mod_json(nested_jar: &[u8]) -> Result<Option<Vec<u8>>, String> {
+fn relax_nested_fabric_mod_json(nested_jar: &[u8], game: &str) -> Result<Option<Vec<u8>>, String> {
     let mut archive = match ZipArchive::new(Cursor::new(nested_jar)) {
         Ok(a) => a,
         Err(_) => return Ok(None),
@@ -177,11 +286,15 @@ fn relax_nested_fabric_mod_json(nested_jar: &[u8]) -> Result<Option<Vec<u8>>, St
         return Ok(None);
     };
 
-    // Exact 1.20.1 — widen so plain 1.20 can load the JiJ (SkinShuffle itself allows both).
-    if mc != "1.20.1" {
+    if game == "1.20" && mc == "1.20.1" {
+        // Exact 1.20.1 — widen so plain 1.20 can load the JiJ (SkinShuffle itself allows both).
+        value["depends"]["minecraft"] = serde_json::json!(">=1.20 <=1.20.1");
+    } else if !crate::mod_audit::version_matches(&[mc.clone()], game) {
+        // Nested lib pinned to one patch (e.g. YACL for 1.20.4 on 1.20.3): accept `game` too.
+        value["depends"]["minecraft"] = serde_json::json!([mc, game]);
+    } else {
         return Ok(None);
     }
-    value["depends"]["minecraft"] = serde_json::json!(">=1.20 <=1.20.1");
     let new_json = serde_json::to_vec_pretty(&value).map_err(|e| e.to_string())?;
 
     let mut out_buf = Cursor::new(Vec::new());
