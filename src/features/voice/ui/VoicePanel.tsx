@@ -89,8 +89,11 @@ export function VoicePanel({
       state={runtimeModal}
       onClose={closeRuntimeModal}
       onRetry={() => {
+        if (busy || active) {
+          closeRuntimeModal();
+          return;
+        }
         closeRuntimeModal();
-        // onCreate always tears down leftover host/session before starting.
         void onCreate();
       }}
     />

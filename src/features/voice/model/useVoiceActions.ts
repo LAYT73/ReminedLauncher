@@ -1,5 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { EVENT } from "@/shared/config/events";
 import { unlockAchievement } from "@/shared/lib/achievements";
 import {
@@ -57,6 +57,8 @@ export function useVoiceActions({
   const [title, setTitle] = useState("Squad");
   const [draft, setDraft] = useState("");
   const [invitePick, setInvitePick] = useState("");
+  /** Sync lock — React `busy` can lag one frame and allow a double Create. */
+  const createInFlight = useRef(false);
   const { active } = room;
   const isHost = active?.hostId === userId;
   const fail = (err: unknown) => onToast(errorMessage(err), "err");
@@ -81,7 +83,7 @@ export function useVoiceActions({
       onRoomStatusChange?.(true);
     } catch (err) {
       await live.disconnect();
-      if (!asGuest) voiceStopHost().catch(() => undefined);
+      if (!asGuest) await voiceStopHost().catch(() => undefined);
       resetActiveUi();
       throw err;
     }
@@ -89,7 +91,7 @@ export function useVoiceActions({
 
   async function teardownFailedCreate(roomId: string | null) {
     await live.disconnect();
-    voiceStopHost().catch(() => undefined);
+    await voiceStopHost().catch(() => undefined);
     if (roomId) await closeVoiceRoom(roomId).catch(() => undefined);
     resetActiveUi();
     await lists.refreshLists().catch(() => undefined);
@@ -97,7 +99,7 @@ export function useVoiceActions({
 
   /** Run `task` with the busy flag set; errors are toasted. */
   async function guarded(task: () => Promise<void>) {
-    if (busy) return;
+    if (busy || createInFlight.current) return;
     setBusy(true);
     try {
       await task();
@@ -109,7 +111,12 @@ export function useVoiceActions({
   }
 
   async function onCreate() {
-    if (busy) return;
+    if (busy || createInFlight.current) return;
+    if (active && live.sessionRef.current) {
+      onToast("Already in a voice room — leave it first", "err");
+      return;
+    }
+    createInFlight.current = true;
     setBusy(true);
     runtime.begin();
     live.setStatus("Preparing voice…");
@@ -136,8 +143,9 @@ export function useVoiceActions({
         ),
     );
     try {
-      // Clean leftover SFU / open rooms before a fresh create (Retry path).
-      await teardownFailedCreate(null);
+      // Clean leftover UI/session only — LiveKit reuse is handled in Rust.
+      await live.disconnect();
+      resetActiveUi();
       await voiceEnsureRuntime();
       step(MSG.voice.startingServer, 85);
       live.setStatus(MSG.voice.startingServer);
@@ -180,6 +188,7 @@ export function useVoiceActions({
       }));
     } finally {
       unlisten();
+      createInFlight.current = false;
       setBusy(false);
     }
   }
@@ -234,16 +243,17 @@ export function useVoiceActions({
   }
 
   async function onLeave() {
+    if (createInFlight.current) return;
     setBusy(true);
     try {
       await live.sessionRef.current?.disconnect();
       live.sessionRef.current = null;
       if (active && isHost) {
         await closeVoiceRoom(active.id);
-        void voiceStopHost();
+        await voiceStopHost().catch(() => undefined);
       } else if (active) {
         await leaveVoiceRoom(active.id, userId).catch(() => undefined);
-        void portholeStopJoin().catch(() => undefined);
+        await portholeStopJoin().catch(() => undefined);
       }
       resetActiveUi();
       await lists.refreshLists();

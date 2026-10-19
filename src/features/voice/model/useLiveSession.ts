@@ -84,7 +84,8 @@ export function useLiveSession({
       },
       onSpeaking: (id, on) => setSpeaking((prev) => ({ ...prev, [id]: on })),
       onDisconnected: () => {
-        setStatus("Voice disconnected");
+        // Keep the room UI; host may still be exposing Porthole. User leaves explicitly.
+        setStatus("Voice disconnected — try Leave, then Create again if needed");
         onRoomStatusChange?.(false);
       },
       onError: (m) => onToast(m, "err"),

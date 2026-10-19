@@ -476,7 +476,26 @@ fn wait_ports_free(timeout: StdDuration) {
     }
 }
 
+fn livekit_healthy() -> bool {
+    wait_healthy(StdDuration::from_millis(800)).is_ok()
+}
+
 pub fn start_host_server(app: &AppHandle, state: &VoiceRuntimeState) -> Result<(), String> {
+    // Never kill a healthy SFU — a second Create/Retry used to wipe the host
+    // mid-session (signalReconnecting → could not restart participant).
+    if livekit_healthy() {
+        let tracked = read_child_alive(state);
+        emit_progress(app, "Voice", "Voice server ready", 100);
+        voice_log::append_ok(
+            app,
+            "host",
+            &format!(
+                "LiveKit already up — reusing ws=127.0.0.1:{LK_TCP_PORT} (tracked={tracked})"
+            ),
+        );
+        return Ok(());
+    }
+
     stop_host(state);
     wait_ports_free(StdDuration::from_secs(3));
     let bin = ensure_runtime(app)?;
