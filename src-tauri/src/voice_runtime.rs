@@ -738,11 +738,12 @@ pub fn guest_connect(
     porthole: PortholeState,
     share_code: &str,
 ) -> Result<(), String> {
-    porthole::start_join_approve(
+    // Approve every offered port — after a Voice+LAN lobby rebuild the host
+    // may add the Minecraft TCP port and guests must pick it up automatically.
+    porthole::start_join_auto(
         app.clone(),
         porthole,
         share_code,
-        &porthole_approve(),
         LK_TCP_PORT,
     )?;
     // Signalling up is not enough — wait briefly for ICE/TCP so WebRTC

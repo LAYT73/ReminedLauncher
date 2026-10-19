@@ -1,9 +1,9 @@
 import { netLog } from "@/shared/api/netLog";
 import {
   portholeStartJoin,
+  portholeStopGameJoin,
   portholeStopAll,
   portholeStopHost,
-  portholeStopJoin,
 } from "@/shared/api/porthole";
 import { MSG } from "@/shared/config/messages";
 import { FALLBACK_USERNAME, USERNAME } from "@/shared/config/limits";
@@ -97,15 +97,21 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
     .getState()
     .beginLaunch(quick ? MSG.launch.joiningFriend : MSG.launch.preparing);
   if (!quick) {
-    // Fresh local launch clears LAN, but must not tear down an active voice tunnel.
+    // Fresh local launch clears LAN state. Restarting Porthole while voice is
+    // live kicks every Steam peer (guest WebRTC dies) — only rebuild the lobby
+    // when we actually need to drop LAN backends from it.
+    const hadLan = game.hostingLan != null;
     game.setHostingLan(null);
     const voice = useVoiceStatusStore.getState();
     if (voice.hostRoomId) {
-      void voiceStartPorthole(null)
-        .then((ready) =>
-          setVoiceRoomShareCode(voice.hostRoomId!, ready.share_code),
-        )
-        .catch(() => undefined);
+      if (hadLan) {
+        void netLog("ui", "launch: drop LAN from voice lobby (keep voice)");
+        void voiceStartPorthole(null)
+          .then((ready) =>
+            setVoiceRoomShareCode(voice.hostRoomId!, ready.share_code),
+          )
+          .catch(() => undefined);
+      }
     } else if (voice.inRoom) {
       // Voice guest: keep join, drop any leftover host expose.
       void portholeStopHost().catch(() => undefined);
@@ -163,7 +169,7 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
     game.setPhase(result.phase);
     if (!result.ok) {
       game.setRunningPackId(null);
-      if (quick) void portholeStopJoin().catch(() => undefined);
+      if (quick) void portholeStopGameJoin().catch(() => undefined);
       void netLog("ui", `game.launch FAILED: ${result.message}`);
       setStatus(result.message, "error");
       return;
@@ -181,7 +187,7 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
     if (quick) setStatus(MSG.launch.joined, "ok");
   } catch (err) {
     game.setRunningPackId(null);
-    if (quick) void portholeStopJoin().catch(() => undefined);
+    if (quick) void portholeStopGameJoin().catch(() => undefined);
     game.setPhase("idle");
     setStatus(String(err), "error");
   }

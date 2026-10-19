@@ -26,8 +26,8 @@ import { voiceStartPorthole } from "@/features/voice/api/voiceNative";
  * Porthole and publishes a share code. Tears the tunnel down when LAN closes
  * or the game exits.
  *
- * Shares one Porthole host with voice: when the local user is a voice host,
- * LAN is merged into the voice lobby instead of replacing it.
+ * With an active voice host: rebuild one shared Voice+LAN lobby and publish the
+ * new share code so guests auto-reconnect.
  */
 export function useLanHosting(): void {
   const appActive = useSessionStore((s) => s.gate === "app");
@@ -52,7 +52,6 @@ export function useLanHosting(): void {
         miss.current = 0;
         const voiceHost = useVoiceStatusStore.getState().hostRoomId;
         if (voiceHost && hadLan) {
-          // Drop LAN backends; keep voice lobby (new share code → sync room).
           void voiceStartPorthole(null)
             .then(async (ready) => {
               await setVoiceRoomShareCode(voiceHost, ready.share_code).catch(
@@ -68,7 +67,6 @@ export function useLanHosting(): void {
     }
     let cancelled = false;
     const publishedPort = () => game().hostingLan?.gamePort ?? null;
-    // ~3 polls × 2s — log noise / saves must not drop LAN from a voice lobby.
     const MISS_BEFORE_DROP = 3;
 
     const tick = window.setInterval(() => {
@@ -78,7 +76,6 @@ export function useLanHosting(): void {
           const port = await readLanPort(packId);
           if (cancelled) return;
 
-          // World left / LAN closed (log shows stop after publish) — tear down tunnel.
           if (!port) {
             if (publishedPort() !== null) {
               miss.current += 1;
@@ -92,7 +89,6 @@ export function useLanHosting(): void {
               game().setHostingLan(null);
               const voiceHost = useVoiceStatusStore.getState().hostRoomId;
               if (voiceHost) {
-                // Drop LAN from the lobby; keep voice expose.
                 const ready = await voiceStartPorthole(null).catch(() => null);
                 if (ready?.share_code) {
                   await setVoiceRoomShareCode(voiceHost, ready.share_code).catch(
@@ -110,7 +106,6 @@ export function useLanHosting(): void {
 
           const voiceHost = useVoiceStatusStore.getState().hostRoomId;
           const live = await portholeCurrentHost().catch(() => null);
-          // When voice+LAN share a lobby, primary port is LiveKit 7880 — still OK if code exists.
           const tunnelOk = live != null && Boolean(live.share_code);
           const liveLan =
             typeof live?.lan_port === "number" && live.lan_port > 0
@@ -118,8 +113,6 @@ export function useLanHosting(): void {
               : null;
           const sameLanAlone =
             !voiceHost && live != null && live.port === port && tunnelOk;
-          // Must see LAN in the live expose — otherwise a voice-only lobby
-          // (lan=-) would stick forever while presence still says hosting.
           const sameMerged =
             Boolean(voiceHost) &&
             tunnelOk &&
@@ -129,7 +122,11 @@ export function useLanHosting(): void {
           if (sameLanAlone || sameMerged) return;
 
           const last = fail.current;
-          if (last && last.port === port && Date.now() - last.at < TIMING.lanHostRetryCooldown) {
+          if (
+            last &&
+            last.port === port &&
+            Date.now() - last.at < TIMING.lanHostRetryCooldown
+          ) {
             return;
           }
           busy.current = true;
@@ -142,12 +139,14 @@ export function useLanHosting(): void {
             let shareCode: string;
             let gamePort = port;
             if (voiceHost) {
+              // One lobby for Voice+LAN — guests reconnect via share code update.
               const ready = await voiceStartPorthole(port);
               shareCode = ready.share_code;
               gamePort = port;
               await setVoiceRoomShareCode(voiceHost, shareCode).catch(
                 () => undefined,
               );
+              toast("Voice lobby rebuilt with LAN — friends reconnecting…");
             } else {
               if (live && live.port !== port) {
                 await portholeStopHost();
@@ -168,13 +167,14 @@ export function useLanHosting(): void {
             });
             void netLog(
               "ui",
-              `hosting set pack=${packId} code=${shareCode} gamePort=${gamePort}`,
+              `hosting set pack=${packId} code=${shareCode} gamePort=${gamePort}${voiceHost ? " (voice+LAN merge)" : ""}`,
             );
             toast(MSG.lan.hosting);
             setStatus("", "ok");
           } catch (err) {
             fail.current = { port, at: Date.now() };
-            const msg = err instanceof Error ? err.message : MSG.lan.startFailed;
+            const msg =
+              err instanceof Error ? err.message : MSG.lan.startFailed;
             void netLog("ui", `tunnel FAILED: ${msg}`);
             if (!cancelled) {
               setStatus(msg, "error");

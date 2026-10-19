@@ -84,10 +84,15 @@ export function subscribeRoomMembers(
   };
 }
 
-/** Fires when the room row changes (e.g. host closed it). */
+export type VoiceRoomRowPatch = {
+  status?: string;
+  portholeShareCode?: string | null;
+};
+
+/** Fires when the room row changes (closed, new Porthole share code, …). */
 export function subscribeVoiceRoom(
   roomId: string,
-  onChange: (status: string) => void,
+  onChange: (patch: VoiceRoomRowPatch) => void,
 ): () => void {
   const channel = supabase
     .channel(`voice-room:${roomId}`)
@@ -100,8 +105,18 @@ export function subscribeVoiceRoom(
         filter: `id=eq.${roomId}`,
       },
       (payload) => {
-        const status = (payload.new as { status?: string } | null)?.status;
-        if (status) onChange(status);
+        const row = payload.new as {
+          status?: string;
+          porthole_share_code?: string | null;
+        } | null;
+        if (!row) return;
+        onChange({
+          status: row.status,
+          portholeShareCode:
+            row.porthole_share_code === undefined
+              ? undefined
+              : row.porthole_share_code,
+        });
       },
     )
     .subscribe();

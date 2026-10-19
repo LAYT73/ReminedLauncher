@@ -651,6 +651,19 @@ async fn porthole_start_host(
 }
 
 #[tauri::command]
+async fn porthole_start_lan_host(
+    app: AppHandle,
+    state: State<'_, porthole::PortholeState>,
+    port: u16,
+) -> Result<porthole::PortholeHostInfo, String> {
+    let state = state.inner().clone();
+    let app2 = app.clone();
+    tauri::async_runtime::spawn_blocking(move || porthole::start_lan_host(app2, state, port))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 async fn porthole_start_join(
     app: AppHandle,
     state: State<'_, porthole::PortholeState>,
@@ -673,9 +686,21 @@ fn porthole_stop_host(app: AppHandle, state: State<'_, porthole::PortholeState>)
 }
 
 #[tauri::command]
+fn porthole_stop_lan_host(app: AppHandle, state: State<'_, porthole::PortholeState>) {
+    net_log::append_ok(&app, "host", "stop_lan_host");
+    porthole::stop_lan_host(&state);
+}
+
+#[tauri::command]
 fn porthole_stop_join(app: AppHandle, state: State<'_, porthole::PortholeState>) {
     net_log::append_ok(&app, "join", "stop_join");
     porthole::stop_join(&state);
+}
+
+#[tauri::command]
+fn porthole_stop_game_join(app: AppHandle, state: State<'_, porthole::PortholeState>) {
+    net_log::append_ok(&app, "join", "stop_game_join");
+    porthole::stop_game_join(&state);
 }
 
 #[tauri::command]
@@ -1119,9 +1144,12 @@ pub fn run() {
             porthole_selftest,
             open_steam_client,
             porthole_start_host,
+            porthole_start_lan_host,
             porthole_start_join,
             porthole_stop_host,
+            porthole_stop_lan_host,
             porthole_stop_join,
+            porthole_stop_game_join,
             porthole_stop_all,
             porthole_current_host,
             net_log_dir,

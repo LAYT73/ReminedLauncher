@@ -41,6 +41,13 @@ export async function portholeStartHost(port: number): Promise<PortholeHostInfo>
   return call<PortholeHostInfo>(CMD.portholeStartHost, { port });
 }
 
+/** LAN expose beside an existing voice lobby (does not restart voice). */
+export async function portholeStartLanHost(
+  port: number,
+): Promise<PortholeHostInfo> {
+  return call<PortholeHostInfo>(CMD.portholeStartLanHost, { port });
+}
+
 export async function portholeStartJoin(
   shareCode: string,
   port: number,
@@ -52,8 +59,17 @@ export async function portholeStopHost(): Promise<void> {
   await call(CMD.portholeStopHost);
 }
 
+export async function portholeStopLanHost(): Promise<void> {
+  await call(CMD.portholeStopLanHost);
+}
+
 export async function portholeStopJoin(): Promise<void> {
   await call(CMD.portholeStopJoin);
+}
+
+/** Stop Minecraft join only — keeps voice join if both are up. */
+export async function portholeStopGameJoin(): Promise<void> {
+  await call(CMD.portholeStopGameJoin);
 }
 
 export async function portholeStopAll(): Promise<void> {

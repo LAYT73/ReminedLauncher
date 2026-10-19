@@ -91,23 +91,37 @@ export function useVoiceActions({
     if (restored && lan) syncLanShareCode(restored.share_code, lan);
   }
 
-  // Guest: when host Ends room, leave UI + Porthole (membership may linger until delete).
+  // Room row updates: host closed, or new Porthole share code (Voice+LAN merge).
   const activeId = active?.id ?? null;
   const activeHostId = active?.hostId ?? null;
   useEffect(() => {
-    if (!activeId || activeHostId === userId) return;
-    return subscribeVoiceRoom(activeId, (status) => {
-      if (status !== "closed") return;
-      void (async () => {
-        await leaveVoiceRoom(activeId, userId).catch(() => undefined);
-        await live.disconnect().catch(() => undefined);
-        await portholeStopJoin().catch(() => undefined);
-        room.reset();
-        live.resetLiveUi();
-        onRoomStatusChange?.(false);
-        await lists.refreshLists().catch(() => undefined);
-        onToast("Host ended the room", "ok");
-      })();
+    if (!activeId) return;
+    return subscribeVoiceRoom(activeId, (patch) => {
+      if (patch.status === "closed") {
+        if (activeHostId === userId) return;
+        void (async () => {
+          await leaveVoiceRoom(activeId, userId).catch(() => undefined);
+          await live.disconnect().catch(() => undefined);
+          await portholeStopJoin().catch(() => undefined);
+          room.reset();
+          live.resetLiveUi();
+          onRoomStatusChange?.(false);
+          await lists.refreshLists().catch(() => undefined);
+          onToast("Host ended the room", "ok");
+        })();
+        return;
+      }
+      if (patch.portholeShareCode === undefined) return;
+      const code = patch.portholeShareCode;
+      room.setActive((prev) => {
+        if (!prev || prev.id !== activeId) return prev;
+        const next = { ...prev, portholeShareCode: code };
+        // Guests auto-reconnect onto the rebuilt Voice+LAN lobby.
+        if (activeHostId !== userId && code) {
+          queueMicrotask(() => live.onHostShareCode(next, code));
+        }
+        return next;
+      });
     });
   }, [
     activeId,

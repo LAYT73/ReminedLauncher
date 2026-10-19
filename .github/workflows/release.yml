@@ -82,10 +82,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v0.7.2
-          releaseName: Remined v0.7.2
+          tagName: v0.7.3
+          releaseName: Remined v0.7.3
           releaseBody: |
-            Remined launcher v0.7.2 — LAN Join: open Porthole tunnel after pack prep, Steam idle keepalive, allow Porthole version mismatch, fix voice lobby dropping LAN, chunked network diagnostics logs, public IP:port host chip.
+            Remined launcher v0.7.3 — Voice+LAN: rebuild one Porthole lobby on Open to LAN; guests auto-reconnect via lobby:<id> (not Steam static code); skip needless voice restart on Play; guest join auto-approves offered ports.
             macOS (arm64 + x64) and Windows builds.
           releaseDraft: false
           prerelease: false

@@ -41,9 +41,12 @@ export const CMD = {
   portholeStatus: "porthole_status",
   portholeSelftest: "porthole_selftest",
   portholeStartHost: "porthole_start_host",
+  portholeStartLanHost: "porthole_start_lan_host",
   portholeStartJoin: "porthole_start_join",
   portholeStopHost: "porthole_stop_host",
+  portholeStopLanHost: "porthole_stop_lan_host",
   portholeStopJoin: "porthole_stop_join",
+  portholeStopGameJoin: "porthole_stop_game_join",
   portholeStopAll: "porthole_stop_all",
   portholeCurrentHost: "porthole_current_host",
   // network / LAN / Porthole diagnostics (chunked under .remined/network/)

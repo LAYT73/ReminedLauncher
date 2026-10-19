@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { netLog } from "@/shared/api/netLog";
-import { portholeStatus, portholeStopJoin } from "@/shared/api/porthole";
+import { portholeStatus, portholeStopGameJoin } from "@/shared/api/porthole";
 import { MSG } from "@/shared/config/messages";
 import { RAIL } from "@/shared/config/routes";
 import { navigateTo } from "@/shared/lib/navigator";
@@ -45,7 +45,7 @@ export async function joinFriendSession(row: FriendRow): Promise<void> {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     void netLog("ui", `Join FAILED: ${msg}`);
-    void portholeStopJoin().catch(() => undefined);
+    void portholeStopGameJoin().catch(() => undefined);
     setStatus(msg, "error");
     useGameStore.getState().setPhase("idle");
   } finally {
