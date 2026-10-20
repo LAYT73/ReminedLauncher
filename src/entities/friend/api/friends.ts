@@ -42,6 +42,33 @@ export function canJoinFriend(row: FriendRow): boolean {
   );
 }
 
+/** Fresh hosting share code + LAN port from Supabase (Friends UI can be stale). */
+export async function fetchFriendHosting(
+  hostUserId: string,
+): Promise<{
+  packId: string;
+  shareCode: string;
+  gamePort: number;
+} | null> {
+  const { data, error } = await supabase
+    .from(TABLE.sessions)
+    .select("status, pack_id, share_code, game_port, updated_at")
+    .eq("user_id", hostUserId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const updatedAt = (data.updated_at as string | null) ?? null;
+  if ((data.status as string) !== "hosting" || !isPresenceFresh(updatedAt)) {
+    return null;
+  }
+  const packId = ((data.pack_id as string | null) ?? "").trim();
+  const shareCode = ((data.share_code as string | null) ?? "").trim();
+  const gamePortRaw = data.game_port as number | null;
+  const gamePort =
+    typeof gamePortRaw === "number" && gamePortRaw > 0 ? gamePortRaw : 0;
+  if (!packId || !shareCode || !gamePort) return null;
+  return { packId, shareCode, gamePort };
+}
+
 export async function listFriendships(userId: string): Promise<FriendRow[]> {
   const { data: rows, error } = await supabase
     .from(TABLE.friendships)

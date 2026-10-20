@@ -3,6 +3,7 @@ import type { VoiceInvite, VoiceRoom } from "@/entities/voice-room";
 import { InfoNote } from "@/shared/ui/InfoNote";
 import { SkinHead } from "@/entities/skin";
 import { MSG } from "@/shared/config/messages";
+import { randomVoiceRoomTitle } from "../lib/roomName";
 
 type Props = {
   userId: string;
@@ -104,6 +105,32 @@ export function VoiceLobby({
           aria-label="Room name"
           disabled={busy}
         />
+        <button
+          type="button"
+          className="btn-mc dim voice-reroll-name"
+          disabled={busy}
+          title="New random name"
+          aria-label="Generate new room name"
+          onClick={() => setTitle(randomVoiceRoomTitle())}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden>
+            <rect
+              x="3.5"
+              y="3.5"
+              width="17"
+              height="17"
+              rx="2.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            />
+            <circle cx="8.5" cy="8.5" r="1.6" fill="currentColor" />
+            <circle cx="15.5" cy="8.5" r="1.6" fill="currentColor" />
+            <circle cx="12" cy="12" r="1.6" fill="currentColor" />
+            <circle cx="8.5" cy="15.5" r="1.6" fill="currentColor" />
+            <circle cx="15.5" cy="15.5" r="1.6" fill="currentColor" />
+          </svg>
+        </button>
         <button
           type="submit"
           className="btn-mc ok"

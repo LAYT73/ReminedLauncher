@@ -852,7 +852,10 @@ fn watch_stdout_for_code(
                 {
                     guest_hint = true;
                     // Soft signal only — wait until localhost:port accepts TCP.
-                    if port_listening(port) || wait_port_listening(port, Duration::from_secs(8)) {
+                    // Approval can lag peer_connected by several seconds on WAN.
+                    if port_listening(port)
+                        || wait_port_listening(port, Duration::from_secs(20))
+                    {
                         return Ok(String::new());
                     }
                 }
@@ -1080,29 +1083,21 @@ pub fn start_join(
         );
         return Ok(());
     }
+    // Always --auto-approve (not a fixed port list). Listing LiveKit ports when
+    // the host only exposes Minecraft left peers connected with zero
+    // port_accepted — localhost never opened and Join aborted before MC.
     let voice_join = state
         .lock()
         .ok()
         .is_some_and(|g| g.join.is_some());
     if voice_join {
-        // Same lobby as voice — rebuild the primary join (not a second Steam
-        // connect) so Minecraft is approved without killing dual-instance Steam.
         net_log::append_ok(
             &app,
             "join",
-            &format!("voice join active → re-join merged lobby for port={port}"),
+            &format!("voice join active → re-join lobby for port={port}"),
         );
-        return start_join_auto(app, state, share_code, port);
     }
-    // Standalone Network Play: approve LiveKit too in case the host merged.
-    let approve = format!(
-        "tcp/{port},tcp/{},tcp/{},udp/{}-{}",
-        crate::voice_runtime::LK_TCP_PORT,
-        crate::voice_runtime::LK_RTC_TCP_PORT,
-        crate::voice_runtime::LK_UDP_START,
-        crate::voice_runtime::LK_UDP_END,
-    );
-    start_join_approve(app, state, share_code, &approve, port)
+    start_join_auto(app, state, share_code, port)
 }
 
 /// Connect and auto-approve a custom port list (e.g. `tcp/7880,udp/7881-7890`).

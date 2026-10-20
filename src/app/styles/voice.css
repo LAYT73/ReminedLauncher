@@ -8,6 +8,22 @@
   margin-bottom: 18px;
 }
 
+.voice-reroll-name {
+  width: 40px;
+  min-width: 40px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.voice-reroll-name svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
 .voice-code-lead {
   margin-top: -4px;
 }

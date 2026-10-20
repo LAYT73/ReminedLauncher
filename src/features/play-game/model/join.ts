@@ -5,7 +5,11 @@ import { MSG } from "@/shared/config/messages";
 import { RAIL } from "@/shared/config/routes";
 import { navigateTo } from "@/shared/lib/navigator";
 import { toast } from "@/shared/lib/toast";
-import { canJoinFriend, type FriendRow } from "@/entities/friend";
+import {
+  canJoinFriend,
+  fetchFriendHosting,
+  type FriendRow,
+} from "@/entities/friend";
 import { useGameStore } from "@/entities/game";
 import { setStatus } from "@/entities/install";
 import { launchWithOpts } from "./launch";
@@ -16,16 +20,9 @@ export const useJoiningFriend = create<{ id: string | null }>(() => ({ id: null 
 /** Open the Porthole tunnel to a friend's hosted world and launch into it. */
 export async function joinFriendSession(row: FriendRow): Promise<void> {
   if (!canJoinFriend(row) || useJoiningFriend.getState().id) return;
-  const packId = row.sessionPackId!;
-  const shareCode = row.sessionShareCode!.trim();
-  const port = row.sessionGamePort!;
   useJoiningFriend.setState({ id: row.friendshipId });
   toast(MSG.launch.joining(row.profile.username));
   setStatus(MSG.launch.connectingNetwork);
-  void netLog(
-    "ui",
-    `Join friend=${row.profile.username} pack=${packId} code=${shareCode} port=${port}`,
-  );
   try {
     const st = await portholeStatus();
     if (!st.installed) {
@@ -35,6 +32,20 @@ export async function joinFriendSession(row: FriendRow): Promise<void> {
       navigateTo(`/${RAIL.settings}#network`);
       return;
     }
+    // Friends list can lag a re-Open-to-LAN — pull live lobby:<id> + port.
+    const live = await fetchFriendHosting(row.profile.id).catch(() => null);
+    const packId = live?.packId || row.sessionPackId!;
+    const shareCode = (live?.shareCode || row.sessionShareCode || "").trim();
+    const port = live?.gamePort || row.sessionGamePort!;
+    if (!shareCode || !port) {
+      throw new Error(
+        "Host lobby is not ready yet — ask them to Open to LAN again",
+      );
+    }
+    void netLog(
+      "ui",
+      `Join friend=${row.profile.username} pack=${packId} code=${shareCode} port=${port}${live ? " (fresh)" : " (cached)"}`,
+    );
     // Prepare pack first; open the Steam tunnel only right before MC starts.
     await launchWithOpts({
       packId,

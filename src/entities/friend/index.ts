@@ -4,6 +4,7 @@ export {
   respondFriendRequest,
   removeFriendship,
   canJoinFriend,
+  fetchFriendHosting,
   normalizeReminedId,
   type FriendRow,
   type FriendshipStatus,
