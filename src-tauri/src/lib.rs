@@ -18,6 +18,7 @@ mod smoke;
 mod vanilla;
 mod vanilla_skin_pack;
 mod net_log;
+mod tray;
 mod unlim;
 mod voice_log;
 mod voice_runtime;
@@ -32,7 +33,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use runtime::LaunchedGame;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, RunEvent, State};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Pack {
@@ -48,6 +49,17 @@ fn default_ram_mb() -> u32 {
 
 fn default_theme() -> String {
     "dark-pink".into()
+}
+
+fn default_friend_toasts() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThemeCustom {
+    pub mode: String,
+    pub accent: String,
+    pub surface: String,
 }
 
 fn default_skin_model() -> String {
@@ -78,6 +90,10 @@ pub struct Profile {
     pub jvm_args: String,
     #[serde(default = "default_theme")]
     pub theme: String,
+    #[serde(default = "default_friend_toasts")]
+    pub friend_toasts: bool,
+    #[serde(default)]
+    pub theme_custom: Option<ThemeCustom>,
 }
 
 impl Default for Profile {
@@ -91,6 +107,8 @@ impl Default for Profile {
             java_path: None,
             jvm_args: String::new(),
             theme: default_theme(),
+            friend_toasts: true,
+            theme_custom: None,
         }
     }
 }
@@ -434,8 +452,10 @@ async fn materialize_skin(root: &Path, skin: &str) -> Result<PathBuf, String> {
         .user_agent("ReminedLauncher/0.2")
         .build()
         .map_err(|e| e.to_string())?;
+    // Skins are upserted at a stable URL — skip intermediary caches.
     let bytes = client
         .get(skin)
+        .header(reqwest::header::CACHE_CONTROL, "no-cache")
         .send()
         .await
         .map_err(|e| e.to_string())?
@@ -1125,7 +1145,7 @@ async fn launch_pack(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     diag::install_panic_hook();
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
@@ -1144,6 +1164,9 @@ pub fn run() {
                     .plugin(tauri_plugin_updater::Builder::new().build())?;
                 app.handle()
                     .plugin(tauri_plugin_global_shortcut::Builder::new().build())?;
+                if let Err(err) = tray::install(app.handle()) {
+                    diag::log("tray", &format!("install failed: {err}"));
+                }
             }
             Ok(())
         })
@@ -1215,7 +1238,24 @@ pub fn run() {
             gamewatch::list_screenshots,
             gamewatch::read_screenshot,
             gamewatch::screenshots_dir,
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        ]);
+
+    #[cfg(desktop)]
+    {
+        builder = builder.on_window_event(|window, event| {
+            tray::on_window_event(window, &event);
+        });
+    }
+
+    builder
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let RunEvent::Reopen {
+                has_visible_windows, ..
+            } = event
+            {
+                tray::on_reopen(app, has_visible_windows);
+            }
+        });
 }

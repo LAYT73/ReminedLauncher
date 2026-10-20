@@ -1,9 +1,11 @@
+import type { MouseEvent } from "react";
 import { NavLink } from "react-router";
 import brandLogo from "@/shared/assets/logo.png";
 import vanillaLogo from "@/shared/assets/vanilla.png";
 import reminedVanillaLogo from "@/shared/assets/remined-vanilla-logo.png";
 import { RAIL, routeFor, type Rail as RailId } from "@/shared/config/routes";
 import { useActiveReminePack, usePackContent } from "@/entities/pack";
+import { burstEnchantFrom } from "@/shared/ui/enchantBurst";
 
 const cx = (...parts: (string | false | undefined)[]) =>
   parts.filter(Boolean).join(" ");
@@ -14,14 +16,23 @@ type ItemProps = {
   base: string;
   /** Extra class while the item shows a bare logo. */
   extra?: string;
+  /** Enchant glyph burst on click (pack / edition icons). */
+  burst?: boolean;
   children: React.ReactNode;
 };
 
-function RailLink({ rail, title, base, extra, children }: ItemProps) {
+function RailLink({ rail, title, base, extra, burst, children }: ItemProps) {
+  const onClick = burst
+    ? (e: MouseEvent<HTMLAnchorElement>) => {
+        burstEnchantFrom(e.currentTarget);
+      }
+    : undefined;
+
   return (
     <NavLink
       to={routeFor(rail)}
       title={title}
+      onClick={onClick}
       className={({ isActive }) => cx("nav-link", base, extra, isActive && "active")}
     >
       {children}
@@ -38,7 +49,7 @@ export function Rail() {
 
   return (
     <aside className="rail">
-      <RailLink rail={RAIL.home} title="Home" base="rail-home">
+      <RailLink rail={RAIL.home} title="Home" base="rail-home" burst>
         <img className="rail-brand-logo" src={brandLogo} alt="Remined" />
       </RailLink>
 
@@ -47,6 +58,7 @@ export function Rail() {
         title={pack?.name ?? "Pack"}
         base="rail-game"
         extra={logoUrl ? "is-bare-logo" : undefined}
+        burst
       >
         {logoUrl ? (
           <img className="rail-pack-logo" src={logoUrl} alt="" />
@@ -57,11 +69,16 @@ export function Rail() {
 
       <div className="rail-spacer" />
 
-      <RailLink rail={RAIL.vanilla} title="Vanilla Minecraft" base="rail-vanilla">
+      <RailLink rail={RAIL.vanilla} title="Vanilla Minecraft" base="rail-vanilla" burst>
         <img className="rail-vanilla-logo" src={vanillaLogo} alt="" />
       </RailLink>
 
-      <RailLink rail={RAIL.reminedVanilla} title="Remined Vanilla" base="rail-vanilla">
+      <RailLink
+        rail={RAIL.reminedVanilla}
+        title="Remined Vanilla"
+        base="rail-vanilla"
+        burst
+      >
         <img className="rail-vanilla-logo" src={reminedVanillaLogo} alt="" />
       </RailLink>
 

@@ -18,6 +18,24 @@ export function mediaSrcRequired(url: string): string {
   return map.get(url.trim()) ?? url;
 }
 
+/** Drop in-memory entries so a replaced-in-place CDN URL can be re-warmed. */
+export function invalidateMedia(urls: string[]): void {
+  for (const raw of urls) {
+    const u = raw.trim();
+    if (u) map.delete(u);
+  }
+}
+
+/**
+ * Authoritative local bytes for a URL (e.g. just-uploaded skin).
+ * Skins keep a stable public URL on replace — without this, stale cache wins.
+ */
+export function seedMedia(url: string, dataUrl: string): void {
+  const u = url.trim();
+  if (!u || !dataUrl) return;
+  map.set(u, dataUrl);
+}
+
 /** The media fields of a catalog pack that get cached on disk. */
 export type MediaPack = {
   logo_url: string | null;

@@ -114,12 +114,17 @@ export function SkinModel({
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer || viewer.disposed) return;
-    const result = viewer.loadSkin(skinUrl ?? steveUrl, { model });
+    let alive = true;
+    const source = skinUrl ?? steveUrl;
+    const result = viewer.loadSkin(source, { model });
     void Promise.resolve(result).then(() => {
-      if (viewer.disposed) return;
+      if (!alive || viewer.disposed) return;
       if (variant === "bust") frameBust(viewer);
       else frameFull(viewer, preset);
     });
+    return () => {
+      alive = false;
+    };
   }, [skinUrl, model, variant, preset]);
 
   useEffect(() => {

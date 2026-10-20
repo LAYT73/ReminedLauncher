@@ -1,6 +1,6 @@
 [package]
 name = "remined"
-version = "0.8.0"
+version = "0.8.1"
 description = "Remined Minecraft Launcher"
 authors = ["Remined"]
 edition = "2021"
@@ -18,7 +18,7 @@ path = "src/bin/remined_cli.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["macos-private-api", "tray-icon"] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }

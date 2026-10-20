@@ -12,41 +12,59 @@ type SkinState = {
   applyPreview: (path: string | null | undefined) => Promise<void>;
 };
 
-export const useSkinStore = create<SkinState>((set, get) => ({
+/** Ignore stale async completions when the user swaps skins quickly. */
+let previewGen = 0;
+
+export const useSkinStore = create<SkinState>((set) => ({
   preview: null,
-  setPreview: (preview) => set({ preview }),
+  setPreview: (preview) => {
+    previewGen += 1;
+    set({ preview });
+  },
   applyPreview: async (path) => {
-    const { setPreview } = get();
+    const gen = ++previewGen;
+    const setIfCurrent = (preview: string | null) => {
+      if (gen !== previewGen) return;
+      set({ preview });
+    };
+
     if (!path) {
-      setPreview(null);
+      setIfCurrent(null);
       return;
     }
+
     if (isSkinUrl(path)) {
-      const local = mediaSrc(path);
-      if (local && local.startsWith("data:")) {
-        setPreview(local);
-        return;
-      }
-      if (useSessionStore.getState().offlineMode) {
+      const offline = useSessionStore.getState().offlineMode;
+      if (offline) {
+        const local = mediaSrc(path);
+        if (local?.startsWith("data:")) {
+          setIfCurrent(local);
+          return;
+        }
         const cached = readOfflineCache().account?.skin_data_url;
         if (cached) {
-          setPreview(cached);
+          setIfCurrent(cached);
           return;
         }
       }
-      // Online: show remote now, warm disk cache in background
+
+      // Online: never trust a prior data-URL for this path — skins are replaced
+      // in-place at a stable CDN URL, so the map can hold the previous PNG.
       const bust = path.includes("?") ? path : `${path}?t=${Date.now()}`;
-      setPreview(bust);
+      setIfCurrent(bust);
       void warmMediaCache([path]).then(() => {
+        if (gen !== previewGen) return;
         const warmed = mediaSrc(path);
-        if (warmed?.startsWith("data:")) setPreview(warmed);
+        if (warmed?.startsWith("data:")) set({ preview: warmed });
       });
       return;
     }
+
     try {
-      setPreview(await skinApi.readDataUrl(path));
+      const data = await skinApi.readDataUrl(path);
+      setIfCurrent(data ?? readOfflineCache().account?.skin_data_url ?? null);
     } catch {
-      setPreview(readOfflineCache().account?.skin_data_url ?? null);
+      setIfCurrent(readOfflineCache().account?.skin_data_url ?? null);
     }
   },
 }));

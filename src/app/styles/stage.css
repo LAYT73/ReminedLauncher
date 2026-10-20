@@ -222,24 +222,34 @@
   background: var(--mc-green-hi);
 }
 
+/* In-voice marker — pixel square like network-pill dots, not a soft round LED. */
 .topnav-tab-badge {
   position: absolute;
   top: 6px;
   right: 8px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #4ade80;
-  box-shadow: 0 0 4px rgba(74, 222, 128, 0.8);
-  animation: pulse-badge 2s ease-in-out infinite;
+  width: 8px;
+  height: 8px;
+  border-radius: 0;
+  border: 1px solid #000;
+  background: var(--mc-green-hi);
+  box-shadow:
+    inset 1px 1px 0 color-mix(in srgb, #fff 35%, transparent),
+    inset -1px -1px 0 color-mix(in srgb, #000 35%, transparent);
+  image-rendering: pixelated;
+  animation: topnav-badge-blink 1.8s steps(2, end) infinite;
 }
 
-@keyframes pulse-badge {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.7; transform: scale(1.15); }
+@keyframes topnav-badge-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
 }
 
-/* Numeric badge for pending invites — higher priority than the in-room dot. */
+/* Numeric badge for pending invites — higher priority than the in-room marker. */
 .topnav-tab-count {
   position: absolute;
   top: 2px;
@@ -249,16 +259,19 @@
   padding: 0 3px;
   display: grid;
   place-items: center;
-  border-radius: 8px;
-  background: #e6b800;
+  border-radius: 0;
+  background: var(--mc-gold);
   color: #1a1a1a;
   border: 2px solid #000;
+  box-shadow: var(--bevel-btn);
   font-family: var(--font-display);
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 400;
+  letter-spacing: 0.02em;
   line-height: 1;
+  text-shadow: none;
   image-rendering: pixelated;
-  animation: pulse-badge 1.6s ease-in-out infinite;
+  animation: topnav-badge-blink 1.6s steps(2, end) infinite;
 }
 
 .content {

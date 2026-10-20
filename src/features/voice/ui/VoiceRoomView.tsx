@@ -54,7 +54,7 @@ type Props = {
   children?: ReactNode;
 };
 
-/** In-room layout: chat + video left, members sidebar + controls right. */
+/** In-room: video grid left; members + chat + controls stacked on the right. */
 export function VoiceRoomView(props: Props) {
   const {
     userId,
@@ -131,26 +131,33 @@ export function VoiceRoomView(props: Props) {
       <div className="voice-room-layout">
         <div className="voice-room-main">
           <VoiceVideoStage tiles={props.videoTiles} members={props.members} />
-          <VoiceChat
-            userId={userId}
-            messages={props.messages}
-            chatEndRef={props.chatEndRef}
-            draft={props.draft}
-            setDraft={props.setDraft}
-            onSend={props.onSend}
-          />
         </div>
 
         <aside className="voice-sidebar">
-          <h3 className="settings-heading voice-sidebar-title">In room</h3>
-          <VoiceMembers
-            userId={userId}
-            session={session}
-            members={props.members}
-            speaking={props.speaking}
-            volumes={props.volumes}
-            setVolumes={props.setVolumes}
-          />
+          <div className="voice-sidebar-section voice-sidebar-members">
+            <h3 className="settings-heading voice-sidebar-title">In room</h3>
+            <VoiceMembers
+              userId={userId}
+              session={session}
+              members={props.members}
+              speaking={props.speaking}
+              volumes={props.volumes}
+              setVolumes={props.setVolumes}
+            />
+          </div>
+
+          <div className="voice-sidebar-section voice-sidebar-chat">
+            <h3 className="settings-heading voice-sidebar-title">Chat</h3>
+            <VoiceChat
+              userId={userId}
+              messages={props.messages}
+              chatEndRef={props.chatEndRef}
+              draft={props.draft}
+              setDraft={props.setDraft}
+              onSend={props.onSend}
+            />
+          </div>
+
           <VoiceToolbar
             session={session}
             isHost={isHost}

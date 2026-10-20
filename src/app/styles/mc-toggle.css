@@ -1,0 +1,99 @@
+/* Minecraft square settings toggle */
+.mc-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 520px;
+  padding: 10px 12px;
+  background: var(--bg-panel);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel);
+  cursor: pointer;
+  user-select: none;
+}
+
+.mc-toggle-row.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.mc-toggle-label {
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+  text-shadow: 1px 1px 0 var(--shadow-soft);
+  min-width: 0;
+  flex: 1;
+}
+
+.mc-toggle {
+  position: relative;
+  flex-shrink: 0;
+  width: 52px;
+  height: 28px;
+}
+
+.mc-toggle-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+  z-index: 2;
+}
+
+.mc-toggle-track {
+  position: absolute;
+  inset: 0;
+  border: 2px solid #000;
+  border-radius: 0;
+  overflow: hidden;
+  box-shadow: var(--bevel-inset);
+  transition: background 0.12s ease;
+  image-rendering: pixelated;
+}
+
+.mc-toggle.is-off .mc-toggle-track {
+  background: #3a3a3a;
+}
+
+.mc-toggle.is-on .mc-toggle-track {
+  background: var(--mc-green);
+}
+
+.mc-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #000;
+  border-radius: 0;
+  background: linear-gradient(180deg, #f2f2f2 0%, #c8c8c8 100%);
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.65),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.25);
+  transition: transform 0.14s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.mc-toggle.is-on .mc-toggle-thumb {
+  transform: translateX(24px);
+}
+
+.mc-toggle-row:not(.is-disabled):active .mc-toggle-thumb {
+  filter: brightness(0.94);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mc-toggle-track,
+  .mc-toggle-thumb {
+    transition: none;
+  }
+}

@@ -17,8 +17,11 @@ export function SkinHead({ skinUrl, className, size = 40 }: Props) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    let alive = true;
+    const gen = { n: 0 };
+
     function paint(img: HTMLImageElement) {
-      if (!ctx) return;
+      if (!alive || !ctx) return;
       const s = 8;
       ctx.imageSmoothingEnabled = false;
       ctx.clearRect(0, 0, size, size);
@@ -30,18 +33,27 @@ export function SkinHead({ skinUrl, className, size = 40 }: Props) {
     }
 
     function load(src: string, fallback = false) {
+      const my = ++gen.n;
       const img = new Image();
       if (/^https?:\/\//i.test(src)) {
         img.crossOrigin = "anonymous";
       }
-      img.onload = () => paint(img);
+      img.onload = () => {
+        if (!alive || my !== gen.n) return;
+        paint(img);
+      };
       img.onerror = () => {
+        if (!alive || my !== gen.n) return;
         if (!fallback) load(steveUrl, true);
       };
       img.src = src;
     }
 
     load(skinUrl?.trim() || steveUrl);
+    return () => {
+      alive = false;
+      gen.n += 1;
+    };
   }, [skinUrl, size]);
 
   return (

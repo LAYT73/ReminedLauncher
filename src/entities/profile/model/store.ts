@@ -36,7 +36,7 @@ export const useProfileStore = create<ProfileState>((set) => ({
   setUsernameBusy: (usernameBusy) => set({ usernameBusy }),
   persist: async (next) => {
     set({ profile: next });
-    applyTheme(next.theme);
+    applyTheme(next.theme, next.theme_custom);
     await profileApi.save(next);
   },
   refreshJava: async (path) => {

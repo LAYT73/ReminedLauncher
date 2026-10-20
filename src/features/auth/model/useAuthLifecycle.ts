@@ -13,7 +13,7 @@ export function useAuthLifecycle(): void {
   useEffect(() => {
     // Hydrate the theme ASAP so boot UI never snaps when the profile arrives.
     void loadLocalProfile()
-      .then((p) => applyTheme(p.theme))
+      .then((p) => applyTheme(p.theme, p.theme_custom))
       .catch(() => applyTheme(DEFAULT_THEME));
 
     void startBoot();

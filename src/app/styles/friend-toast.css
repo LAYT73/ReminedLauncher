@@ -1,0 +1,149 @@
+/* Desktop friend toast overlay — Remined MC panel + active theme tokens */
+html.friend-toast-window,
+html.friend-toast-window body,
+html.friend-toast-window #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent !important;
+}
+
+.friend-desktop-toast {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 100%;
+  padding: 10px 12px;
+  background: var(--bg-panel);
+  color: var(--text);
+  border: 3px solid #000;
+  box-shadow:
+    var(--bevel-panel),
+    0 8px 0 rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+
+.friend-desktop-toast-accent {
+  width: 6px;
+  align-self: stretch;
+  flex-shrink: 0;
+  margin: -10px 0 -10px -12px;
+  background: var(--mc-green);
+  border-right: 2px solid #000;
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--mc-green-hi) 55%, transparent);
+}
+
+.friend-desktop-toast-skin {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  background: var(--mc-stone);
+  border: 2px solid #000;
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.12);
+  image-rendering: pixelated;
+}
+
+.friend-desktop-toast-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  padding-right: 2px;
+}
+
+.friend-desktop-toast-title {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-on-stone);
+  text-shadow: 1px 1px 0 var(--shadow-soft);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.friend-desktop-toast-badge {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 3px 7px 2px;
+  border: 2px solid #000;
+  background: var(--mc-green);
+  color: var(--text-on-accent);
+  box-shadow: var(--bevel-btn);
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.45);
+  line-height: 1.2;
+}
+
+.friend-desktop-toast-kind {
+  flex-shrink: 0;
+}
+
+.friend-desktop-toast-detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  opacity: 0.95;
+}
+
+.friend-desktop-toast.is-in {
+  animation: friend-desktop-toast-in 0.2s ease-out both;
+}
+
+.friend-desktop-toast.is-out {
+  animation: friend-desktop-toast-out 0.28s ease-in both;
+}
+
+@keyframes friend-desktop-toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes friend-desktop-toast-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .friend-desktop-toast.is-in,
+  .friend-desktop-toast.is-out {
+    animation: none;
+  }
+
+  .friend-desktop-toast.is-out {
+    opacity: 0;
+  }
+}

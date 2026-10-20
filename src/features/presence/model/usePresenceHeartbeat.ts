@@ -10,7 +10,8 @@ import { useVoiceStatusStore } from "@/entities/voice-room";
 
 /**
  * Publishes friends-visible presence (online / in_game / hosting + voice) now
- * and every 40 s, and marks the user offline on page hide / unmount.
+ * and every 40 s. Stays online while the main window is hidden to tray —
+ * only goes offline on real unload / sign-out.
  */
 export function usePresenceHeartbeat(): void {
   const userId = useSessionStore(selectUserId);
@@ -67,18 +68,21 @@ export function usePresenceHeartbeat(): void {
     push();
     const heartbeat = window.setInterval(push, TIMING.presenceHeartbeat);
 
+    /** Real process teardown — not window.hide() to tray. */
     const goOffline = () => {
       void setPresence({ userId, status: "offline", packId: null });
     };
     window.addEventListener("pagehide", goOffline);
+    window.addEventListener("beforeunload", goOffline);
 
     return () => {
       window.clearInterval(heartbeat);
       window.removeEventListener("pagehide", goOffline);
+      window.removeEventListener("beforeunload", goOffline);
     };
   }, [userId, enabled, phase, hostingLan, voiceInRoom, playingPackId]);
 
-  // Offline on sign-out / unmount.
+  // Offline on sign-out (gate leaves app) — not on window hide to tray.
   useEffect(() => {
     if (!userId || !enabled) return;
     return () => {

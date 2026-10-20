@@ -1,0 +1,86 @@
+/* One-shot enchant glyph burst from rail pack icons */
+.enchant-burst-layer {
+  position: fixed;
+  inset: 0;
+  /* Inside .rail: above the sidebar background, below icon slots (z-index: 2). */
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.enchant-burst-glyph {
+  position: fixed;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-enchant);
+  font-size: var(--burst-size, 14px);
+  font-weight: 400;
+  line-height: 1;
+  color: var(--burst-accent, var(--accent-text));
+  pointer-events: none;
+  user-select: none;
+  will-change: transform, opacity;
+  animation-name: enchant-burst-fly;
+  animation-timing-function: cubic-bezier(0.16, 0.84, 0.28, 1);
+  animation-fill-mode: forwards;
+  transform: translate3d(var(--burst-x), var(--burst-y), 0) scale(0.35)
+    rotate(0deg);
+  opacity: 0;
+}
+
+.enchant-burst-glow,
+.enchant-burst-core {
+  grid-area: 1 / 1;
+  display: block;
+  line-height: 1;
+}
+
+.enchant-burst-glow {
+  opacity: 0.34;
+  transform: scale(1.12);
+  text-shadow:
+    0 0 8px var(--burst-accent, var(--accent-text)),
+    0 0 18px var(--burst-accent, var(--accent-text));
+}
+
+.enchant-burst-core {
+  opacity: 0.95;
+  text-shadow: none;
+}
+
+@keyframes enchant-burst-fly {
+  0% {
+    opacity: 0;
+    transform: translate3d(var(--burst-x), var(--burst-y), 0) scale(0.28)
+      rotate(0deg);
+  }
+  14% {
+    opacity: 1;
+    transform: translate3d(
+        calc(var(--burst-x) + var(--burst-dx) * 0.18),
+        calc(var(--burst-y) + var(--burst-dy) * 0.18),
+        0
+      )
+      scale(1.12) rotate(calc(var(--burst-rot) * 0.25));
+  }
+  55% {
+    opacity: 0.88;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(
+        calc(var(--burst-x) + var(--burst-dx)),
+        calc(var(--burst-y) + var(--burst-dy)),
+        0
+      )
+      scale(0.55) rotate(var(--burst-rot));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .enchant-burst-layer {
+    display: none;
+  }
+}

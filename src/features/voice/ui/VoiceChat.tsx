@@ -36,7 +36,7 @@ export function VoiceChat({
               <SkinHead
                 skinUrl={m.senderSkinPath ?? null}
                 className="voice-chat-avatar"
-                size={32}
+                size={28}
               />
               <div className="voice-chat-body">
                 <strong>{m.senderName || FALLBACK_USERNAME}</strong>

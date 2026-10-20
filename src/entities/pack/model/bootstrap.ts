@@ -126,7 +126,7 @@ export async function bootstrapLauncher(): Promise<void> {
 
     const profile = useProfileStore.getState();
     profile.setProfile(next);
-    applyTheme(next.theme);
+    applyTheme(next.theme, next.theme_custom);
     useGameStore.getState().setPhase(gamePhase);
     profile.setAppVersion(version || FALLBACK_APP_VERSION);
     void profile.refreshJava(next.java_path);

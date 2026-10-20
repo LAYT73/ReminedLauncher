@@ -275,15 +275,13 @@ export function useLiveSession({
               return;
             }
             onRoomStatusChange?.(false);
+            // Intentional leave/close: clear status. Do not leave a sticky
+            // "In voice" / disconnect banner on the lobby after resetLiveUi.
+            setStatus("");
             if (asGuest) {
               void leaveVoiceRoom(liveRoom.id, userId)
                 .then(() => listRoomMembers(liveRoom.id).then(setMembers))
                 .catch(() => undefined);
-              setStatus("Disconnected — Leave or rejoin from the lobby");
-            } else {
-              setStatus(
-                "Voice disconnected — try Leave, then Create again if needed",
-              );
             }
           },
           onError: (m) => onToast(m, "err"),

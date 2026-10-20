@@ -46,6 +46,14 @@
   margin-bottom: 18px;
 }
 
+/* Chat composer — full width of the chat column (overrides lobby .friends-add). */
+.voice-panel .friends-add.voice-chat-form {
+  max-width: none;
+  width: 100%;
+  margin-bottom: 0;
+  box-sizing: border-box;
+}
+
 .voice-room-head {
   flex-shrink: 0;
   margin-bottom: 10px;
@@ -55,7 +63,7 @@
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--voice-sidebar-w, 310px);
+  grid-template-columns: minmax(0, 1fr) var(--voice-sidebar-w, 340px);
   gap: 14px;
   align-items: stretch;
 }
@@ -65,7 +73,6 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
   overflow: hidden;
 }
 
@@ -74,7 +81,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
   overflow: hidden;
   border: 3px solid #000;
   box-shadow: var(--bevel-panel);
@@ -82,8 +89,28 @@
   padding: 10px;
 }
 
+.voice-sidebar-section {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.voice-sidebar-members {
+  flex: 0 1 34%;
+  min-height: 5.5rem;
+  padding-bottom: 8px;
+  border-bottom: 2px solid color-mix(in srgb, var(--text) 14%, transparent);
+}
+
+.voice-sidebar-chat {
+  flex: 1 1 42%;
+  min-height: 9rem;
+  padding: 8px 0;
+}
+
 .voice-sidebar-title {
-  margin: 0;
+  margin: 0 0 6px;
   flex-shrink: 0;
 }
 
@@ -338,36 +365,38 @@
   image-rendering: pixelated;
 }
 
-.voice-chat {
+.voice-sidebar .voice-chat {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  padding: 2px;
+  box-sizing: border-box;
   overflow: hidden;
 }
 
 .voice-chat-log {
   flex: 1 1 auto;
   min-height: 0;
-  height: 0; /* force flex height — don't grow with first messages */
+  height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  margin: 0 0 10px;
-  padding: 12px;
-  background: var(--bg-panel);
+  margin: 0 0 8px;
+  padding: 8px;
+  background: var(--bg-input);
   border: 3px solid #000;
-  box-shadow: var(--bevel-panel);
+  box-shadow: var(--bevel-inset);
 }
 
 .voice-chat-line {
   display: flex;
   flex-direction: row;
   align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 10px;
-  padding: 8px 10px;
-  font-size: 13px;
-  line-height: 1.4;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.35;
   background: var(--mc-stone);
   border: 2px solid #000;
   box-shadow: var(--bevel-inset);
@@ -380,13 +409,18 @@
 }
 
 .voice-chat-avatar {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
   background: var(--bg-input);
   border: 2px solid #000;
   box-shadow: var(--bevel-inset);
   image-rendering: pixelated;
+}
+
+.voice-sidebar .voice-chat-form .btn-mc {
+  padding-left: 10px;
+  padding-right: 10px;
 }
 
 .voice-chat-body {
@@ -410,16 +444,15 @@
 
 .voice-chat-form {
   margin: 0;
-  max-width: none;
   flex-shrink: 0;
 }
 
-/* Parent uses overflow:hidden — outer focus ring clips to top/bottom lines. */
+/* Outside ring like Friends — 2px pad on .voice-chat keeps it from clipping. */
 .voice-chat-form input:focus {
   outline: none;
   box-shadow:
     var(--bevel-inset),
-    inset 0 0 0 2px var(--mc-green-hi);
+    0 0 0 2px var(--mc-green-hi);
 }
 
 .voice-modal-backdrop {
@@ -678,53 +711,92 @@
   border: 2px solid #000;
 }
 
-/* Stage above chat: cameras row, then screen-share row. */
+/* Discord / Telemost-style adaptive video grid — fills the main column. */
 .voice-video-stage {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 0;
+  flex: 1 1 auto;
   min-width: 0;
-  flex-shrink: 0;
-  max-height: 38%;
-}
-
-.voice-video-strip {
-  display: flex;
-  flex-flow: row nowrap;
-  gap: 8px;
-  padding: 8px;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  margin: 0;
   background: rgba(0, 0, 0, 0.35);
   border: 3px solid #000;
   box-shadow: var(--bevel-panel);
-  overflow-x: auto;
-  overflow-y: hidden;
-  min-width: 0;
-  scrollbar-width: thin;
+  overflow: auto;
+  align-content: center;
+  justify-content: stretch;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: auto;
 }
 
-.voice-video-strip.is-screens {
-  background: rgba(0, 0, 0, 0.45);
+.voice-video-stage.is-empty {
+  display: grid;
+  place-items: center;
+  grid-template-columns: 1fr;
+}
+
+.voice-video-empty {
+  margin: 0;
+  padding: 12px 16px;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.voice-video-stage[data-count="1"] {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: min(960px, 100%);
+  margin-inline: auto;
+}
+
+.voice-video-stage[data-count="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.voice-video-stage[data-count="3"],
+.voice-video-stage[data-count="4"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.voice-video-stage[data-count="5"],
+.voice-video-stage[data-count="6"],
+.voice-video-stage[data-count="7"],
+.voice-video-stage[data-count="8"],
+.voice-video-stage[data-count="9"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .voice-video-tile {
   position: relative;
-  flex: 0 0 auto;
-  width: min(280px, 72vw);
+  min-width: 0;
+  width: 100%;
+  height: auto;
   background: #111;
   border: 3px solid #000;
   box-shadow: var(--bevel-panel);
   aspect-ratio: 16 / 9;
   overflow: hidden;
+  place-self: stretch;
 }
 
-.voice-video-strip.is-screens .voice-video-tile {
-  width: min(420px, 85vw);
+.voice-video-stage[data-count="1"] .voice-video-tile {
+  max-width: min(960px, 100%);
+  max-height: min(72vh, 100%);
+  width: 100%;
+  justify-self: center;
 }
 
 .voice-video-tile:fullscreen {
   width: 100%;
   height: 100%;
+  max-height: none;
   aspect-ratio: auto;
   background: #000;
 }
@@ -737,7 +809,7 @@
   background: #111;
 }
 
-.voice-video-strip.is-screens .voice-video-tile video,
+.voice-video-tile.is-screen video,
 .voice-video-tile:fullscreen video {
   object-fit: contain;
 }

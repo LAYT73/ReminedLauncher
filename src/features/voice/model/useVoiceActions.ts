@@ -336,8 +336,9 @@ export function useVoiceActions({
         await leaveVoiceRoom(active.id, userId).catch(() => undefined);
         await voiceGuestDisconnect().catch(() => undefined);
       }
-      await live.sessionRef.current?.disconnect().catch(() => undefined);
-      live.sessionRef.current = null;
+      // Must use live.disconnect() — sets intentionalLeave so onDisconnected
+      // does not schedule auto-reconnect and resurrect "In voice" + tab badge.
+      await live.disconnect().catch(() => undefined);
       if (active && isHost) {
         await stopHostKeepingLan();
       }

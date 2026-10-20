@@ -447,6 +447,139 @@
   box-shadow: var(--bevel-inset);
 }
 
+.theme-swatch-custom {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  overflow: hidden;
+  padding: 0;
+}
+
+.theme-swatch-half {
+  display: block;
+  min-height: 100%;
+}
+
+.theme-swatch-plus {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-display);
+  font-size: 16px;
+  line-height: 1;
+  color: #fff;
+  background: #111;
+  border: 2px solid #000;
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.2),
+    0 0 0 1px rgba(255, 255, 255, 0.35);
+  text-shadow: none;
+  pointer-events: none;
+}
+
+.theme-custom-editor {
+  margin-top: 14px;
+  max-width: 420px;
+  padding: 12px;
+  background: var(--bg-panel);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.theme-custom-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.theme-custom-label {
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  min-width: 4.5rem;
+}
+
+.theme-mode-seg {
+  display: flex;
+  border: 2px solid #000;
+  box-shadow: var(--bevel-inset);
+  overflow: hidden;
+}
+
+.theme-mode-btn {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  min-width: 72px;
+  height: 32px;
+  padding: 0 12px;
+  background: var(--mc-stone);
+  color: var(--text-on-stone-muted);
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.theme-mode-btn + .theme-mode-btn {
+  border-left: 2px solid #000;
+}
+
+.theme-mode-btn.is-active {
+  background: var(--mc-green);
+  color: var(--text-on-accent);
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
+}
+
+.theme-color-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.theme-color-field input[type="color"] {
+  width: 36px;
+  height: 32px;
+  padding: 2px;
+  border: 2px solid #000;
+  background: var(--bg-input);
+  box-shadow: var(--bevel-inset);
+  cursor: pointer;
+}
+
+.theme-color-hex {
+  width: 7.5rem;
+  height: 32px;
+  padding: 0 8px;
+  border: 2px solid #000;
+  background: var(--bg-input);
+  box-shadow: var(--bevel-inset);
+  color: var(--text);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.theme-custom-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
 /* Account / Mojang-red sign out */
 .settings-account {
   max-width: 420px;

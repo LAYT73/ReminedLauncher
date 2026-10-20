@@ -6,6 +6,7 @@ import { JavaSection } from "./sections/JavaSection";
 import { LauncherSection } from "./sections/LauncherSection";
 import { NetworkSection } from "./sections/NetworkSection";
 import { PackSection } from "./sections/PackSection";
+import { NotificationsSection } from "./sections/NotificationsSection";
 import { ThemeSection } from "./sections/ThemeSection";
 
 type SettingsTab = "general" | "network" | "runtime" | "updates" | "debug";
@@ -84,7 +85,13 @@ export function SettingsPage() {
         aria-labelledby={`settings-tab-${tab}`}
       >
         {tab === "general" ? (
-          <Divided sections={[<ThemeSection key="theme" />, <AccountSection key="account" />]} />
+          <Divided
+            sections={[
+              <ThemeSection key="theme" />,
+              <NotificationsSection key="notifications" />,
+              <AccountSection key="account" />,
+            ]}
+          />
         ) : null}
         {tab === "network" ? <NetworkSection /> : null}
         {tab === "runtime" ? <JavaSection /> : null}

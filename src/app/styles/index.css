@@ -1,7 +1,10 @@
 /* Launcher styles — split by area under ./styles; order matters (cascade). */
 @import "./base.css";
 @import "./rail.css";
+@import "./enchant-burst.css";
+@import "./mc-toggle.css";
 @import "./stage.css";
+
 @import "./hero-home.css";
 @import "./pack-page.css";
 @import "./installations.css";
@@ -11,5 +14,6 @@
 @import "./friends.css";
 @import "./toast.css";
 @import "./game-toast.css";
+@import "./friend-toast.css";
 @import "./voice.css";
 @import "./tray-screenshots.css";

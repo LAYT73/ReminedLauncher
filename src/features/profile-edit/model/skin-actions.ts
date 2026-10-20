@@ -1,7 +1,11 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { MSG } from "@/shared/config/messages";
 import { toast } from "@/shared/lib/toast";
-import { warmMediaCache } from "@/shared/lib/mediaCache";
+import {
+  invalidateMedia,
+  seedMedia,
+  warmMediaCache,
+} from "@/shared/lib/mediaCache";
 import {
   clearAccountSkin,
   ensureCloudProfile,
@@ -48,8 +52,13 @@ export async function pickSkin(): Promise<void> {
   const skin = useSkinStore.getState();
   const { profile, persist } = useProfileStore.getState();
 
-  // Local preview while uploading.
-  skin.setPreview(await skinApi.readDataUrl(selected));
+  // Local bytes are authoritative — same CDN URL is reused on replace.
+  const dataUrl = await skinApi.readDataUrl(selected);
+  if (!dataUrl) {
+    toast("Could not read skin");
+    return;
+  }
+  skin.setPreview(dataUrl);
 
   try {
     let id = session.reminedId;
@@ -60,8 +69,17 @@ export async function pickSkin(): Promise<void> {
     const url = await publishAccountSkin(id, selected, user.id);
     const next = { ...profile, skin_path: url };
     await persist(next);
-    await warmMediaCache([url]);
-    await skin.applyPreview(url);
+
+    invalidateMedia([url]);
+    seedMedia(url, dataUrl);
+    skin.setPreview(dataUrl);
+
+    // Refresh disk cache in the background; re-seed after so a stale CDN
+    // response cannot overwrite the just-uploaded bytes in the media map.
+    void warmMediaCache([url]).then(() => {
+      seedMedia(url, dataUrl);
+    });
+
     void rememberOfflineSnapshot({
       offline: useSessionStore.getState().offlineMode,
       userId: user.id,
