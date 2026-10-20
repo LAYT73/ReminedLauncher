@@ -10,7 +10,7 @@ type Props = {
   userId: string;
   session: VoiceSession | null;
   isHost: boolean;
-  /** Host has published a Porthole share code — invite only after this. */
+  /** Host has published an Unlim share key — invite only after this. */
   lobbyReady: boolean;
   members: VoiceMember[];
   speaking: Record<string, boolean>;
@@ -55,7 +55,7 @@ export function VoiceMembers({
             const inVoice = liveIds.has(m.userId);
             // Only treat others as "connecting" once *we* are in LiveKit —
             // otherwise every tile (incl. the host) looks stuck while we still
-            // negotiate Porthole.
+            // negotiate Unlim.
             const pendingJoin = iAmLive && !inVoice && !isMe;
             const statusLabel = (() => {
               if (isMe && !inVoice) return "Connecting…";

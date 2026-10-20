@@ -778,6 +778,11 @@ fn watch_stdout_for_code(
     let deadline = Instant::now() + Duration::from_secs(45);
     let mut last_err = String::new();
     let mut guest_hint = false;
+    // Prefer Steam static share code for guests. Publishing lobby:<id> alone
+    // left peers connected with zero port_accepted on Minecraft LAN exposes
+    // (localhost never opened). Static code historically gets port_accepted.
+    // Wait for lobby_ready first so the lobby exists, then publish static.
+    let mut pending_static: Option<String> = None;
 
     while Instant::now() < deadline {
         // Guest: local bind is the only reliable "ready" signal.
@@ -788,15 +793,25 @@ fn watch_stdout_for_code(
         match rx.recv_timeout(remaining.min(Duration::from_millis(400))) {
             Ok(LineEvt::Line(line)) => {
                 let _ = app.emit("porthole-log", line.clone());
-                // static_code is Steam-profile scoped — identical for every concurrent
-                // expose. Always publish lobby:<id> so guests join the right lobby
-                // (voice vs LAN sidecar).
+                if is_host {
+                    if let Some(c) = extract_share_code(&line) {
+                        // Keep the latest static/share code; lobby_ready finalizes.
+                        pending_static = Some(c);
+                    }
+                }
                 let host_code = if is_host {
-                    extract_lobby_target(&line)
+                    extract_lobby_target(&line).map(|lobby| {
+                        pending_static.take().unwrap_or(lobby)
+                    })
                 } else {
                     None
                 };
                 if let Some(code) = host_code {
+                    net_log::append_ok(
+                        &app,
+                        "host",
+                        &format!("publish join target={code}"),
+                    );
                     let lan_port = if let Ok(mut guard) = state.lock() {
                         match slot {
                             ChildSlot::HostLan => {

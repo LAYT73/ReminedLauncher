@@ -64,12 +64,11 @@ export function VoiceLobby({
       </div>
 
       <p className="friends-lead">
-        Host a room on your PC, invite friends over Steam Porthole, keep chat in
-        Remined.
+        Host a room on your PC, invite friends over Unlim, keep chat in Remined.
       </p>
 
-      <InfoNote id="voice.porthole-setup">
-        Needs Steam + Porthole (same setup as Network Play). Friends join via
+      <InfoNote id="voice.unlim-setup">
+        Needs Unlim installed (Settings → Network → Unlim). Friends join via
         invite — they do not need your public IP.
         {onOpenNetworkPlay ? (
           <>
@@ -79,7 +78,7 @@ export function VoiceLobby({
               className="friends-inline-link"
               onClick={onOpenNetworkPlay}
             >
-              Open Network Play
+              Open Network
             </button>
           </>
         ) : null}

@@ -7,8 +7,7 @@ import {
   type VoiceRoom,
 } from "@/entities/voice-room";
 import { netLog } from "@/shared/api/netLog";
-import { portholeStopJoin } from "@/shared/api/porthole";
-import { voiceGuestConnect } from "../api/voiceNative";
+import { voiceGuestConnect, voiceGuestDisconnect } from "../api/voiceNative";
 import { VoiceSession, type VoiceVideoTile } from "../lib/voiceSession";
 import { errorMessage, type ToastFn } from "./types";
 import { MSG } from "@/shared/config/messages";
@@ -139,7 +138,7 @@ export function useLiveSession({
     async (room: VoiceRoom, asGuest: boolean) => {
       intentionalLeaveRef.current = false;
       connectingRef.current = true;
-      setStatus(asGuest ? "Connecting Porthole…" : MSG.voice.connectingVoice);
+      setStatus(asGuest ? "Connecting Unlim…" : MSG.voice.connectingVoice);
       let liveRoom = room;
       try {
         if (asGuest) {
@@ -173,13 +172,13 @@ export function useLiveSession({
             connectingCodeRef.current = code;
             if (i > 0) {
               setStatus(
-                `Connecting Porthole… (retry ${i + 1}/${portholeAttempts})`,
+                `Connecting Unlim… (retry ${i + 1}/${portholeAttempts})`,
               );
               await new Promise((r) => setTimeout(r, 600 * i));
             }
             try {
-              // Drop a stale join tunnel before binding the new lobby.
-              await portholeStopJoin().catch(() => undefined);
+              // Drop a stale join tunnel before binding the new key.
+              await voiceGuestDisconnect().catch(() => undefined);
               await voiceGuestConnect(code);
               portholeErr = null;
               break;

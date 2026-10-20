@@ -64,7 +64,13 @@ export const CMD = {
   voiceStartHost: "voice_start_host",
   voiceStopHost: "voice_stop_host",
   voiceGuestConnect: "voice_guest_connect",
+  voiceGuestDisconnect: "voice_guest_disconnect",
   voiceMintToken: "voice_mint_token",
+  // unlim (voice tunnel)
+  unlimStatus: "unlim_status",
+  unlimCheck: "unlim_check",
+  unlimGetPath: "unlim_get_path",
+  unlimSetPath: "unlim_set_path",
 } as const;
 
 export type Command = (typeof CMD)[keyof typeof CMD];

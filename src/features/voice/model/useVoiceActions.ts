@@ -19,9 +19,10 @@ import {
   type VoiceRoom,
 } from "@/entities/voice-room";
 import { useGameStore } from "@/entities/game";
-import { portholeStopJoin } from "@/shared/api/porthole";
+import { unlimStatus } from "@/shared/api/unlim";
 import {
   voiceEnsureRuntime,
+  voiceGuestDisconnect,
   voiceLog,
   voiceStartLivekit,
   voiceStartPorthole,
@@ -39,6 +40,7 @@ function lanPortNow(): number | null {
   return useGameStore.getState().hostingLan?.gamePort ?? null;
 }
 
+/** Keep Friends "Hosting" chip in sync when voice stop re-exposes LAN on Porthole. */
 function syncLanShareCode(shareCode: string, gamePort: number) {
   const game = useGameStore.getState();
   const prev = game.hostingLan;
@@ -102,7 +104,7 @@ export function useVoiceActions({
         void (async () => {
           await leaveVoiceRoom(activeId, userId).catch(() => undefined);
           await live.disconnect().catch(() => undefined);
-          await portholeStopJoin().catch(() => undefined);
+          await voiceGuestDisconnect().catch(() => undefined);
           room.reset();
           live.resetLiveUi();
           onRoomStatusChange?.(false);
@@ -116,10 +118,10 @@ export function useVoiceActions({
       room.setActive((prev) => {
         if (!prev || prev.id !== activeId) return prev;
         // Same-code Realtime echo must not force a guest rejoin — that kills
-        // the in-flight Porthole connect (localhost:7880 never opens).
+        // the in-flight Unlim connect (localhost:7880 never opens).
         if (code === prev.portholeShareCode) return prev;
         const next = { ...prev, portholeShareCode: code };
-        // Guests auto-reconnect onto the rebuilt Voice+LAN lobby.
+        // Guests auto-reconnect when the host publishes a new Unlim key.
         if (activeHostId !== userId && code) {
           queueMicrotask(() => live.onHostShareCode(next, code));
         }
@@ -152,7 +154,7 @@ export function useVoiceActions({
     } catch (err) {
       await live.disconnect();
       if (!asGuest) await stopHostKeepingLan();
-      else await portholeStopJoin().catch(() => undefined);
+      else await voiceGuestDisconnect().catch(() => undefined);
       resetActiveUi();
       throw err;
     }
@@ -215,10 +217,14 @@ export function useVoiceActions({
       // Clean leftover UI/session only — LiveKit reuse is handled in Rust.
       await live.disconnect();
       resetActiveUi();
+      const unlim = await unlimStatus();
+      if (!unlim.installed) {
+        throw new Error(MSG.voice.installUnlim);
+      }
       await voiceEnsureRuntime();
       step(MSG.voice.startingServer, 85);
       live.setStatus(MSG.voice.startingServer);
-      // LiveKit first — host WebRTC must succeed before Porthole binds the same ports.
+      // LiveKit first — host WebRTC must succeed before Unlim binds the same ports.
       const livekit = await voiceStartLivekit();
       const created = await createVoiceRoom({
         hostId: userId,
@@ -235,11 +241,8 @@ export function useVoiceActions({
       useVoiceStatusStore.getState().setHostRoomId(created.id);
       step(MSG.voice.openingPorthole, 96);
       live.setStatus(MSG.voice.openingPorthole);
-      // Merge Open-to-LAN into the same Steam lobby when already hosting.
-      const lan = lanPortNow();
-      const ready = await voiceStartPorthole(lan);
+      const ready = await voiceStartPorthole(null);
       await setVoiceRoomShareCode(created.id, ready.share_code);
-      if (lan) syncLanShareCode(ready.share_code, lan);
       room.setActive((prev) => ({
         ...(prev ?? created),
         portholeShareCode: ready.share_code,
@@ -279,30 +282,30 @@ export function useVoiceActions({
             await stopHostKeepingLan();
           } else {
             await leaveVoiceRoom(active.id, userId).catch(() => undefined);
-            await portholeStopJoin().catch(() => undefined);
+            await voiceGuestDisconnect().catch(() => undefined);
           }
           await live.disconnect();
           resetActiveUi();
         }
         const joined = await respondVoiceInvite(inv.id, true, userId);
         if (!joined) throw new Error("Room unavailable");
-        // Host may still be publishing the Porthole code after create — poll briefly.
+        // Host may still be publishing the Unlim key after create — poll briefly.
         let room = joined;
         for (let i = 0; i < 10 && !room.portholeShareCode; i++) {
-          live.setStatus("Waiting for host lobby code…");
+          live.setStatus("Waiting for host share key…");
           await new Promise((r) => setTimeout(r, 500));
           room = (await getVoiceRoom(joined.id)) ?? room;
         }
         if (!room.portholeShareCode) {
           throw new Error(
-            "Host lobby code is not ready yet — ask them to wait until the code appears, then re-accept",
+            "Host share key is not ready yet — ask them to wait until the code appears, then re-accept",
           );
         }
         await openRoomSession(room, true);
         onToast("Joined voice room", "ok");
         unlockAchievement("first-voice-room", onToast);
       } catch (err) {
-        void portholeStopJoin().catch(() => undefined);
+        void voiceGuestDisconnect().catch(() => undefined);
         resetActiveUi();
         throw err;
       }
@@ -327,7 +330,7 @@ export function useVoiceActions({
         await closeVoiceRoom(active.id).catch(() => undefined);
       } else if (active) {
         await leaveVoiceRoom(active.id, userId).catch(() => undefined);
-        await portholeStopJoin().catch(() => undefined);
+        await voiceGuestDisconnect().catch(() => undefined);
       }
       await live.sessionRef.current?.disconnect().catch(() => undefined);
       live.sessionRef.current = null;
@@ -390,12 +393,10 @@ export function useVoiceActions({
       await openRoomSession(target, asGuest);
       if (!asGuest) {
         useVoiceStatusStore.getState().setHostRoomId(target.id);
-        // Host rejoin: ensure lobby is up (and still merged with LAN if needed).
+        // Host rejoin: ensure Unlim tunnel is up.
         if (!target.portholeShareCode) {
-          const lan = lanPortNow();
-          const ready = await voiceStartPorthole(lan);
+          const ready = await voiceStartPorthole(null);
           await setVoiceRoomShareCode(target.id, ready.share_code);
-          if (lan) syncLanShareCode(ready.share_code, lan);
           room.setActive((prev) =>
             prev
               ? { ...prev, portholeShareCode: ready.share_code }
@@ -413,7 +414,7 @@ export function useVoiceActions({
         onToast("Room closed", "ok");
       } else {
         await leaveVoiceRoom(target.id, userId);
-        await portholeStopJoin().catch(() => undefined);
+        await voiceGuestDisconnect().catch(() => undefined);
         onToast("Left room", "ok");
       }
       if (active?.id === target.id) {

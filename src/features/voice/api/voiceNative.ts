@@ -45,8 +45,8 @@ export async function voiceStartLivekit(): Promise<VoiceHostReady> {
   return call<VoiceHostReady>(CMD.voiceStartLivekit);
 }
 
-/** Steam Porthole expose — call after host has joined LiveKit locally.
- *  Pass `lanPort` to keep Open-to-LAN on the same lobby. */
+/** Unlim tunnel for voice — call after host has joined LiveKit locally.
+ *  `lanPort` is ignored (Open-to-LAN stays on Steam Porthole). */
 export async function voiceStartPorthole(
   lanPort?: number | null,
 ): Promise<VoiceHostReady> {
@@ -70,6 +70,10 @@ export async function voiceStopHost(
 
 export async function voiceGuestConnect(shareCode: string): Promise<void> {
   await call(CMD.voiceGuestConnect, { shareCode });
+}
+
+export async function voiceGuestDisconnect(): Promise<void> {
+  await call(CMD.voiceGuestDisconnect);
 }
 
 export async function voiceMintToken(

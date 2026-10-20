@@ -447,6 +447,22 @@ button.network-pill:hover {
   margin-top: 6px;
 }
 
+.network-unlim {
+  max-width: 640px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 2px solid color-mix(in srgb, var(--text) 18%, transparent);
+}
+
+.network-unlim .friends-lead {
+  margin-bottom: 12px;
+}
+
+.network-unlim .field {
+  margin-top: 12px;
+  max-width: 640px;
+}
+
 
 .friend-join {
   justify-self: end;

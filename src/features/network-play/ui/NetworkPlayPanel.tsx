@@ -1,4 +1,6 @@
+import { open } from "@tauri-apps/plugin-dialog";
 import { usePortholeStatus } from "../model/usePortholeStatus";
+import { useUnlimStatus } from "../model/useUnlimStatus";
 
 type Props = {
   hostingSelf?: boolean;
@@ -45,8 +47,9 @@ export function NetworkPlayPanel({
     openSteam,
     launchSteamApp,
     runCheck,
-  } =
-    usePortholeStatus(onToast);
+  } = usePortholeStatus(onToast);
+
+  const unlim = useUnlimStatus(onToast);
 
   const installed = Boolean(status?.installed);
   const steamOk =
@@ -100,6 +103,36 @@ export function NetworkPlayPanel({
           ? "Installed"
           : "Missing";
 
+  const unlimInstalled = Boolean(unlim.status?.installed);
+  const unlimTone: "ok" | "warn" | "bad" | "idle" = !unlim.status
+    ? "idle"
+    : unlim.checking
+      ? "idle"
+      : unlim.check
+        ? unlim.check.ok
+          ? "ok"
+          : unlimInstalled
+            ? "warn"
+            : "bad"
+        : unlimInstalled
+          ? "ok"
+          : "bad";
+  const unlimValue = !unlim.status
+    ? "…"
+    : unlim.checking
+      ? "Checking"
+      : unlim.check
+        ? unlim.check.ok
+          ? "Ready"
+          : unlimInstalled
+            ? "Issue"
+            : "Missing"
+        : unlimInstalled
+          ? unlim.status.version
+            ? `v${unlim.status.version}`
+            : "Found"
+          : "Missing";
+
   const statusClass = check
     ? check.ok
       ? "is-ready"
@@ -124,6 +157,35 @@ export function NetworkPlayPanel({
         ? "Leave Steam open and logged in to host or join."
         : "Install free Porthole on Steam to play with friends online.";
 
+  const unlimStatusClass = unlim.check
+    ? unlim.check.ok
+      ? "is-ready"
+      : "is-missing"
+    : unlimInstalled
+      ? "is-ready"
+      : "is-missing";
+  const unlimTitle = unlim.check
+    ? unlim.check.ok
+      ? "Ready for voice"
+      : "Needs attention"
+    : unlimInstalled
+      ? "Found"
+      : "Not found";
+  const unlimBody = unlim.checking
+    ? "Checking Unlim…"
+    : unlim.check
+      ? unlim.check.message
+      : unlimInstalled
+        ? unlim.status?.path ?? "Binary found."
+        : "Install Unlim for voice chat (separate from Network Play).";
+
+  async function browseUnlim() {
+    const selected = await open({ multiple: false, directory: false });
+    if (!selected || Array.isArray(selected)) return;
+    unlim.setPathDraft(selected);
+    await unlim.savePath(selected);
+  }
+
   const Root = embedded ? "div" : "section";
   return (
     <Root
@@ -140,6 +202,7 @@ export function NetworkPlayPanel({
             value={portholeValue}
             tone={portholeTone}
           />
+          <StatusBadge label="Unlim" value={unlimValue} tone={unlimTone} />
         </div>
       </div>
       {voiceLive ? (
@@ -248,6 +311,105 @@ export function NetworkPlayPanel({
               the world.
             </li>
           </ol>
+        </div>
+      </div>
+
+      <div className="network-unlim">
+        <h3 className="settings-heading">Unlim (voice)</h3>
+        <p className="friends-lead">
+          Voice chat uses <strong>Unlim</strong>, not Porthole. Free install from{" "}
+          unlim.cc — both host and guests need it.
+        </p>
+        <div className={`network-status ${unlimStatusClass}`}>
+          <div className="network-status-copy">
+            <strong>{unlimTitle}</strong>
+            <p>{unlimBody}</p>
+          </div>
+          <div className="network-status-actions">
+            {!unlimInstalled ? (
+              <button
+                type="button"
+                className="btn-mc ok"
+                disabled={unlim.busy || unlim.checking}
+                onClick={() => void unlim.openDownload()}
+              >
+                Get Unlim
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="btn-mc ok"
+              disabled={unlim.busy || unlim.checking}
+              onClick={() => void unlim.runCheck()}
+            >
+              {unlim.checking ? "Checking…" : "Check"}
+            </button>
+            <button
+              type="button"
+              className="btn-mc dim"
+              disabled={unlim.busy || unlim.checking}
+              onClick={() => void unlim.refresh()}
+            >
+              Refresh
+            </button>
+            {unlimInstalled ? (
+              <button
+                type="button"
+                className="btn-mc dim"
+                disabled={unlim.busy || unlim.checking}
+                onClick={() => void unlim.openDownload()}
+              >
+                unlim.cc
+              </button>
+            ) : null}
+          </div>
+        </div>
+        {unlim.error ? <p className="friends-error">{unlim.error}</p> : null}
+        {unlim.check && !unlim.check.ok && unlim.check.detail ? (
+          <pre className="network-check-detail">{unlim.check.detail}</pre>
+        ) : null}
+
+        <div className="field">
+          <label htmlFor="unlim-path">Unlim binary</label>
+          <div className="field-row">
+            <input
+              id="unlim-path"
+              type="text"
+              spellCheck={false}
+              placeholder="Auto-detect"
+              value={unlim.pathDraft}
+              onChange={(e) => unlim.setPathDraft(e.target.value)}
+              onBlur={() => {
+                const next = unlim.pathDraft.trim();
+                void unlim.savePath(next || null);
+              }}
+            />
+            <button
+              type="button"
+              className="btn-mc ok"
+              disabled={unlim.busy}
+              onClick={() => void browseUnlim()}
+            >
+              Browse
+            </button>
+            {unlim.status?.custom_path || unlim.pathDraft.trim() ? (
+              <button
+                type="button"
+                className="btn-mc dim"
+                disabled={unlim.busy}
+                onClick={() => {
+                  unlim.setPathDraft("");
+                  void unlim.savePath(null);
+                }}
+              >
+                Auto
+              </button>
+            ) : null}
+          </div>
+          <p className="field-hint">
+            If auto-find misses it: Win → unlim.exe (often %APPDATA%\Unlim\bin\);
+            Mac → Unlim/bin/unlim under Application Support.
+          </p>
         </div>
       </div>
     </Root>

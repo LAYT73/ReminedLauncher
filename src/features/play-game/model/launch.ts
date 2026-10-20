@@ -1,6 +1,5 @@
 import { netLog } from "@/shared/api/netLog";
 import {
-  portholeCurrentHost,
   portholeStartJoin,
   portholeStopGameJoin,
   portholeStopAll,
@@ -30,11 +29,7 @@ import {
 import { usePlaytimeStore } from "@/entities/playtime";
 import { syncCloudProfile, useProfileStore } from "@/entities/profile";
 import { useSessionStore } from "@/entities/session";
-import {
-  setVoiceRoomShareCode,
-  useVoiceStatusStore,
-} from "@/entities/voice-room";
-import { voiceStartPorthole } from "@/features/voice/api/voiceNative";
+import { useVoiceStatusStore } from "@/entities/voice-room";
 import { downloadPack, ensurePackUpToDate } from "./pack-install";
 import { getPlayState } from "./play-state";
 import { installVersion } from "./versions";
@@ -104,21 +99,9 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
     game.setHostingLan(null);
     game.setLive(null);
     const voice = useVoiceStatusStore.getState();
-    if (voice.hostRoomId) {
-      void portholeCurrentHost()
-        .then((live) => {
-          if (!live?.lan_port) {
-            void netLog("ui", "launch: voice host — leave Porthole alone");
-            return;
-          }
-          void netLog("ui", "launch: drop LAN from voice lobby (keep voice)");
-          return voiceStartPorthole(null).then((ready) =>
-            setVoiceRoomShareCode(voice.hostRoomId!, ready.share_code),
-          );
-        })
-        .catch(() => undefined);
-    } else if (voice.inRoom) {
-      // Voice guest: keep join, drop any leftover host expose.
+    // Voice rides Unlim; Play must not rebuild it. Only clear leftover Porthole.
+    if (voice.hostRoomId || voice.inRoom) {
+      void netLog("ui", "launch: voice live — leave Unlim, stop stale Porthole host");
       void portholeStopHost().catch(() => undefined);
     } else {
       void portholeStopAll().catch(() => undefined);

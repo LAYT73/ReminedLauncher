@@ -223,6 +223,8 @@ pub fn porthole_line_interesting(line: &str) -> bool {
         || lower.contains("share_code")
         || lower.contains("lobby_ready")
         || lower.contains("port_accepted")
+        || lower.contains("port_offered")
+        || lower.contains("port_rejected")
         || lower.contains("session_opened")
         || lower.contains("session_closed")
         || lower.contains("peer_connected")
@@ -236,4 +238,5 @@ pub fn porthole_line_interesting(line: &str) -> bool {
         || lower.contains("mismatch")
         || lower.contains("steam init")
         || lower.contains("not logged")
+        || lower.contains("roster")
 }

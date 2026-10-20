@@ -82,10 +82,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v0.7.5
-          releaseName: Remined v0.7.5
+          tagName: v0.7.6
+          releaseName: Remined v0.7.6
           releaseBody: |
-            Remined launcher v0.7.5 — Network Play Join: --auto-approve so Minecraft LAN ports actually get port_accepted (fixed localhost not open / pack never launches); refresh host lobby+port before tunnel; dice reroll for voice room name.
+            Remined launcher v0.7.6 — Voice chat moves to Unlim (Porthole stays for Network Play only); Network tab Unlim check + custom binary path/browse when auto-find misses; guests reconnect on Unlim without Steam lobby merge.
             macOS (arm64 + x64) and Windows builds.
           releaseDraft: false
           prerelease: false

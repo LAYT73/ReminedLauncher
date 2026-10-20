@@ -139,7 +139,7 @@ export function VoiceRoomView(props: Props) {
 
       {active.portholeShareCode ? (
         <p className="friends-lead voice-code-lead">
-          Porthole code{" "}
+          Share key{" "}
           <button
             type="button"
             className="friend-id"

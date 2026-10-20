@@ -18,6 +18,7 @@ mod smoke;
 mod vanilla;
 mod vanilla_skin_pack;
 mod net_log;
+mod unlim;
 mod voice_log;
 mod voice_runtime;
 
@@ -756,12 +757,12 @@ async fn voice_start_livekit(
 #[tauri::command]
 async fn voice_start_porthole(
     app: AppHandle,
-    porthole: State<'_, porthole::PortholeState>,
+    unlim: State<'_, unlim::UnlimState>,
     lan_port: Option<u16>,
 ) -> Result<voice_runtime::VoiceHostReady, String> {
-    let porthole = porthole.inner().clone();
+    let unlim = unlim.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        voice_runtime::start_voice_porthole(app, porthole, lan_port)
+        voice_runtime::start_voice_porthole(app, unlim, lan_port)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -771,13 +772,13 @@ async fn voice_start_porthole(
 async fn voice_start_host(
     app: AppHandle,
     voice: State<'_, voice_runtime::VoiceRuntimeState>,
-    porthole: State<'_, porthole::PortholeState>,
+    unlim: State<'_, unlim::UnlimState>,
 ) -> Result<voice_runtime::VoiceHostReady, String> {
     let voice = voice.inner().clone();
-    let porthole = porthole.inner().clone();
+    let unlim = unlim.inner().clone();
     let app2 = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        voice_runtime::start_voice_host(app2, voice, porthole)
+        voice_runtime::start_voice_host(app2, voice, unlim)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -788,24 +789,53 @@ fn voice_stop_host(
     app: AppHandle,
     voice: State<'_, voice_runtime::VoiceRuntimeState>,
     porthole: State<'_, porthole::PortholeState>,
+    unlim: State<'_, unlim::UnlimState>,
     keep_lan_port: Option<u16>,
 ) -> Option<porthole::PortholeHostInfo> {
-    voice_runtime::stop_voice_host(&app, &voice, &porthole, keep_lan_port)
+    voice_runtime::stop_voice_host(&app, &voice, &porthole, &unlim, keep_lan_port)
 }
 
 #[tauri::command]
 async fn voice_guest_connect(
     app: AppHandle,
-    porthole: State<'_, porthole::PortholeState>,
+    unlim: State<'_, unlim::UnlimState>,
     share_code: String,
 ) -> Result<(), String> {
-    let porthole = porthole.inner().clone();
+    let unlim = unlim.inner().clone();
     let app2 = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        voice_runtime::guest_connect(app2, porthole, &share_code)
+        voice_runtime::guest_connect(app2, unlim, &share_code)
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn voice_guest_disconnect(
+    app: AppHandle,
+    unlim: State<'_, unlim::UnlimState>,
+) {
+    voice_runtime::guest_disconnect(&app, &unlim);
+}
+
+#[tauri::command]
+fn unlim_status(app: AppHandle) -> unlim::UnlimStatus {
+    unlim::status(&app)
+}
+
+#[tauri::command]
+fn unlim_check(app: AppHandle) -> unlim::UnlimCheckResult {
+    unlim::check(&app)
+}
+
+#[tauri::command]
+fn unlim_get_path(app: AppHandle) -> Option<String> {
+    unlim::get_custom_path(&app)
+}
+
+#[tauri::command]
+fn unlim_set_path(app: AppHandle, path: Option<String>) -> Result<(), String> {
+    unlim::set_custom_path(&app, path)
 }
 
 #[tauri::command]
@@ -1113,6 +1143,7 @@ pub fn run() {
         })
         .manage(Mutex::new(GameSession::default()))
         .manage(porthole::PortholeState::default())
+        .manage(unlim::UnlimState::default())
         .manage(voice_runtime::VoiceRuntimeState::default())
         .invoke_handler(tauri::generate_handler![
             list_packs,
@@ -1165,7 +1196,12 @@ pub fn run() {
             voice_start_host,
             voice_stop_host,
             voice_guest_connect,
+            voice_guest_disconnect,
             voice_mint_token,
+            unlim_status,
+            unlim_check,
+            unlim_get_path,
+            unlim_set_path,
             read_lan_port,
             gamewatch::latest_crash_report,
             gamewatch::game_log_status,
