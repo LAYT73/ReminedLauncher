@@ -33,7 +33,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use runtime::LaunchedGame;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, RunEvent, State};
+use tauri::{AppHandle, State};
+#[cfg(target_os = "macos")]
+use tauri::RunEvent;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Pack {
