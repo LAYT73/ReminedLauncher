@@ -71,6 +71,8 @@ export function useVoiceActions({
   runtime,
 }: Args) {
   const [busy, setBusy] = useState(false);
+  /** True only while Create is running — leave/close must not look like creating. */
+  const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState(() => randomVoiceRoomTitle());
   const [draft, setDraft] = useState("");
   const [invitePick, setInvitePick] = useState("");
@@ -188,6 +190,7 @@ export function useVoiceActions({
       return;
     }
     createInFlight.current = true;
+    setCreating(true);
     setBusy(true);
     runtime.begin();
     live.setStatus("Preparing voice…");
@@ -266,6 +269,7 @@ export function useVoiceActions({
     } finally {
       unlisten();
       createInFlight.current = false;
+      setCreating(false);
       setBusy(false);
     }
   }
@@ -338,6 +342,8 @@ export function useVoiceActions({
         await stopHostKeepingLan();
       }
       resetActiveUi();
+      // Drop busy before list refresh so lobby Create doesn't flash "Starting…".
+      setBusy(false);
       await lists.refreshLists();
     } catch (err) {
       fail(err);
@@ -350,7 +356,7 @@ export function useVoiceActions({
     if (!active || !invitePick) return;
     if (!active.portholeShareCode) {
       onToast("Wait until the lobby code appears before inviting", "err");
-      return;
+      throw new Error("Lobby not ready");
     }
     try {
       await inviteFriendToRoom({ roomId: active.id, fromId: userId, toId: invitePick });
@@ -358,6 +364,7 @@ export function useVoiceActions({
       onToast("Invite sent", "ok");
     } catch (err) {
       fail(err);
+      throw err;
     }
   }
 
@@ -426,6 +433,7 @@ export function useVoiceActions({
 
   return {
     busy,
+    creating,
     isHost,
     title,
     setTitle,

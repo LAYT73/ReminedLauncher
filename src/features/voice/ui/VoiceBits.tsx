@@ -98,6 +98,34 @@ export function ScreenIcon({ slashed }: { slashed?: boolean }) {
   );
 }
 
+/** Person + plus — invite friend. */
+export function InviteIcon() {
+  return (
+    <svg className="voice-icon-svg" viewBox="0 0 24 24" aria-hidden>
+      <path
+        fill="currentColor"
+        d="M9 11a3.5 3.5 0 1 0-3.5-3.5A3.5 3.5 0 0 0 9 11zm-6.5 9a5.5 5.5 0 0 1 11 0 1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1z"
+      />
+      <path
+        fill="currentColor"
+        d="M18.5 7.5h-1.25V6.25a.75.75 0 1 0-1.5 0V7.5H14.5a.75.75 0 1 0 0 1.5h1.25v1.25a.75.75 0 1 0 1.5 0V9H18.5a.75.75 0 1 0 0-1.5z"
+      />
+    </svg>
+  );
+}
+
+/** Door / leave room. */
+export function LeaveIcon() {
+  return (
+    <svg className="voice-icon-svg" viewBox="0 0 24 24" aria-hidden>
+      <path
+        fill="currentColor"
+        d="M10 3a1 1 0 0 0-1 1v7H5.41l1.3-1.29a1 1 0 0 0-1.42-1.42l-3 3a1 1 0 0 0 0 1.42l3 3a1 1 0 0 0 1.42-1.42L5.41 13H9v7a1 1 0 0 0 1 1h9a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-9zm2 2h7v14h-7v-5h2a1 1 0 1 0 0-2h-2V5z"
+      />
+    </svg>
+  );
+}
+
 export function VideoTileView({ tile, label }: { tile: VoiceVideoTile; label: string }) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const ref = useRef<HTMLVideoElement | null>(null);

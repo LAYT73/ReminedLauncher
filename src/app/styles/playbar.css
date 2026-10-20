@@ -187,6 +187,21 @@
   cursor: default;
 }
 
+.pack-select-skin {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  background: var(--bg-input);
+  border: 2px solid #000;
+  box-shadow: var(--bevel-inset);
+  image-rendering: pixelated;
+}
+
+.pack-select-trigger .pack-select-skin {
+  width: 24px;
+  height: 24px;
+}
+
 .pack-select-value {
   flex: 1;
   min-width: 0;

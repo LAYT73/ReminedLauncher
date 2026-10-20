@@ -79,6 +79,22 @@ export async function closeVoiceRoom(roomId: string): Promise<void> {
     .update({ status: "closed", updated_at: new Date().toISOString() })
     .eq("id", roomId);
   if (error) throw new Error(error.message || "Could not close room");
+  // Drop pending invites so they don't hang on friends' Voice tab.
+  const { error: invErr } = await supabase
+    .from(TABLE.voiceInvites)
+    .delete()
+    .eq("room_id", roomId);
+  if (invErr) {
+    // Fallback if DELETE is blocked by RLS — mark pending as declined.
+    const { error: markErr } = await supabase
+      .from(TABLE.voiceInvites)
+      .update({ status: "declined" })
+      .eq("room_id", roomId)
+      .eq("status", "pending");
+    if (markErr) {
+      throw new Error(markErr.message || "Could not clear room invites");
+    }
+  }
   // Purge membership so closed rooms never resurrect ghost members in lists.
   const { error: mErr } = await supabase
     .from(TABLE.voiceRoomMembers)

@@ -1,9 +1,12 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { SkinHead } from "@/entities/skin";
 
 export type McSelectOption = {
   id: string;
   label: string;
   hint?: string;
+  /** Optional Minecraft face for friend pickers. */
+  skinUrl?: string | null;
 };
 
 type Props = {
@@ -34,6 +37,7 @@ export function McSelect({
   const menuRef = useRef<HTMLUListElement>(null);
   const listId = useId();
   const selected = options.find((o) => o.id === value);
+  const showSkins = options.some((o) => o.skinUrl !== undefined);
 
   useEffect(() => {
     if (!open) return;
@@ -68,6 +72,7 @@ export function McSelect({
     open ? "is-open" : "",
     disabled ? "is-disabled" : "",
     menuPlacement === "down" ? "pack-select--menu-down" : "",
+    showSkins ? "pack-select--skins" : "",
     className,
   ]
     .filter(Boolean)
@@ -88,6 +93,13 @@ export function McSelect({
         disabled={disabled || options.length === 0}
         onClick={() => setOpen((v) => !v)}
       >
+        {showSkins && selected ? (
+          <SkinHead
+            skinUrl={selected.skinUrl ?? null}
+            className="pack-select-skin"
+            size={24}
+          />
+        ) : null}
         <span className="pack-select-value">
           <strong>{selected?.label ?? placeholder}</strong>
           {selected?.hint ? <em>{selected.hint}</em> : null}
@@ -126,6 +138,13 @@ export function McSelect({
                     setOpen(false);
                   }}
                 >
+                  {showSkins ? (
+                    <SkinHead
+                      skinUrl={opt.skinUrl ?? null}
+                      className="pack-select-skin"
+                      size={28}
+                    />
+                  ) : null}
                   <span className="pack-select-option-copy">
                     <strong>{opt.label}</strong>
                     {opt.hint ? <em>{opt.hint}</em> : null}

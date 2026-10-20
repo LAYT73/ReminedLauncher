@@ -7,7 +7,13 @@ import {
   type VoiceRoom,
 } from "@/entities/voice-room";
 import { netLog } from "@/shared/api/netLog";
-import { voiceGuestConnect, voiceGuestDisconnect } from "../api/voiceNative";
+import { setVoiceRoomShareCode } from "@/entities/voice-room";
+import {
+  voiceGuestConnect,
+  voiceGuestDisconnect,
+  voiceStartLivekit,
+  voiceStartPorthole,
+} from "../api/voiceNative";
 import { VoiceSession, type VoiceVideoTile } from "../lib/voiceSession";
 import { errorMessage, type ToastFn } from "./types";
 import { MSG } from "@/shared/config/messages";
@@ -22,6 +28,8 @@ type Args = {
   onToast: ToastFn;
   onRoomStatusChange?: (inRoom: boolean) => void;
   setMembers: (members: VoiceMember[]) => void;
+  /** Host tunnel key changed after auto-reconnect — keep room UI in sync. */
+  onHostShareCodeRepublished?: (roomId: string, shareCode: string) => void;
 };
 
 /** The LiveKit session and everything that mirrors it into UI state. */
@@ -31,6 +39,7 @@ export function useLiveSession({
   onToast,
   onRoomStatusChange,
   setMembers,
+  onHostShareCodeRepublished,
 }: Args) {
   const sessionRef = useRef<VoiceSession | null>(null);
   const [status, setStatus] = useState("");
@@ -54,6 +63,8 @@ export function useLiveSession({
   /** Newer lobby:<id> that arrived while connect/reconnect was in flight. */
   const pendingShareCodeRef = useRef<string | null>(null);
   const guestRoomRef = useRef<VoiceRoom | null>(null);
+  const hostRoomRef = useRef<VoiceRoom | null>(null);
+  const roleRef = useRef<"host" | "guest" | null>(null);
   const intentionalLeaveRef = useRef(false);
   const reconnectingRef = useRef(false);
   /** True while connect()/voiceGuestConnect is in flight. */
@@ -62,6 +73,8 @@ export function useLiveSession({
   const reconnectFnRef = useRef<(opts?: { force?: boolean }) => Promise<void>>(
     async () => undefined,
   );
+  const shareRepublishRef = useRef(onHostShareCodeRepublished);
+  shareRepublishRef.current = onHostShareCodeRepublished;
 
   const clearPruneTimers = useCallback(() => {
     for (const t of pruneTimers.current.values()) clearTimeout(t);
@@ -99,6 +112,8 @@ export function useLiveSession({
     connectingCodeRef.current = null;
     pendingShareCodeRef.current = null;
     guestRoomRef.current = null;
+    hostRoomRef.current = null;
+    roleRef.current = null;
   }, [clearPruneTimers]);
 
   const resetLiveUi = useCallback(() => {
@@ -138,9 +153,11 @@ export function useLiveSession({
     async (room: VoiceRoom, asGuest: boolean) => {
       intentionalLeaveRef.current = false;
       connectingRef.current = true;
+      roleRef.current = asGuest ? "guest" : "host";
       setStatus(asGuest ? "Connecting Unlim…" : MSG.voice.connectingVoice);
       let liveRoom = room;
       try {
+        if (!asGuest) hostRoomRef.current = liveRoom;
         if (asGuest) {
           guestRoomRef.current = liveRoom;
           const portholeAttempts = 3;
@@ -234,12 +251,21 @@ export function useLiveSession({
             setSpeaking({});
             setNeedsAudioUnlock(false);
             joinedCodeRef.current = null;
-            if (asGuest && !intentionalLeaveRef.current) {
-              // Steam profile static_code never changes — we join via lobby:<id>.
-              // Host rebuild (Open to LAN) kills the tunnel; rejoin by force, not
-              // by waiting for a "new share code" string.
-              setStatus("Lobby changed — reconnecting…");
-              void netLog("ui", "voice guest disconnected — force reconnect loop");
+            sessionRef.current = null;
+            if (!intentionalLeaveRef.current) {
+              // Dev HMR / LiveKit blip / Unlim drop — auto-heal instead of
+              // stranding the host on "try Leave, then Create again".
+              setStatus(
+                asGuest
+                  ? "Lobby changed — reconnecting…"
+                  : "Voice dropped — reconnecting…",
+              );
+              void netLog(
+                "ui",
+                asGuest
+                  ? "voice guest disconnected — force reconnect loop"
+                  : "voice host disconnected — auto reconnect",
+              );
               if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
               reconnectTimer.current = setTimeout(() => {
                 void reconnectFnRef
@@ -410,7 +436,71 @@ export function useLiveSession({
     },
     [connect, onToast],
   );
-  reconnectFnRef.current = reconnectGuest;
+
+  /** Host: restart LiveKit (+ Unlim if needed) after unexpected drop / tauri rebuild. */
+  const reconnectHost = useCallback(async () => {
+    if (reconnectingRef.current) return;
+    const base = hostRoomRef.current;
+    if (!base) return;
+    reconnectingRef.current = true;
+    intentionalLeaveRef.current = true;
+    if (reconnectTimer.current) {
+      clearTimeout(reconnectTimer.current);
+      reconnectTimer.current = null;
+    }
+    await sessionRef.current?.disconnect().catch(() => undefined);
+    sessionRef.current = null;
+
+    let lastErr: unknown;
+    try {
+      for (let i = 0; i < RECONNECT_TRIES; i++) {
+        if (i > 0) {
+          setStatus(`Reconnecting voice… (${i + 1}/${RECONNECT_TRIES})`);
+          await new Promise((r) => setTimeout(r, 1500));
+        } else {
+          setStatus("Restoring voice server…");
+        }
+        void netLog("ui", `voice host reconnect try=${i + 1}`);
+        try {
+          await voiceStartLivekit();
+          await connect(base, false);
+          const ready = await voiceStartPorthole(null);
+          const key = ready.share_code?.trim();
+          if (key) {
+            hostRoomRef.current = { ...base, portholeShareCode: key };
+            await setVoiceRoomShareCode(base.id, key).catch(() => undefined);
+            shareRepublishRef.current?.(base.id, key);
+          }
+          onToast("Voice reconnected", "ok");
+          void netLog("ui", "voice host reconnect ok");
+          return;
+        } catch (err) {
+          lastErr = err;
+          sessionRef.current = null;
+          intentionalLeaveRef.current = true;
+        }
+      }
+      intentionalLeaveRef.current = false;
+      setStatus(
+        "Voice disconnected — try Leave, then Create again if needed",
+      );
+      onToast(`Voice reconnect failed: ${errorMessage(lastErr)}`, "err");
+      void netLog(
+        "ui",
+        `voice host reconnect FAILED: ${errorMessage(lastErr)}`,
+      );
+    } finally {
+      reconnectingRef.current = false;
+    }
+  }, [connect, onToast]);
+
+  reconnectFnRef.current = async (opts) => {
+    if (roleRef.current === "host") {
+      await reconnectHost();
+      return;
+    }
+    await reconnectGuest(opts);
+  };
 
   /** Host published a new lobby:<id> after Voice+LAN merge — force rejoin. */
   const onHostShareCode = useCallback(

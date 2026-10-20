@@ -1,10 +1,4 @@
-import type {
-  Dispatch,
-  FormEvent,
-  ReactNode,
-  RefObject,
-  SetStateAction,
-} from "react";
+import { useState, type Dispatch, type FormEvent, type ReactNode, type RefObject, type SetStateAction } from "react";
 import type {
   VoiceInvite,
   VoiceMember,
@@ -13,11 +7,12 @@ import type {
 } from "@/entities/voice-room";
 import type { VoiceSession, VoiceVideoTile } from "../lib/voiceSession";
 import { SkinHead } from "@/entities/skin";
+import type { McSelectOption } from "@/shared/ui/McSelect";
 import { VoiceChat } from "./VoiceChat";
+import { VoiceInviteModal } from "./VoiceInviteModal";
 import { VoiceMembers } from "./VoiceMembers";
 import { VoiceToolbar } from "./VoiceToolbar";
 import { VoiceVideoStage } from "./VoiceVideoStage";
-import { MSG } from "@/shared/config/messages";
 
 type Props = {
   userId: string;
@@ -42,13 +37,12 @@ type Props = {
   screenOn: boolean;
   needsAudioUnlock: boolean;
   unlockAudio: () => void;
-  inviteOptions: { id: string; label: string; hint?: string }[];
+  inviteOptions: McSelectOption[];
   invitePick: string;
   setInvitePick: (id: string) => void;
   draft: string;
   setDraft: (v: string) => void;
   chatEndRef: RefObject<HTMLDivElement | null>;
-  onToast: (msg: string, tone?: "default" | "ok" | "err") => void;
   setDevicesOpen: (open: boolean) => void;
   toggleCamera: () => Promise<void>;
   toggleScreen: () => Promise<void>;
@@ -57,11 +51,10 @@ type Props = {
   onInvite: () => Promise<void>;
   onLeave: () => Promise<void>;
   onSend: (e: FormEvent) => Promise<void>;
-  /** Modals rendered inside the panel section. */
   children?: ReactNode;
 };
 
-/** The "inside a room" screen: status, invites, controls, members and chat. */
+/** In-room layout: chat + video left, members sidebar + controls right. */
 export function VoiceRoomView(props: Props) {
   const {
     userId,
@@ -72,26 +65,24 @@ export function VoiceRoomView(props: Props) {
     status,
     tone,
     invites,
-    onToast,
     onAcceptInvite,
     onDeclineInvite,
     children,
   } = props;
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const lobbyReady = Boolean(active.portholeShareCode);
+
   return (
-    <section className="section voice-panel">
-      <div className="page-title-row">
+    <section className="section voice-panel is-room">
+      <div className="page-title-row voice-room-head">
         <h2 className="page-title">{active.title}</h2>
         <div className="network-status-badges" aria-live="polite">
           <span className={`network-pill is-${tone}`}>
             <span className="network-pill-dot" aria-hidden />
             <span className="network-pill-label">Voice</span>
-            <span className="network-pill-value">
-              {status || "Idle"}
-            </span>
+            <span className="network-pill-value">{status || "Idle"}</span>
           </span>
-          <span
-            className={`network-pill is-${isHost ? "ok" : "idle"}`}
-          >
+          <span className={`network-pill is-${isHost ? "ok" : "idle"}`}>
             <span className="network-pill-dot" aria-hidden />
             <span className="network-pill-label">Role</span>
             <span className="network-pill-value">
@@ -137,66 +128,61 @@ export function VoiceRoomView(props: Props) {
         </div>
       ) : null}
 
-      {active.portholeShareCode ? (
-        <p className="friends-lead voice-code-lead">
-          Share key{" "}
-          <button
-            type="button"
-            className="friend-id"
-            onClick={() => {
-              void navigator.clipboard.writeText(active.portholeShareCode!);
-              onToast(MSG.voice.copiedShareCode);
-            }}
-          >
-            {active.portholeShareCode}
-          </button>
-        </p>
-      ) : null}
+      <div className="voice-room-layout">
+        <div className="voice-room-main">
+          <VoiceVideoStage tiles={props.videoTiles} members={props.members} />
+          <VoiceChat
+            userId={userId}
+            messages={props.messages}
+            chatEndRef={props.chatEndRef}
+            draft={props.draft}
+            setDraft={props.setDraft}
+            onSend={props.onSend}
+          />
+        </div>
 
-      <VoiceVideoStage tiles={props.videoTiles} members={props.members} />
-
-      <VoiceToolbar
-        session={session}
-        isHost={isHost}
-        busy={busy}
-        muted={props.muted}
-        setMuted={props.setMuted}
-        deafened={props.deafened}
-        setDeafened={props.setDeafened}
-        camOn={props.camOn}
-        screenOn={props.screenOn}
-        needsAudioUnlock={props.needsAudioUnlock}
-        unlockAudio={props.unlockAudio}
-        toggleCamera={props.toggleCamera}
-        toggleScreen={props.toggleScreen}
-        setDevicesOpen={props.setDevicesOpen}
-        onLeave={props.onLeave}
-      />
-
-      <div className="voice-room-grid">
-        <VoiceMembers
-          userId={userId}
-          session={session}
-          isHost={isHost}
-          lobbyReady={Boolean(active.portholeShareCode)}
-          members={props.members}
-          speaking={props.speaking}
-          volumes={props.volumes}
-          setVolumes={props.setVolumes}
-          inviteOptions={props.inviteOptions}
-          invitePick={props.invitePick}
-          setInvitePick={props.setInvitePick}
-          onInvite={props.onInvite}
-        />
-        <VoiceChat
-          userId={userId}
-          messages={props.messages}
-          chatEndRef={props.chatEndRef}
-          draft={props.draft}
-          setDraft={props.setDraft}
-          onSend={props.onSend}
-        />
+        <aside className="voice-sidebar">
+          <h3 className="settings-heading voice-sidebar-title">In room</h3>
+          <VoiceMembers
+            userId={userId}
+            session={session}
+            members={props.members}
+            speaking={props.speaking}
+            volumes={props.volumes}
+            setVolumes={props.setVolumes}
+          />
+          <VoiceToolbar
+            session={session}
+            isHost={isHost}
+            busy={busy}
+            lobbyReady={lobbyReady}
+            muted={props.muted}
+            setMuted={props.setMuted}
+            deafened={props.deafened}
+            setDeafened={props.setDeafened}
+            camOn={props.camOn}
+            screenOn={props.screenOn}
+            needsAudioUnlock={props.needsAudioUnlock}
+            unlockAudio={props.unlockAudio}
+            toggleCamera={props.toggleCamera}
+            toggleScreen={props.toggleScreen}
+            setDevicesOpen={props.setDevicesOpen}
+            setInviteOpen={setInviteOpen}
+            onLeave={props.onLeave}
+          />
+        </aside>
       </div>
+
+      <VoiceInviteModal
+        open={inviteOpen}
+        busy={busy}
+        lobbyReady={lobbyReady}
+        inviteOptions={props.inviteOptions}
+        invitePick={props.invitePick}
+        setInvitePick={props.setInvitePick}
+        onInvite={props.onInvite}
+        onClose={() => setInviteOpen(false)}
+      />
 
       {children}
     </section>

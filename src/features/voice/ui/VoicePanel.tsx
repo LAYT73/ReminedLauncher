@@ -28,6 +28,13 @@ export function VoicePanel({
     onToast,
     onRoomStatusChange,
     setMembers: room.setMembers,
+    onHostShareCodeRepublished: (roomId, shareCode) => {
+      room.setActive((prev) =>
+        prev && prev.id === roomId
+          ? { ...prev, portholeShareCode: shareCode }
+          : prev,
+      );
+    },
   });
   const runtime = useRuntimeModal();
   const actions = useVoiceActions({
@@ -55,6 +62,7 @@ export function VoicePanel({
           id: f.profile.id,
           label: f.profile.username || "Friend",
           hint: f.profile.remined_id ? `#${f.profile.remined_id}` : undefined,
+          skinUrl: f.profile.skin_path ?? null,
         })),
     [friends],
   );
@@ -130,7 +138,6 @@ export function VoicePanel({
         draft={actions.draft}
         setDraft={actions.setDraft}
         chatEndRef={chatEndRef}
-        onToast={onToast}
         setDevicesOpen={setDevicesOpen}
         toggleCamera={live.toggleCamera}
         toggleScreen={live.toggleScreen}
@@ -153,6 +160,7 @@ export function VoicePanel({
       title={actions.title}
       setTitle={actions.setTitle}
       busy={busy}
+      creating={actions.creating}
       listsLoading={listsLoading}
       invites={invites}
       rooms={rooms}

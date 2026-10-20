@@ -12,6 +12,8 @@ type Props = {
   title: string;
   setTitle: (v: string) => void;
   busy: boolean;
+  /** True only during Create — leave/close must not show "Starting…". */
+  creating?: boolean;
   listsLoading: boolean;
   invites: VoiceInvite[];
   rooms: VoiceRoom[];
@@ -35,6 +37,7 @@ export function VoiceLobby({
   title,
   setTitle,
   busy,
+  creating = false,
   listsLoading,
   invites,
   rooms,
@@ -49,7 +52,7 @@ export function VoiceLobby({
   children,
 }: Props) {
   return (
-    <section className="section voice-panel">
+    <section className="section voice-panel is-lobby">
       <div className="page-title-row">
         <h2 className="page-title">Voice</h2>
         {status ? (
@@ -135,7 +138,7 @@ export function VoiceLobby({
           className="btn-mc ok"
           disabled={busy || !title.trim()}
         >
-          {busy ? "Starting…" : "Create room"}
+          {creating ? "Starting…" : "Create room"}
         </button>
         <button
           type="button"

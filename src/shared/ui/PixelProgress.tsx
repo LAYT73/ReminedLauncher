@@ -2,13 +2,15 @@ type Props = {
   value: number;
   label?: string;
   phase?: string;
+  /** Number of square cells (default 20). */
+  cells?: number;
 };
 
 /** Minecraft-style green square pixel progress bar */
-export function PixelProgress({ value, label, phase }: Props) {
+export function PixelProgress({ value, label, phase, cells = 20 }: Props) {
+  const steps = Math.max(1, Math.floor(cells));
   const pct = Math.max(0, Math.min(100, Math.round(value)));
-  const cells = 20;
-  const filled = Math.round((pct / 100) * cells);
+  const filled = Math.round((pct / 100) * steps);
 
   return (
     <div
@@ -36,7 +38,7 @@ export function PixelProgress({ value, label, phase }: Props) {
         </div>
       ) : null}
       <div className="pixel-progress-track" aria-hidden>
-        {Array.from({ length: cells }, (_, i) => (
+        {Array.from({ length: steps }, (_, i) => (
           <span
             key={i}
             className={`pixel-progress-cell ${i < filled ? "is-on" : ""}`}

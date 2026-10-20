@@ -16,6 +16,7 @@ export const CMD = {
   getAppVersion: "get_app_version",
   getRuntimeStatus: "get_runtime_status",
   runOnboarding: "run_onboarding",
+  diagLogsDir: "diag_logs_dir",
   // skin
   readSkinDataUrl: "read_skin_data_url",
   materializeSkinPath: "materialize_skin_path",

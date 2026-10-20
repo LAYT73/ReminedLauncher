@@ -82,10 +82,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v0.7.6
-          releaseName: Remined v0.7.6
+          tagName: v0.8.0
+          releaseName: Remined v0.8.0
           releaseBody: |
-            Remined launcher v0.7.6 — Voice chat moves to Unlim (Porthole stays for Network Play only); Network tab Unlim check + custom binary path/browse when auto-find misses; guests reconnect on Unlim without Steam lobby merge.
+            Remined launcher v0.8.0 — Voice room UI overhaul (full-width layout, member sidebar, invite modal + skin faces); Debug settings tab for local logs; Steam-style join toast; host auto-reconnect after LiveKit drops; mic level pixel meter; invite cleanup on room close.
             macOS (arm64 + x64) and Windows builds.
           releaseDraft: false
           prerelease: false

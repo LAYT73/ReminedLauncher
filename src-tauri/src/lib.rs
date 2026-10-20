@@ -853,6 +853,12 @@ fn read_lan_port(app: AppHandle, pack_id: String) -> Result<Option<u16>, String>
 }
 
 #[tauri::command]
+fn diag_logs_dir(app: AppHandle) -> Result<String, String> {
+    let root = paths::remined_root(&app)?;
+    diag::ensure_logs_dir(&root).map(|p| p.display().to_string())
+}
+
+#[tauri::command]
 fn net_log_dir(app: AppHandle) -> Result<String, String> {
     net_log::dir(&app).map(|p| p.display().to_string())
 }
@@ -1183,6 +1189,7 @@ pub fn run() {
             porthole_stop_game_join,
             porthole_stop_all,
             porthole_current_host,
+            diag_logs_dir,
             net_log_dir,
             net_log_append,
             net_log_tail,

@@ -1,11 +1,112 @@
-/* Voice rooms — reuse Friends / Network / Settings field chrome */
+/* Voice host mount — fill content area when Voice tab is open */
+.voice-slot {
+  display: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  flex-direction: column;
+}
+
+.voice-slot.is-open {
+  display: flex;
+}
+
+.voice-host {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.content:has(.voice-slot.is-open) {
+  overflow: hidden;
+}
+
+/* Voice rooms — full tab width, rubber layout in-room */
 .voice-panel {
-  max-width: 920px;
+  max-width: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.voice-panel.is-room {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 16px;
 }
 
 .voice-panel .friends-add {
   max-width: 560px;
   margin-bottom: 18px;
+}
+
+.voice-room-head {
+  flex-shrink: 0;
+  margin-bottom: 10px;
+}
+
+.voice-room-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--voice-sidebar-w, 310px);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.voice-room-main {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.voice-sidebar {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel);
+  background: var(--bg-panel);
+  padding: 10px;
+}
+
+.voice-sidebar-title {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.voice-sidebar-controls {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding-top: 8px;
+  border-top: 2px solid color-mix(in srgb, var(--text) 14%, transparent);
+}
+
+.voice-sidebar-controls .voice-icon-btn {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+}
+
+.voice-sidebar-controls .voice-icon-btn.voice-text-btn {
+  width: auto;
+  min-width: 36px;
+  padding: 0 8px;
 }
 
 .voice-reroll-name {
@@ -30,8 +131,9 @@
 
 /* Incoming invite shown on top of the active room (room switching). */
 .voice-invite-banner {
-  max-width: 640px;
-  margin: 0 0 14px;
+  flex-shrink: 0;
+  max-width: none;
+  margin: 0 0 10px;
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
@@ -77,19 +179,10 @@
   padding: 0 12px;
 }
 
-.voice-room-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 0 0 18px;
-}
-
 .voice-icon-group {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-wrap: nowrap;
+  gap: 6px;
 }
 
 .voice-icon-btn {
@@ -109,6 +202,11 @@
     background 0.15s ease,
     transform 0.1s ease,
     filter 0.15s ease;
+}
+
+.voice-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .voice-icon-btn:hover:not(:disabled) {
@@ -145,37 +243,83 @@
   display: block;
 }
 
-.voice-room-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.voice-room-grid {
-  display: grid;
-  grid-template-columns: minmax(240px, 320px) 1fr;
-  gap: 18px;
-  align-items: start;
-}
-
-@media (max-width: 720px) {
-  .voice-room-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 .voice-col {
   min-width: 0;
 }
 
 .voice-member-list {
-  margin-bottom: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.voice-member-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 6px;
+  background: var(--mc-stone);
+  border: 2px solid #000;
+  box-shadow: var(--bevel-inset);
+  color: var(--text-on-stone);
 }
 
 .voice-member-row.is-speaking {
-  box-shadow:
-    var(--bevel-panel),
-    inset 0 0 0 2px rgba(125, 206, 85, 0.55);
+  outline: 2px solid rgba(125, 206, 85, 0.65);
+  outline-offset: -3px;
+}
+
+.voice-member-row.is-connecting {
+  opacity: 0.72;
+}
+
+.voice-member-avatar {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  background: var(--bg-input);
+  border: 2px solid #000;
+  box-shadow: var(--bevel-inset);
+  image-rendering: pixelated;
+}
+
+.voice-member-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.voice-member-name {
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.voice-member-status {
+  font-size: 11px;
+  opacity: 0.78;
+}
+
+.voice-member-badges {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.voice-member-row .voice-vol {
+  flex: 1 1 100%;
+  margin: 0;
+  padding: 2px 4px;
 }
 
 .voice-room-icon {
@@ -194,20 +338,20 @@
   image-rendering: pixelated;
 }
 
-.voice-invite-block {
-  margin-top: 4px;
+.voice-chat {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.voice-invite-block .pack-select {
-  width: 100%;
+  overflow: hidden;
 }
 
 .voice-chat-log {
-  max-height: 300px;
-  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 0; /* force flex height — don't grow with first messages */
+  overflow-x: hidden;
+  overflow-y: auto;
   margin: 0 0 10px;
   padding: 12px;
   background: var(--bg-panel);
@@ -267,6 +411,15 @@
 .voice-chat-form {
   margin: 0;
   max-width: none;
+  flex-shrink: 0;
+}
+
+/* Parent uses overflow:hidden — outer focus ring clips to top/bottom lines. */
+.voice-chat-form input:focus {
+  outline: none;
+  box-shadow:
+    var(--bevel-inset),
+    inset 0 0 0 2px var(--mc-green-hi);
 }
 
 .voice-modal-backdrop {
@@ -314,33 +467,21 @@
   margin: 0;
 }
 
+.voice-modal-close .btn-pixel-icon {
+  width: 14px;
+  height: 14px;
+}
+
 .voice-meter-block {
   margin: 4px 0 16px;
 }
 
-.voice-meter-label {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
+.voice-meter-block .pixel-progress {
+  margin: 0;
 }
 
-.voice-meter {
-  height: 18px;
-  border: 3px solid #000;
-  background: #1a1a1a;
-  box-shadow: var(--bevel-inset);
-  overflow: hidden;
-}
-
-.voice-meter-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #3c8527, #6cc349);
-  transition: width 0.05s linear;
+.voice-meter-block .field-hint {
+  margin-top: 8px;
 }
 
 .voice-modal-actions {
@@ -489,10 +630,10 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 4px;
+  margin: 0;
   padding: 4px 6px;
-  background: var(--mc-stone, #5a5a5a);
-  border: 3px solid #000;
+  background: color-mix(in srgb, var(--mc-stone, #5a5a5a) 88%, #000 12%);
+  border: 2px solid #000;
   box-shadow: var(--bevel-inset);
   box-sizing: border-box;
 }
@@ -537,13 +678,15 @@
   border: 2px solid #000;
 }
 
-/* Stage above members/chat: cameras row, then screen-share row. */
+/* Stage above chat: cameras row, then screen-share row. */
 .voice-video-stage {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin: 0 0 14px;
+  margin: 0;
   min-width: 0;
+  flex-shrink: 0;
+  max-height: 38%;
 }
 
 .voice-video-strip {

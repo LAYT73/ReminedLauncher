@@ -18,12 +18,24 @@ pub fn lock_session<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+/// `<remined_root>/.remined/logs` — safe to reveal in Finder/Explorer.
+pub fn logs_dir(root: &std::path::Path) -> PathBuf {
+    root.join(".remined").join("logs")
+}
+
 /// Set the log destination once the install root is known.
 pub fn set_log_dir(root: &std::path::Path) {
-    let dir = root.join(".remined").join("logs");
+    let dir = logs_dir(root);
     if fs::create_dir_all(&dir).is_ok() {
         let _ = LOG_FILE.set(dir.join("app.log"));
     }
+}
+
+/// Ensure the logs folder exists and return its path (for Debug settings).
+pub fn ensure_logs_dir(root: &std::path::Path) -> Result<PathBuf, String> {
+    let dir = logs_dir(root);
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
 }
 
 fn fallback_path() -> PathBuf {

@@ -22,7 +22,6 @@ export function VoiceChat({
 }: Props) {
   return (
     <div className="voice-col voice-chat">
-      <h3 className="settings-heading">Chat</h3>
       <div className="voice-chat-log">
         {messages.length === 0 ? (
           <p className="friends-muted">No messages yet.</p>

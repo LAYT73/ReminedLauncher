@@ -35,14 +35,19 @@ export async function listPendingInvites(userId: string): Promise<VoiceInvite[]>
   const roomIds = [...new Set(rows.map((r) => r.room_id as string))];
   const fromIds = [...new Set(rows.map((r) => r.from_id as string))];
   const [{ data: rooms }, { data: profiles }] = await Promise.all([
-    supabase.from(TABLE.voiceRooms).select("id, title").in("id", roomIds),
+    supabase
+      .from(TABLE.voiceRooms)
+      .select("id, title, status")
+      .in("id", roomIds),
     supabase
       .from(TABLE.profiles)
       .select("id, username, nick, skin_path")
       .in("id", fromIds),
   ]);
-  const titleBy = new Map(
-    (rooms ?? []).map((r) => [r.id as string, (r.title as string) || "Voice room"]),
+  const openRooms = new Map(
+    (rooms ?? [])
+      .filter((r) => (r.status as string) === "open")
+      .map((r) => [r.id as string, (r.title as string) || "Voice room"]),
   );
   const profileBy = new Map(
     (profiles ?? []).map((p) => [
@@ -54,20 +59,23 @@ export async function listPendingInvites(userId: string): Promise<VoiceInvite[]>
     ]),
   );
 
-  return rows.map((r) => {
-    const from = profileBy.get(r.from_id as string);
-    return {
-      id: r.id as string,
-      roomId: r.room_id as string,
-      fromId: r.from_id as string,
-      toId: r.to_id as string,
-      status: r.status as VoiceInviteStatus,
-      createdAt: r.created_at as string,
-      roomTitle: titleBy.get(r.room_id as string),
-      fromName: from?.name,
-      fromSkinPath: from?.skin ?? null,
-    };
-  });
+  // Hide invites whose room was closed (host left without invite cleanup).
+  return rows
+    .filter((r) => openRooms.has(r.room_id as string))
+    .map((r) => {
+      const from = profileBy.get(r.from_id as string);
+      return {
+        id: r.id as string,
+        roomId: r.room_id as string,
+        fromId: r.from_id as string,
+        toId: r.to_id as string,
+        status: r.status as VoiceInviteStatus,
+        createdAt: r.created_at as string,
+        roomTitle: openRooms.get(r.room_id as string),
+        fromName: from?.name,
+        fromSkinPath: from?.skin ?? null,
+      };
+    });
 }
 
 export async function respondVoiceInvite(

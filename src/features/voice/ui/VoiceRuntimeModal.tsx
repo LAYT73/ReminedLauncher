@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { voiceLogPath, voiceRevealLog } from "../api/voiceNative";
+import { PixelCrossIcon } from "@/shared/ui/PixelIcons";
 import { PixelProgress } from "@/shared/ui/PixelProgress";
 
 export type VoiceRuntimeModalState = {
@@ -58,8 +59,14 @@ export function VoiceRuntimeModal({ state, onClose, onRetry }: Props) {
             Setting up voice
           </h3>
           {state.error ? (
-            <button type="button" className="btn-mc dim" onClick={onClose}>
-              Close
+            <button
+              type="button"
+              className="btn-mc dim btn-icon-sq voice-modal-close"
+              title="Close"
+              aria-label="Close"
+              onClick={onClose}
+            >
+              <PixelCrossIcon />
             </button>
           ) : null}
         </header>

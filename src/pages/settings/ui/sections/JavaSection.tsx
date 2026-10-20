@@ -1,5 +1,6 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { RAM_OPTIONS_GB, useProfileStore } from "@/entities/profile";
+import { FolderIconBtn } from "@/shared/ui/FolderIconBtn";
 
 export function JavaSection() {
   const { profile, javaInfo, setProfile, persist, refreshJava } =
@@ -63,13 +64,7 @@ export function JavaSection() {
               void refreshJava(profile.java_path);
             }}
           />
-          <button
-            type="button"
-            className="btn-mc ok"
-            onClick={() => void pickJava()}
-          >
-            Browse
-          </button>
+          <FolderIconBtn title="Browse for Java" onClick={() => void pickJava()} />
           {profile.java_path ? (
             <button
               type="button"

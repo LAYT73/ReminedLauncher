@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { call } from "@/shared/api/invoke";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { CMD } from "@/shared/config/commands";
+import { FolderIconBtn } from "@/shared/ui/FolderIconBtn";
 
 type Row = { name: string; path: string; modified_ms: number; size: number };
 
@@ -136,19 +137,15 @@ export function ScreenshotsPanel({
           >
             Refresh
           </button>
-          <button
-            type="button"
-            className="btn-mc dim"
-            disabled={!installed}
-            title={
-              installed
-                ? "Open screenshots folder"
-                : "Install this pack first"
-            }
-            onClick={() => void openFolder()}
-          >
-            Show folder
-          </button>
+            <FolderIconBtn
+              title={
+                installed
+                  ? "Open screenshots folder"
+                  : "Install this pack first"
+              }
+              disabled={!installed}
+              onClick={() => void openFolder()}
+            />
         </div>
       </div>
       <p className="friends-lead">

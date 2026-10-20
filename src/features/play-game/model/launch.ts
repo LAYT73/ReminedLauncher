@@ -16,6 +16,7 @@ import {
   isVanillaPackId,
   versionFromPackId,
 } from "@/shared/lib/packIds";
+import { gameToast } from "@/shared/lib/gameToast";
 import { toast } from "@/shared/lib/toast";
 import { gameApi, useGameStore } from "@/entities/game";
 import { EDITIONS, useVersionStore } from "@/entities/game-version";
@@ -173,6 +174,7 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
     if (quick) unlockAchievement("first-network-join", toast);
     rememberLaunched(packId);
     if (quick) setStatus(MSG.launch.joined, "ok");
+    gameToast("Now playing", quick ? MSG.launch.joined : "Minecraft");
   } catch (err) {
     game.setRunningPackId(null);
     if (quick) void portholeStopGameJoin().catch(() => undefined);

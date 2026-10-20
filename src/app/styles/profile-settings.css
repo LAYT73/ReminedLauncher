@@ -165,6 +165,32 @@
   min-width: 0;
 }
 
+.btn-icon-sq {
+  box-sizing: border-box;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.btn-icon-sq svg {
+  display: block;
+  flex-shrink: 0;
+  fill: currentColor;
+}
+
+.settings-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .field-hint {
   margin: 6px 0 0;
   font-size: 11px;

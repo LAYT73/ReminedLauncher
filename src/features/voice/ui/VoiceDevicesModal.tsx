@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 import { listAudioDevices, type VoiceDeviceLists } from "../lib/audioDevices";
 import type { VoiceSession } from "../lib/voiceSession";
 import { McSelect } from "@/shared/ui/McSelect";
+import { PixelCrossIcon } from "@/shared/ui/PixelIcons";
+import { PixelProgress } from "@/shared/ui/PixelProgress";
 
 type Props = {
   open: boolean;
@@ -13,9 +15,85 @@ type Props = {
   onApply: (micId: string, outputId: string) => void;
 };
 
+const METER_CELLS = 20;
+
+/** Live mic preview — stepped peak/decay so short phrases register on the bar. */
+function useMicPreview(open: boolean, deviceId: string) {
+  const [levelPct, setLevelPct] = useState(0);
+
+  useEffect(() => {
+    if (!open) {
+      setLevelPct(0);
+      return;
+    }
+
+    let cancelled = false;
+    let stream: MediaStream | null = null;
+    let ctx: AudioContext | null = null;
+    let raf = 0;
+    let held = 0;
+
+    async function start() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: deviceId
+            ? { deviceId: { exact: deviceId }, echoCancellation: true }
+            : { echoCancellation: true },
+          video: false,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        const AC =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext })
+            .webkitAudioContext;
+        ctx = new AC();
+        await ctx.resume().catch(() => undefined);
+        const source = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 1024;
+        analyser.smoothingTimeConstant = 0.35;
+        source.connect(analyser);
+        const buf = new Float32Array(analyser.fftSize);
+        const tick = () => {
+          if (cancelled) return;
+          analyser.getFloatTimeDomainData(buf);
+          let sum = 0;
+          for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+          const rms = Math.sqrt(sum / buf.length);
+          const raw = Math.min(1, rms * 5);
+          // Instant attack so a short phrase lights cells; slow decay to read it.
+          if (raw > held) held = raw;
+          else held = Math.max(0, held - 0.045);
+          // Snap to the same steps the pixel bar uses (5% per cell).
+          const stepped = Math.round(held * METER_CELLS) / METER_CELLS;
+          setLevelPct(Math.round(stepped * 100));
+          raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+      } catch {
+        if (!cancelled) setLevelPct(0);
+      }
+    }
+
+    void start();
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      stream?.getTracks().forEach((t) => t.stop());
+      void ctx?.close().catch(() => undefined);
+    };
+  }, [open, deviceId]);
+
+  return levelPct;
+}
+
 export function VoiceDevicesModal({
   open,
-  session,
+  session: _session,
   micId,
   outputId,
   onClose,
@@ -28,10 +106,9 @@ export function VoiceDevicesModal({
   });
   const [mic, setMic] = useState(micId);
   const [out, setOut] = useState(outputId);
-  const [level, setLevel] = useState(0);
   const [loading, setLoading] = useState(false);
-  const rafRef = useRef(0);
   const dialogRef = useRef<HTMLDivElement | null>(null);
+  const levelPct = useMicPreview(open, mic);
 
   useEffect(() => {
     if (!open) return;
@@ -42,16 +119,6 @@ export function VoiceDevicesModal({
       .then(setDevices)
       .finally(() => setLoading(false));
   }, [open, micId, outputId]);
-
-  useEffect(() => {
-    if (!open) return;
-    const tick = () => {
-      setLevel(session?.getMicLevel() ?? 0);
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    rafRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [open, session]);
 
   useEffect(() => {
     if (!open) return;
@@ -99,8 +166,6 @@ export function VoiceDevicesModal({
 
   if (!open) return null;
 
-  const pct = Math.round(level * 100);
-
   return createPortal(
     <div
       className="voice-modal-backdrop"
@@ -119,8 +184,14 @@ export function VoiceDevicesModal({
           <h3 id={titleId} className="settings-heading">
             Voice devices
           </h3>
-          <button type="button" className="btn-mc dim" onClick={onClose}>
-            Close
+          <button
+            type="button"
+            className="btn-mc dim btn-icon-sq voice-modal-close"
+            title="Close"
+            aria-label="Close"
+            onClick={onClose}
+          >
+            <PixelCrossIcon />
           </button>
         </header>
 
@@ -147,21 +218,13 @@ export function VoiceDevicesModal({
         />
 
         <div className="voice-meter-block">
-          <div className="voice-meter-label">
-            Input level <span>{pct}%</span>
-          </div>
-          <div
-            className="voice-meter"
-            role="progressbar"
-            aria-valuenow={pct}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label="Microphone input level"
-          >
-            <div className="voice-meter-fill" style={{ width: `${pct}%` }} />
-          </div>
+          <PixelProgress
+            value={levelPct}
+            phase="Input level"
+            cells={METER_CELLS}
+          />
           <p className="field-hint">
-            Speak to test the live mic. Level updates after you are in a room.
+            Speak to test — uses a live mic preview (not the room session).
           </p>
         </div>
 

@@ -1,4 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
+import { FolderIconBtn } from "@/shared/ui/FolderIconBtn";
 import { usePortholeStatus } from "../model/usePortholeStatus";
 import { useUnlimStatus } from "../model/useUnlimStatus";
 
@@ -384,14 +385,11 @@ export function NetworkPlayPanel({
                 void unlim.savePath(next || null);
               }}
             />
-            <button
-              type="button"
-              className="btn-mc ok"
+            <FolderIconBtn
+              title="Browse for Unlim binary"
               disabled={unlim.busy}
               onClick={() => void browseUnlim()}
-            >
-              Browse
-            </button>
+            />
             {unlim.status?.custom_path || unlim.pathDraft.trim() ? (
               <button
                 type="button"

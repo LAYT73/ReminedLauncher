@@ -10,8 +10,7 @@ export function VoiceSlot() {
   if (!userId) return null;
   return (
     <div
-      className="voice-slot"
-      style={{ display: tab === TAB.voice ? "block" : "none" }}
+      className={`voice-slot${tab === TAB.voice ? " is-open" : ""}`}
       ref={(el) => {
         const host = getVoiceHost();
         if (el && host.parentElement !== el) el.appendChild(host);

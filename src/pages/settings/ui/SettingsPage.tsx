@@ -1,19 +1,21 @@
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { useLocation } from "react-router";
 import { AccountSection } from "./sections/AccountSection";
+import { DebugSection } from "./sections/DebugSection";
 import { JavaSection } from "./sections/JavaSection";
 import { LauncherSection } from "./sections/LauncherSection";
 import { NetworkSection } from "./sections/NetworkSection";
 import { PackSection } from "./sections/PackSection";
 import { ThemeSection } from "./sections/ThemeSection";
 
-type SettingsTab = "general" | "network" | "runtime" | "updates";
+type SettingsTab = "general" | "network" | "runtime" | "updates" | "debug";
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: "general", label: "General" },
   { id: "network", label: "Network" },
   { id: "runtime", label: "Runtime" },
   { id: "updates", label: "Updates" },
+  { id: "debug", label: "Debug" },
 ];
 
 function tabFromHash(hash: string): SettingsTab | null {
@@ -21,6 +23,7 @@ function tabFromHash(hash: string): SettingsTab | null {
   if (key === "network") return "network";
   if (key === "runtime" || key === "java") return "runtime";
   if (key === "updates" || key === "launcher") return "updates";
+  if (key === "debug") return "debug";
   if (key === "general" || key === "theme" || key === "account") return "general";
   return null;
 }
@@ -93,6 +96,7 @@ export function SettingsPage() {
             ]}
           />
         ) : null}
+        {tab === "debug" ? <DebugSection /> : null}
       </div>
     </section>
   );

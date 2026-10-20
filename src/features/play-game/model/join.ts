@@ -4,6 +4,7 @@ import { portholeStatus, portholeStopGameJoin } from "@/shared/api/porthole";
 import { MSG } from "@/shared/config/messages";
 import { RAIL } from "@/shared/config/routes";
 import { navigateTo } from "@/shared/lib/navigator";
+import { gameToast } from "@/shared/lib/gameToast";
 import { toast } from "@/shared/lib/toast";
 import {
   canJoinFriend,
@@ -22,6 +23,7 @@ export async function joinFriendSession(row: FriendRow): Promise<void> {
   if (!canJoinFriend(row) || useJoiningFriend.getState().id) return;
   useJoiningFriend.setState({ id: row.friendshipId });
   toast(MSG.launch.joining(row.profile.username));
+  gameToast(row.profile.username, "Joining world…");
   setStatus(MSG.launch.connectingNetwork);
   try {
     const st = await portholeStatus();
