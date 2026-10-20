@@ -5,6 +5,7 @@ import {
   portholeStopAll,
   portholeStopHost,
 } from "@/shared/api/porthole";
+import { unlimStartGameJoin, unlimStopGameJoin } from "@/shared/api/unlim";
 import { MSG } from "@/shared/config/messages";
 import { FALLBACK_USERNAME, USERNAME } from "@/shared/config/limits";
 import { RAIL, routeFor, parseRoute, type Rail } from "@/shared/config/routes";
@@ -16,7 +17,6 @@ import {
   isVanillaPackId,
   versionFromPackId,
 } from "@/shared/lib/packIds";
-import { gameToast } from "@/shared/lib/gameToast";
 import { toast } from "@/shared/lib/toast";
 import { gameApi, useGameStore } from "@/entities/game";
 import { EDITIONS, useVersionStore } from "@/entities/game-version";
@@ -40,6 +40,8 @@ type LaunchOpts = {
   quickPlay?: string | null;
   /** Open the Steam tunnel after install prep, immediately before the game process. */
   portholeJoin?: { shareCode: string; port: number };
+  /** Open Unlim tunnel for Network Play (Unlim-only hosts). */
+  unlimJoin?: { shareCode: string; port: number };
 };
 
 /** Make sure `packId` is on disk before launching (never throws; returns ready). */
@@ -100,9 +102,10 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
     game.setHostingLan(null);
     game.setLive(null);
     const voice = useVoiceStatusStore.getState();
-    // Voice rides Unlim; Play must not rebuild it. Only clear leftover Porthole.
+    // Voice (and Unlim-only LAN) ride Unlim — do not tear it on Play.
+    // Only clear leftover Porthole host state from hybrid mode.
     if (voice.hostRoomId || voice.inRoom) {
-      void netLog("ui", "launch: voice live — leave Unlim, stop stale Porthole host");
+      void netLog("ui", "launch: voice live — keep Unlim, stop stale Porthole host");
       void portholeStopHost().catch(() => undefined);
     } else {
       void portholeStopAll().catch(() => undefined);
@@ -133,8 +136,18 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
       setStatus(MSG.launch.usernameLength, "error");
       return;
     }
-    // Tunnel last — Steam forwards die if we open them before a long prepare.
-    if (opts.portholeJoin) {
+    // Tunnel last — die if we open them before a long prepare.
+    if (opts.unlimJoin) {
+      setStatus(MSG.launch.connectingNetwork);
+      void netLog(
+        "ui",
+        `unlimJoin before MC code=${opts.unlimJoin.shareCode} port=${opts.unlimJoin.port}`,
+      );
+      await unlimStartGameJoin(
+        opts.unlimJoin.shareCode,
+        opts.unlimJoin.port,
+      );
+    } else if (opts.portholeJoin) {
       setStatus(MSG.launch.connectingNetwork);
       void netLog(
         "ui",
@@ -158,7 +171,10 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
     game.setPhase(result.phase);
     if (!result.ok) {
       game.setRunningPackId(null);
-      if (quick) void portholeStopGameJoin().catch(() => undefined);
+      if (quick) {
+        if (opts.unlimJoin) void unlimStopGameJoin().catch(() => undefined);
+        else void portholeStopGameJoin().catch(() => undefined);
+      }
       void netLog("ui", `game.launch FAILED: ${result.message}`);
       setStatus(result.message, "error");
       return;
@@ -174,10 +190,12 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
     if (quick) unlockAchievement("first-network-join", toast);
     rememberLaunched(packId);
     if (quick) setStatus(MSG.launch.joined, "ok");
-    gameToast("Now playing", quick ? MSG.launch.joined : "Minecraft");
   } catch (err) {
     game.setRunningPackId(null);
-    if (quick) void portholeStopGameJoin().catch(() => undefined);
+    if (quick) {
+      if (opts.unlimJoin) void unlimStopGameJoin().catch(() => undefined);
+      else void portholeStopGameJoin().catch(() => undefined);
+    }
     game.setPhase("idle");
     setStatus(String(err), "error");
   }

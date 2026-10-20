@@ -6,6 +6,7 @@ import {
   type FriendRow,
 } from "@/entities/friend";
 import { InfoNote } from "@/shared/ui/InfoNote";
+import { TitleHint } from "@/shared/ui/TitleHint";
 import { errText, useFriends } from "../model/useFriends";
 import { FriendItem, OutgoingRow, RequestRow } from "./FriendRows";
 import { FriendsSkeletonList } from "./FriendsSkeletonList";
@@ -62,17 +63,22 @@ export function FriendsPanel({
 
   return (
     <section className="section friends-panel">
-      <h2 className="page-title">Friends</h2>
-      <p className="friends-lead">
-        Add people by their Remined id
-        {myReminedId ? (
+      <TitleHint
+        title="Friends"
+        hint={
           <>
-            {" "}
-            — yours is <span className="friends-id-inline">#{myReminedId}</span>
+            Add people by their Remined id
+            {myReminedId ? (
+              <>
+                {" "}
+                — yours is{" "}
+                <span className="friends-id-inline">#{myReminedId}</span>
+              </>
+            ) : null}
+            .
           </>
-        ) : null}
-        .
-      </p>
+        }
+      />
 
       <InfoNote id="friends.play-together">
         <p>

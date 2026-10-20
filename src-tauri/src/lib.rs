@@ -57,6 +57,14 @@ fn default_friend_toasts() -> bool {
     true
 }
 
+fn default_network_mode() -> String {
+    "unlim".into()
+}
+
+fn default_lan_port() -> u16 {
+    unlim::DEFAULT_LAN_TCP_PORT
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThemeCustom {
     pub mode: String,
@@ -94,6 +102,12 @@ pub struct Profile {
     pub theme: String,
     #[serde(default = "default_friend_toasts")]
     pub friend_toasts: bool,
+    /// `"unlim"` (default) — voice + LAN on Unlim; `"hybrid"` — LAN on Porthole.
+    #[serde(default = "default_network_mode")]
+    pub network_mode: String,
+    /// Open-to-LAN / mcwifipnp port (Unlim-only pre-reserve).
+    #[serde(default = "default_lan_port")]
+    pub lan_port: u16,
     #[serde(default)]
     pub theme_custom: Option<ThemeCustom>,
 }
@@ -110,6 +124,8 @@ impl Default for Profile {
             jvm_args: String::new(),
             theme: default_theme(),
             friend_toasts: true,
+            network_mode: default_network_mode(),
+            lan_port: default_lan_port(),
             theme_custom: None,
         }
     }
@@ -813,8 +829,16 @@ fn voice_stop_host(
     porthole: State<'_, porthole::PortholeState>,
     unlim: State<'_, unlim::UnlimState>,
     keep_lan_port: Option<u16>,
+    keep_unlim: Option<bool>,
 ) -> Option<porthole::PortholeHostInfo> {
-    voice_runtime::stop_voice_host(&app, &voice, &porthole, &unlim, keep_lan_port)
+    voice_runtime::stop_voice_host(
+        &app,
+        &voice,
+        &porthole,
+        &unlim,
+        keep_lan_port,
+        keep_unlim.unwrap_or(false),
+    )
 }
 
 #[tauri::command]
@@ -858,6 +882,73 @@ fn unlim_get_path(app: AppHandle) -> Option<String> {
 #[tauri::command]
 fn unlim_set_path(app: AppHandle, path: Option<String>) -> Result<(), String> {
     unlim::set_custom_path(&app, path)
+}
+
+#[tauri::command]
+fn unlim_lan_port() -> u16 {
+    unlim::DEFAULT_LAN_TCP_PORT
+}
+
+#[tauri::command]
+fn unlim_current_key(unlim: State<'_, unlim::UnlimState>) -> Option<String> {
+    unlim::current_host_key(unlim.inner())
+}
+
+#[tauri::command]
+fn unlim_host_state(
+    app: AppHandle,
+    unlim: State<'_, unlim::UnlimState>,
+) -> unlim::UnlimHostState {
+    unlim::host_state(&app, unlim.inner())
+}
+
+#[tauri::command]
+async fn unlim_ensure_host(
+    app: AppHandle,
+    unlim: State<'_, unlim::UnlimState>,
+    lan_port: Option<u16>,
+) -> Result<String, String> {
+    let unlim = unlim.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        unlim::ensure_shared_host(&app, &unlim, lan_port)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn unlim_apply_lan_port(app: AppHandle, pack_id: String, port: u16) -> Result<(), String> {
+    let root = paths::remined_root(&app)?;
+    let instance = paths::pack_dir(&root, &pack_id);
+    if !instance.is_dir() {
+        return Ok(());
+    }
+    unlim::write_mcwifipnp_lan_port(&instance, port)
+}
+
+#[tauri::command]
+async fn unlim_start_game_join(
+    app: AppHandle,
+    unlim: State<'_, unlim::UnlimState>,
+    key: String,
+    port: u16,
+) -> Result<(), String> {
+    let unlim = unlim.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        unlim::start_game_join(&app, &unlim, &key, port)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn unlim_stop_game_join(app: AppHandle, unlim: State<'_, unlim::UnlimState>) {
+    unlim::stop_join(&app, unlim.inner());
+}
+
+#[tauri::command]
+fn unlim_stop_host(app: AppHandle, unlim: State<'_, unlim::UnlimState>) {
+    unlim::stop_host(&app, unlim.inner());
 }
 
 #[tauri::command]
@@ -1234,6 +1325,14 @@ pub fn run() {
             unlim_check,
             unlim_get_path,
             unlim_set_path,
+            unlim_lan_port,
+            unlim_current_key,
+            unlim_host_state,
+            unlim_ensure_host,
+            unlim_apply_lan_port,
+            unlim_start_game_join,
+            unlim_stop_game_join,
+            unlim_stop_host,
             read_lan_port,
             gamewatch::latest_crash_report,
             gamewatch::game_log_status,

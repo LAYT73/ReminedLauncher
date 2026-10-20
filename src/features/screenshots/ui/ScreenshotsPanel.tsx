@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { call } from "@/shared/api/invoke";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { CMD } from "@/shared/config/commands";
 import { FolderIconBtn } from "@/shared/ui/FolderIconBtn";
+import { TitleHint } from "@/shared/ui/TitleHint";
 
 type Row = { name: string; path: string; modified_ms: number; size: number };
 
@@ -126,17 +128,21 @@ export function ScreenshotsPanel({
 
   return (
     <section className="section screenshot-page">
-      <div className="screenshot-page-head">
-        <h3 className="page-title">Screenshots</h3>
-        <div className="screenshot-actions">
-          <button
-            type="button"
-            className="btn-mc dim"
-            disabled={!installed}
-            onClick={() => void refresh()}
-          >
-            Refresh
-          </button>
+      <TitleHint
+        as="h3"
+        className="screenshot-page-head"
+        title="Screenshots"
+        hint="Press F2 in game. Shown from this installation's screenshots folder — stays on your computer, never uploaded."
+        end={
+          <div className="screenshot-actions">
+            <button
+              type="button"
+              className="btn-mc dim"
+              disabled={!installed}
+              onClick={() => void refresh()}
+            >
+              Refresh
+            </button>
             <FolderIconBtn
               title={
                 installed
@@ -146,12 +152,9 @@ export function ScreenshotsPanel({
               disabled={!installed}
               onClick={() => void openFolder()}
             />
-        </div>
-      </div>
-      <p className="friends-lead">
-        Press F2 in game. Shown from this installation&apos;s screenshots folder
-        — stays on your computer, never uploaded.
-      </p>
+          </div>
+        }
+      />
       {!installed ? (
         <p className="friends-lead">
           Install this pack first — screenshots appear here after you take them
@@ -187,103 +190,106 @@ export function ScreenshotsPanel({
         </div>
       )}
 
-      {openRow ? (
-        <div
-          className="screenshot-viewer"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Screenshot preview"
-        >
-          <button
-            type="button"
-            className="screenshot-viewer-close"
-            aria-label="Close preview"
-            onClick={() => setIndex(null)}
-          >
-            ×
-          </button>
-
-          <div
-            className="screenshot-viewer-stage"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setIndex(null);
-            }}
-          >
-            {multi ? (
+      {openRow
+        ? createPortal(
+            <div
+              className="screenshot-viewer"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Screenshot preview"
+            >
               <button
                 type="button"
-                className="screenshot-viewer-nav is-prev"
-                aria-label="Previous screenshot"
-                onClick={() =>
-                  setIndex((i) =>
-                    i == null || !rows
-                      ? i
-                      : (i - 1 + rows.length) % rows.length,
-                  )
-                }
-              >
-                ‹
-              </button>
-            ) : null}
-
-            {thumbs[openRow.name] ? (
-              <img
-                className="screenshot-viewer-img"
-                src={thumbs[openRow.name]}
-                alt={openRow.name}
-                onClick={(e) => e.stopPropagation()}
-              />
-            ) : (
-              <p className="screenshot-viewer-loading">Loading…</p>
-            )}
-
-            {multi ? (
-              <button
-                type="button"
-                className="screenshot-viewer-nav is-next"
-                aria-label="Next screenshot"
-                onClick={() =>
-                  setIndex((i) =>
-                    i == null || !rows ? i : (i + 1) % rows.length,
-                  )
-                }
-              >
-                ›
-              </button>
-            ) : null}
-          </div>
-
-          <div className="screenshot-viewer-bar">
-            <div className="screenshot-viewer-info">
-              <strong>
-                {index != null && rows
-                  ? `${index + 1} / ${rows.length}`
-                  : ""}
-              </strong>
-              <span>{openRow.name}</span>
-              <span>{new Date(openRow.modified_ms).toLocaleString()}</span>
-            </div>
-            <div className="screenshot-actions">
-              <button
-                type="button"
-                className="btn-mc dim"
-                onClick={() => {
-                  void revealItemInDir(openRow.path).catch(() => undefined);
-                }}
-              >
-                Show file
-              </button>
-              <button
-                type="button"
-                className="btn-mc dim"
+                className="screenshot-viewer-close"
+                aria-label="Close preview"
                 onClick={() => setIndex(null)}
               >
-                Close
+                ×
               </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+
+              <div
+                className="screenshot-viewer-stage"
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) setIndex(null);
+                }}
+              >
+                {multi ? (
+                  <button
+                    type="button"
+                    className="screenshot-viewer-nav is-prev"
+                    aria-label="Previous screenshot"
+                    onClick={() =>
+                      setIndex((i) =>
+                        i == null || !rows
+                          ? i
+                          : (i - 1 + rows.length) % rows.length,
+                      )
+                    }
+                  >
+                    ‹
+                  </button>
+                ) : null}
+
+                {thumbs[openRow.name] ? (
+                  <img
+                    className="screenshot-viewer-img"
+                    src={thumbs[openRow.name]}
+                    alt={openRow.name}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <p className="screenshot-viewer-loading">Loading…</p>
+                )}
+
+                {multi ? (
+                  <button
+                    type="button"
+                    className="screenshot-viewer-nav is-next"
+                    aria-label="Next screenshot"
+                    onClick={() =>
+                      setIndex((i) =>
+                        i == null || !rows ? i : (i + 1) % rows.length,
+                      )
+                    }
+                  >
+                    ›
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="screenshot-viewer-bar">
+                <div className="screenshot-viewer-info">
+                  <strong>
+                    {index != null && rows
+                      ? `${index + 1} / ${rows.length}`
+                      : ""}
+                  </strong>
+                  <span>{openRow.name}</span>
+                  <span>{new Date(openRow.modified_ms).toLocaleString()}</span>
+                </div>
+                <div className="screenshot-actions">
+                  <button
+                    type="button"
+                    className="btn-mc dim"
+                    onClick={() => {
+                      void revealItemInDir(openRow.path).catch(() => undefined);
+                    }}
+                  >
+                    Show file
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-mc dim"
+                    onClick={() => setIndex(null)}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </section>
   );
 }

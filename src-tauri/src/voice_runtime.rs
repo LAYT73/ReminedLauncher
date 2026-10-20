@@ -634,23 +634,33 @@ pub fn start_voice_livekit(app: &AppHandle, voice: &VoiceRuntimeState) -> Result
 }
 
 /// Expose LiveKit over Unlim after the host has joined locally.
-/// `lan_port` is ignored — Open-to-LAN uses Steam Porthole separately.
+/// When `lan_port` is set (Unlim-only network mode), reserve that Open-to-LAN
+/// TCP port so voice→LAN needs no lobby rebuild.
 pub fn start_voice_porthole(
     app: AppHandle,
     unlim: UnlimState,
-    _lan_port: Option<u16>,
+    lan_port: Option<u16>,
 ) -> Result<VoiceHostReady, String> {
+    let lan = lan_port.filter(|p| *p > 0);
     emit_progress(&app, "Voice", "Opening Unlim tunnel…", 92);
     voice_log::append_ok(
         &app,
         "unlim",
         &format!(
-            "host ports tcp={LK_TCP_PORT},{LK_RTC_TCP_PORT} udp={LK_UDP_START}-{LK_UDP_END}"
+            "host ports tcp={LK_TCP_PORT},{LK_RTC_TCP_PORT} udp={LK_UDP_START}-{LK_UDP_END} lan={}",
+            lan.map(|p| p.to_string()).unwrap_or_else(|| "-".into())
         ),
     );
-    match unlim::start_voice_host(&app, &unlim) {
+    match unlim::ensure_shared_host(&app, &unlim, lan) {
         Ok(key) => {
-            voice_log::append_ok(&app, "unlim", &format!("host ready key={key}"));
+            voice_log::append_ok(
+                &app,
+                "unlim",
+                &format!(
+                    "host ready key={key} lan={}",
+                    lan.map(|p| p.to_string()).unwrap_or_else(|| "-".into())
+                ),
+            );
             Ok(VoiceHostReady {
                 share_code: key,
                 ws_url: format!("ws://127.0.0.1:{LK_TCP_PORT}"),
@@ -675,20 +685,36 @@ pub fn start_voice_host(
     start_voice_porthole(app, unlim, None)
 }
 
-/// Stop LiveKit + Unlim voice tunnel. If `keep_lan_port` is set, ensure Porthole
-/// still exposes that LAN port (Network Play is independent of Unlim).
+/// Stop LiveKit. Unlim stops unless `keep_unlim` (LAN still using the shared session).
+/// Hybrid: if `keep_lan_port` is set and Unlim is stopped, re-expose LAN on Porthole.
 pub fn stop_voice_host(
     app: &AppHandle,
     voice: &VoiceRuntimeState,
     porthole: &PortholeState,
     unlim: &UnlimState,
     keep_lan_port: Option<u16>,
+    keep_unlim: bool,
 ) -> Option<porthole::PortholeHostInfo> {
     stop_host(voice);
-    unlim::stop_host(app, unlim);
     let lan = keep_lan_port.filter(|p| *p > 0);
+    if keep_unlim {
+        let key = unlim::current_host_key(unlim);
+        voice_log::append_ok(
+            app,
+            "unlim",
+            &format!("voice stopped — keeping Unlim host key={}", key.as_deref().unwrap_or("-")),
+        );
+        if let (Some(key), Some(port)) = (key, lan) {
+            return Some(porthole::PortholeHostInfo {
+                share_code: key,
+                port,
+                lan_port: Some(port),
+            });
+        }
+        return None;
+    }
+    unlim::stop_host(app, unlim);
     if let Some(port) = lan {
-        // LAN may already be on Porthole — only restore if nothing is exposing it.
         if let Some(live) = porthole::current_host(porthole) {
             if live.lan_port == Some(port) || live.port == port {
                 return Some(live);

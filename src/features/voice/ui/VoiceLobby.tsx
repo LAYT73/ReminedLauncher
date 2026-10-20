@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { VoiceInvite, VoiceRoom } from "@/entities/voice-room";
 import { InfoNote } from "@/shared/ui/InfoNote";
+import { TitleHint } from "@/shared/ui/TitleHint";
 import { SkinHead } from "@/entities/skin";
 import { MSG } from "@/shared/config/messages";
 import { randomVoiceRoomTitle } from "../lib/roomName";
@@ -53,26 +54,25 @@ export function VoiceLobby({
 }: Props) {
   return (
     <section className="section voice-panel is-lobby">
-      <div className="page-title-row">
-        <h2 className="page-title">Voice</h2>
-        {status ? (
-          <div className="network-status-badges" aria-live="polite">
-            <span className={`network-pill is-${tone}`}>
-              <span className="network-pill-dot" aria-hidden />
-              <span className="network-pill-label">Status</span>
-              <span className="network-pill-value">{status}</span>
-            </span>
-          </div>
-        ) : null}
-      </div>
-
-      <p className="friends-lead">
-        Host a room on your PC, invite friends over Unlim, keep chat in Remined.
-      </p>
+      <TitleHint
+        title="Voice"
+        hint="Host a room on your PC, invite friends over Unlim, keep chat in Remined."
+        end={
+          status ? (
+            <div className="network-status-badges" aria-live="polite">
+              <span className={`network-pill is-${tone}`}>
+                <span className="network-pill-dot" aria-hidden />
+                <span className="network-pill-label">Status</span>
+                <span className="network-pill-value">{status}</span>
+              </span>
+            </div>
+          ) : null
+        }
+      />
 
       <InfoNote id="voice.unlim-setup">
-        Needs Unlim installed (Settings → Network → Unlim). Friends join via
-        invite — they do not need your public IP.
+        Needs Unlim installed (Settings → Network). Friends join via invite —
+        they do not need your public IP.
         {onOpenNetworkPlay ? (
           <>
             {" "}

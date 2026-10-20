@@ -1,6 +1,9 @@
 import type { SkinModelKind } from "@/entities/skin";
 import type { CustomTheme, ThemeId } from "@/entities/theme";
 
+/** Tunnel backend for Network Play + Voice. */
+export type NetworkMode = "unlim" | "hybrid";
+
 export type Profile = {
   username: string;
   skin_path: string | null;
@@ -12,6 +15,13 @@ export type Profile = {
   theme: ThemeId;
   /** Desktop Steam-like friend play toasts. */
   friend_toasts: boolean;
+  /**
+   * `unlim` — voice + LAN on Unlim (default, no Porthole).
+   * `hybrid` — voice Unlim + LAN Porthole (legacy).
+   */
+  network_mode: NetworkMode;
+  /** Open-to-LAN / mcwifipnp port (also reserved on Unlim when mode is unlim). */
+  lan_port: number;
   /** Used when `theme === "custom"`. */
   theme_custom: CustomTheme | null;
 };

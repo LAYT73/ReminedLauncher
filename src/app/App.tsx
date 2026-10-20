@@ -1,6 +1,6 @@
 import { useAuthLifecycle } from "@/features/auth";
+import { LauncherUpdateHost } from "@/features/launcher-update";
 import { AppGate } from "./providers/AppGate";
-import { GameToastHost } from "./providers/GameToastHost";
 import { ToastHost } from "./providers/ToastHost";
 
 export default function App() {
@@ -9,7 +9,7 @@ export default function App() {
     <>
       <AppGate />
       <ToastHost />
-      <GameToastHost />
+      <LauncherUpdateHost />
     </>
   );
 }

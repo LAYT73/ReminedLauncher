@@ -10,7 +10,11 @@
   width: min(320px, 42vw);
   min-height: 360px;
   flex-shrink: 0;
-  background: radial-gradient(ellipse at 50% 70%, #2a2a2a 0%, #151515 70%);
+  background: radial-gradient(
+    ellipse at 50% 72%,
+    color-mix(in srgb, var(--bg-panel) 82%, var(--accent-text) 18%) 0%,
+    var(--bg-deep) 70%
+  );
   border: 3px solid #000;
   box-shadow: var(--bevel-panel);
   overflow: hidden;
@@ -292,6 +296,16 @@
   line-height: 1.4;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.launcher-update-modal .launcher-update-notes {
+  margin: 0 0 14px;
+  max-height: 180px;
+}
+
+.launcher-update-modal-copy {
+  margin: 0 0 12px;
+  max-width: none;
 }
 
 .settings-heading {

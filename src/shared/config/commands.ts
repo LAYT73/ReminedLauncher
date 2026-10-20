@@ -67,11 +67,19 @@ export const CMD = {
   voiceGuestConnect: "voice_guest_connect",
   voiceGuestDisconnect: "voice_guest_disconnect",
   voiceMintToken: "voice_mint_token",
-  // unlim (voice tunnel)
+  // unlim (voice + optional LAN tunnel)
   unlimStatus: "unlim_status",
   unlimCheck: "unlim_check",
   unlimGetPath: "unlim_get_path",
   unlimSetPath: "unlim_set_path",
+  unlimLanPort: "unlim_lan_port",
+  unlimCurrentKey: "unlim_current_key",
+  unlimHostState: "unlim_host_state",
+  unlimEnsureHost: "unlim_ensure_host",
+  unlimApplyLanPort: "unlim_apply_lan_port",
+  unlimStartGameJoin: "unlim_start_game_join",
+  unlimStopGameJoin: "unlim_stop_game_join",
+  unlimStopHost: "unlim_stop_host",
 } as const;
 
 export type Command = (typeof CMD)[keyof typeof CMD];

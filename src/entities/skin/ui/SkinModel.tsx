@@ -3,6 +3,7 @@ import { SkinViewer } from "skinview3d";
 import steveUrl from "@/shared/assets/steve.png";
 import { applyNameTag } from "../lib/nameTag";
 import { normalizeSkinModel, type SkinModelKind } from "../lib/skinModel";
+import { enableProfileStage } from "../lib/profileStage";
 import { enableHomeSkinShading, enableSkinAntiAlias } from "../lib/viewerEffects";
 import { createHeadIdle, createStandingIdle, frameBust, frameFull, frameFullHome } from "../lib/viewerMotion";
 import type { Preset, Variant } from "../lib/viewerTypes";
@@ -72,8 +73,11 @@ export function SkinModel({
       viewer.background = null;
     }
 
+    let disposeProfileStage: (() => void) | undefined;
     if (preset === "home") {
       enableHomeSkinShading(viewer);
+    } else if (!transparent) {
+      disposeProfileStage = enableProfileStage(viewer);
     }
     const syncAntiAlias = enableSkinAntiAlias(viewer);
 
@@ -105,6 +109,7 @@ export function SkinModel({
 
     return () => {
       ro.disconnect();
+      disposeProfileStage?.();
       viewer.dispose();
       viewerRef.current = null;
     };

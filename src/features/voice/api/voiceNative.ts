@@ -46,7 +46,7 @@ export async function voiceStartLivekit(): Promise<VoiceHostReady> {
 }
 
 /** Unlim tunnel for voice — call after host has joined LiveKit locally.
- *  `lanPort` is ignored (Open-to-LAN stays on Steam Porthole). */
+ *  Pass `lanPort` in Unlim-only mode to pre-reserve Open-to-LAN. */
 export async function voiceStartPorthole(
   lanPort?: number | null,
 ): Promise<VoiceHostReady> {
@@ -59,12 +59,15 @@ export async function voiceStartHost(): Promise<VoiceHostReady> {
   return call<VoiceHostReady>(CMD.voiceStartHost);
 }
 
-/** Stop LiveKit. Pass `keepLanPort` to re-expose Network Play alone. */
+/** Stop LiveKit. `keepLanPort` restores Porthole LAN (hybrid).
+ *  `keepUnlim` leaves the shared Unlim host running (Unlim-only + LAN). */
 export async function voiceStopHost(
   keepLanPort?: number | null,
+  keepUnlim = false,
 ): Promise<{ share_code: string; port: number } | null> {
   return call<{ share_code: string; port: number } | null>(CMD.voiceStopHost, {
     keepLanPort: keepLanPort && keepLanPort > 0 ? keepLanPort : null,
+    keepUnlim,
   });
 }
 

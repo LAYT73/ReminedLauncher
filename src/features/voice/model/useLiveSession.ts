@@ -8,6 +8,7 @@ import {
 } from "@/entities/voice-room";
 import { netLog } from "@/shared/api/netLog";
 import { setVoiceRoomShareCode } from "@/entities/voice-room";
+import { useProfileStore } from "@/entities/profile";
 import {
   voiceGuestConnect,
   voiceGuestDisconnect,
@@ -462,7 +463,14 @@ export function useLiveSession({
         try {
           await voiceStartLivekit();
           await connect(base, false);
-          const ready = await voiceStartPorthole(null);
+          const profile = useProfileStore.getState().profile;
+          const lanPort =
+            profile.network_mode !== "hybrid" &&
+            typeof profile.lan_port === "number" &&
+            profile.lan_port >= 1024
+              ? profile.lan_port
+              : null;
+          const ready = await voiceStartPorthole(lanPort);
           const key = ready.share_code?.trim();
           if (key) {
             hostRoomRef.current = { ...base, portholeShareCode: key };

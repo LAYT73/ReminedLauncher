@@ -19,6 +19,10 @@
   margin: 0;
 }
 
+.screenshot-page-head .page-title-hint-wrap {
+  margin-right: auto;
+}
+
 .screenshot-grid {
   display: grid;
   /* auto-fill keeps empty tracks so a single shot stays card-sized */
@@ -67,10 +71,13 @@
   flex-shrink: 0;
 }
 
-/* Full-tab style viewer — covers the window, image stays contained. */
+/* Full-window viewer (portaled to body — avoids PageMotion transform trapping fixed). */
 .screenshot-viewer {
   position: fixed;
   inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
   z-index: 220;
   display: flex;
   flex-direction: column;

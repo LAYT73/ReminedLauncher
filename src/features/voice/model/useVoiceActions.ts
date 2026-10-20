@@ -19,7 +19,8 @@ import {
   type VoiceRoom,
 } from "@/entities/voice-room";
 import { useGameStore } from "@/entities/game";
-import { unlimStatus } from "@/shared/api/unlim";
+import { useProfileStore } from "@/entities/profile";
+import { encodeUnlimShareCode, unlimStatus } from "@/shared/api/unlim";
 import {
   voiceEnsureRuntime,
   voiceGuestDisconnect,
@@ -40,7 +41,17 @@ function lanPortNow(): number | null {
   return useGameStore.getState().hostingLan?.gamePort ?? null;
 }
 
-/** Keep Friends "Hosting" chip in sync when voice stop re-exposes LAN on Porthole. */
+function isUnlimOnly(): boolean {
+  return useProfileStore.getState().profile.network_mode !== "hybrid";
+}
+
+function reservedLanPort(): number | null {
+  if (!isUnlimOnly()) return null;
+  const p = useProfileStore.getState().profile.lan_port;
+  return typeof p === "number" && p >= 1024 && p <= 65535 ? p : 55666;
+}
+
+/** Keep Friends "Hosting" chip in sync when voice stop re-exposes / keeps LAN. */
 function syncLanShareCode(shareCode: string, gamePort: number) {
   const game = useGameStore.getState();
   const prev = game.hostingLan;
@@ -91,8 +102,14 @@ export function useVoiceActions({
 
   async function stopHostKeepingLan() {
     const lan = lanPortNow();
-    const restored = await voiceStopHost(lan).catch(() => null);
-    if (restored && lan) syncLanShareCode(restored.share_code, lan);
+    const keepUnlim = isUnlimOnly() && lan != null;
+    const restored = await voiceStopHost(lan, keepUnlim).catch(() => null);
+    if (restored && lan) {
+      const code = keepUnlim
+        ? encodeUnlimShareCode(restored.share_code)
+        : restored.share_code;
+      syncLanShareCode(code, lan);
+    }
   }
 
   // Room row updates: host closed, or new Porthole share code (Voice+LAN merge).
@@ -244,7 +261,7 @@ export function useVoiceActions({
       useVoiceStatusStore.getState().setHostRoomId(created.id);
       step(MSG.voice.openingPorthole, 96);
       live.setStatus(MSG.voice.openingPorthole);
-      const ready = await voiceStartPorthole(null);
+      const ready = await voiceStartPorthole(reservedLanPort());
       await setVoiceRoomShareCode(created.id, ready.share_code);
       room.setActive((prev) => ({
         ...(prev ?? created),
@@ -403,7 +420,7 @@ export function useVoiceActions({
         useVoiceStatusStore.getState().setHostRoomId(target.id);
         // Host rejoin: ensure Unlim tunnel is up.
         if (!target.portholeShareCode) {
-          const ready = await voiceStartPorthole(null);
+          const ready = await voiceStartPorthole(reservedLanPort());
           await setVoiceRoomShareCode(target.id, ready.share_code);
           room.setActive((prev) =>
             prev

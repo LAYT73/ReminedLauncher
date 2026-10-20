@@ -65,10 +65,6 @@ export function DebugSection() {
   return (
     <div className="settings-block" id="settings-debug">
       <h3 className="settings-heading">Debug</h3>
-      <p className="field-hint">
-        Local logs only — useful when reporting a bug. Nothing here leaves your
-        PC.
-      </p>
 
       <div className="settings-row">
         <span>Launcher logs</span>

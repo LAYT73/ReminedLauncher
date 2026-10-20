@@ -8,11 +8,19 @@ import {
   portholeStopAll,
   portholeStopHost,
 } from "@/shared/api/porthole";
+import {
+  encodeUnlimShareCode,
+  unlimEnsureHost,
+  unlimHostState,
+  unlimStatus,
+  unlimStopHost,
+} from "@/shared/api/unlim";
 import { toast } from "@/shared/lib/toast";
 import { useRail } from "@/shared/lib/useRoute";
 import { useGameStore } from "@/entities/game";
 import { setStatus } from "@/entities/install";
 import { useCurrentPackId } from "@/entities/pack";
+import { useProfileStore } from "@/entities/profile";
 import { useSessionStore } from "@/entities/session";
 import { useVoiceStatusStore } from "@/entities/voice-room";
 
@@ -24,13 +32,15 @@ function liveLanPort(): number | null {
   return typeof port === "number" && port > 0 ? port : null;
 }
 
+function voiceBusy(): boolean {
+  const v = useVoiceStatusStore.getState();
+  return Boolean(v.hostRoomId || v.inRoom);
+}
+
 /**
- * While the game runs, watches for Open-to-LAN, exposes the port through
- * Porthole and publishes a share code. Tears the tunnel down when LAN closes
- * or the game exits.
- *
- * With an active voice host: rebuild one shared Voice+LAN lobby and publish the
- * new share code so guests auto-reconnect.
+ * While the game runs, watches for Open-to-LAN and publishes a share code.
+ * - `network_mode=unlim`: shared Unlim host (voice ports + LAN).
+ * - `network_mode=hybrid`: Steam Porthole for LAN only.
  */
 export function useLanHosting(): void {
   const appActive = useSessionStore((s) => s.gate === "app");
@@ -38,6 +48,7 @@ export function useLanHosting(): void {
   const runningPackId = useGameStore((s) => s.runningPackId);
   const currentPackId = useCurrentPackId(useRail());
   const packId = runningPackId ?? currentPackId;
+  const networkMode = useProfileStore((s) => s.profile.network_mode);
 
   const busy = useRef(false);
   const fail = useRef<{ port: number; at: number } | null>(null);
@@ -53,13 +64,15 @@ export function useLanHosting(): void {
         game().setHostingLan(null);
         busy.current = false;
         miss.current = 0;
-        // Voice uses Unlim — only tear Porthole LAN when the game exits.
-        void portholeStopHost().catch(() => undefined);
-        if (
-          !useVoiceStatusStore.getState().hostRoomId &&
-          !useVoiceStatusStore.getState().inRoom
-        ) {
-          void portholeStopAll().catch(() => undefined);
+        if (networkMode === "unlim") {
+          if (!voiceBusy()) {
+            void unlimStopHost().catch(() => undefined);
+          }
+        } else {
+          void portholeStopHost().catch(() => undefined);
+          if (!voiceBusy()) {
+            void portholeStopAll().catch(() => undefined);
+          }
         }
         void hadLan;
       }
@@ -73,8 +86,6 @@ export function useLanHosting(): void {
       void (async () => {
         if (cancelled || busy.current) return;
         try {
-          // gamewatch live status resets on "Setting user:" — unlike the old
-          // reverse log scan that resurrected yesterday's Open-to-LAN.
           const port = liveLanPort();
           if (cancelled) return;
 
@@ -86,23 +97,104 @@ export function useLanHosting(): void {
               fail.current = null;
               void netLog(
                 "ui",
-                `LAN closed → tear tunnel (was port=${publishedPort()})`,
+                `LAN closed → tear tunnel (was port=${publishedPort()} mode=${networkMode})`,
               );
               game().setHostingLan(null);
-              await portholeStopHost().catch(() => undefined);
+              if (networkMode === "unlim") {
+                if (!voiceBusy()) {
+                  await unlimStopHost().catch(() => undefined);
+                }
+              } else {
+                await portholeStopHost().catch(() => undefined);
+              }
               if (!cancelled) toast(MSG.lan.hostingStopped);
             }
             return;
           }
           miss.current = 0;
 
+          if (networkMode === "unlim") {
+            const existing = game().hostingLan;
+            // Already published this LAN — never reopen / re-toast every poll.
+            if (existing && existing.gamePort === port) {
+              return;
+            }
+
+            const last = fail.current;
+            if (
+              last &&
+              last.port === port &&
+              Date.now() - last.at < TIMING.lanHostRetryCooldown
+            ) {
+              return;
+            }
+
+            const preferPort = useProfileStore.getState().profile.lan_port;
+            const reservePort =
+              typeof preferPort === "number" && preferPort > 0
+                ? preferPort
+                : port;
+            const host = await unlimHostState().catch(() => null);
+            const keyNow = host?.alive ? host.key : null;
+            const alreadyOpen =
+              Boolean(keyNow) &&
+              (host?.lan_port === reservePort ||
+                (host?.alive === true && host.lan_port == null));
+
+            busy.current = true;
+            if (!alreadyOpen) {
+              setStatus(MSG.lan.openingTunnel);
+              void netLog(
+                "ui",
+                `opening Unlim shared host port=${port} reserve=${reservePort}`,
+              );
+            } else {
+              void netLog(
+                "ui",
+                `Unlim already live key=${keyNow} lan=${host?.lan_port ?? "-"} — publish LAN port=${port}`,
+              );
+            }
+            try {
+              const st = await unlimStatus();
+              if (!st.installed) {
+                throw new Error(MSG.voice.installUnlim);
+              }
+              // ensure reuses daemon via `unlim status` (not Child PID).
+              const rawKey = await unlimEnsureHost(reservePort);
+              const shareCode = encodeUnlimShareCode(rawKey);
+              if (cancelled) return;
+              fail.current = null;
+              const prevCode = existing?.shareCode;
+              game().setHostingLan({
+                packId,
+                shareCode,
+                gamePort: port,
+              });
+              void netLog(
+                "ui",
+                `hosting Unlim pack=${packId} code=${shareCode} gamePort=${port} reused=${prevCode === shareCode || alreadyOpen ? 1 : 0}`,
+              );
+              if (prevCode !== shareCode) toast(MSG.lan.hosting);
+              if (!alreadyOpen) setStatus("", "ok");
+            } catch (err) {
+              fail.current = { port, at: Date.now() };
+              const msg =
+                err instanceof Error ? err.message : MSG.lan.startFailed;
+              void netLog("ui", `Unlim LAN FAILED: ${msg}`);
+              if (!cancelled) setStatus(msg, "error");
+            } finally {
+              busy.current = false;
+            }
+            return;
+          }
+
+          // Hybrid: Steam Porthole for LAN.
           const live = await portholeCurrentHost().catch(() => null);
           const tunnelOk = live != null && Boolean(live.share_code);
           const liveLan =
             typeof live?.lan_port === "number" && live.lan_port > 0
               ? live.lan_port
               : null;
-          // Voice is on Unlim — LAN is always a standalone Porthole expose.
           const sameLan =
             live != null &&
             (live.port === port || liveLan === port) &&
@@ -110,11 +202,11 @@ export function useLanHosting(): void {
             publishedPort() === port;
           if (sameLan) return;
 
-          const last = fail.current;
+          const lastHy = fail.current;
           if (
-            last &&
-            last.port === port &&
-            Date.now() - last.at < TIMING.lanHostRetryCooldown
+            lastHy &&
+            lastHy.port === port &&
+            Date.now() - lastHy.at < TIMING.lanHostRetryCooldown
           ) {
             return;
           }
@@ -122,7 +214,7 @@ export function useLanHosting(): void {
           setStatus(MSG.lan.openingTunnel);
           void netLog(
             "ui",
-            `opening tunnel port=${port} (Porthole LAN; voice stays on Unlim) liveLan=${liveLan ?? "-"}`,
+            `opening Porthole LAN port=${port} liveLan=${liveLan ?? "-"}`,
           );
           try {
             if (live && live.port !== port && liveLan !== port) {
@@ -143,7 +235,7 @@ export function useLanHosting(): void {
             });
             void netLog(
               "ui",
-              `hosting set pack=${packId} code=${shareCode} gamePort=${gamePort}`,
+              `hosting Porthole pack=${packId} code=${shareCode} gamePort=${gamePort}`,
             );
             toast(MSG.lan.hosting);
             setStatus("", "ok");
@@ -152,9 +244,7 @@ export function useLanHosting(): void {
             const msg =
               err instanceof Error ? err.message : MSG.lan.startFailed;
             void netLog("ui", `tunnel FAILED: ${msg}`);
-            if (!cancelled) {
-              setStatus(msg, "error");
-            }
+            if (!cancelled) setStatus(msg, "error");
           } finally {
             busy.current = false;
           }
@@ -168,5 +258,5 @@ export function useLanHosting(): void {
       cancelled = true;
       window.clearInterval(tick);
     };
-  }, [appActive, phase, packId]);
+  }, [appActive, phase, packId, networkMode]);
 }

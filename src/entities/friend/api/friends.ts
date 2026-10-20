@@ -22,6 +22,8 @@ export type FriendRow = {
   sessionShareCode?: string | null;
   sessionGamePort?: number | null;
   sessionInVoice?: boolean;
+  /** ISO timestamp from `sessions.updated_at` (last presence heartbeat). */
+  sessionUpdatedAt?: string | null;
 };
 
 type FriendshipRecord = {
@@ -191,6 +193,7 @@ export async function listFriendships(userId: string): Promise<FriendRow[]> {
       sessionShareCode: sess?.shareCode ?? null,
       sessionGamePort: sess?.gamePort ?? null,
       sessionInVoice: sess?.inVoice ?? false,
+      sessionUpdatedAt: sess?.updatedAt ?? null,
     });
   }
 

@@ -1,7 +1,31 @@
+import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import type { NetworkMode } from "@/entities/profile";
+import {
+  DEFAULT_LAN_PORT,
+  normalizeLanPort,
+  useProfileStore,
+} from "@/entities/profile";
+import { useCurrentPackId } from "@/entities/pack";
+import { unlimApplyLanPort } from "@/shared/api/unlim";
 import { FolderIconBtn } from "@/shared/ui/FolderIconBtn";
+import { McSelect } from "@/shared/ui/McSelect";
+import { useRail } from "@/shared/lib/useRoute";
 import { usePortholeStatus } from "../model/usePortholeStatus";
 import { useUnlimStatus } from "../model/useUnlimStatus";
+
+const NETWORK_MODE_OPTIONS = [
+  {
+    id: "unlim",
+    label: "Unlim only",
+    hint: "Default — voice + LAN, no Porthole",
+  },
+  {
+    id: "hybrid",
+    label: "Hybrid",
+    hint: "Porthole for LAN + Unlim for voice",
+  },
+] as const;
 
 type Props = {
   hostingSelf?: boolean;
@@ -38,6 +62,17 @@ export function NetworkPlayPanel({
   embedded,
   onToast,
 }: Props) {
+  const networkMode = useProfileStore((s) => s.profile.network_mode);
+  const lanPort = useProfileStore((s) => s.profile.lan_port);
+  const persist = useProfileStore((s) => s.persist);
+  const profile = useProfileStore((s) => s.profile);
+  const packId = useCurrentPackId(useRail());
+  const [portDraft, setPortDraft] = useState(String(lanPort || DEFAULT_LAN_PORT));
+
+  useEffect(() => {
+    setPortDraft(String(lanPort || DEFAULT_LAN_PORT));
+  }, [lanPort]);
+
   const {
     status,
     check,
@@ -51,6 +86,28 @@ export function NetworkPlayPanel({
   } = usePortholeStatus(onToast);
 
   const unlim = useUnlimStatus(onToast);
+  const hybrid = networkMode === "hybrid";
+
+  async function setMode(next: NetworkMode) {
+    if (next === networkMode) return;
+    await persist({ ...profile, network_mode: next });
+    onToast(
+      next === "unlim"
+        ? "Network mode: Unlim only (no Porthole)"
+        : "Network mode: Hybrid (Porthole + Unlim)",
+    );
+  }
+
+  async function commitLanPort() {
+    const next = normalizeLanPort(portDraft.trim() || DEFAULT_LAN_PORT);
+    setPortDraft(String(next));
+    if (next === lanPort) return;
+    await persist({ ...profile, lan_port: next });
+    if (packId) {
+      await unlimApplyLanPort(packId, next).catch(() => undefined);
+    }
+    onToast(`LAN port set to ${next}`);
+  }
 
   const installed = Boolean(status?.installed);
   const steamOk =
@@ -167,7 +224,9 @@ export function NetworkPlayPanel({
       : "is-missing";
   const unlimTitle = unlim.check
     ? unlim.check.ok
-      ? "Ready for voice"
+      ? hybrid
+        ? "Ready for voice"
+        : "Ready for voice + LAN"
       : "Needs attention"
     : unlimInstalled
       ? "Found"
@@ -178,7 +237,9 @@ export function NetworkPlayPanel({
       ? unlim.check.message
       : unlimInstalled
         ? unlim.status?.path ?? "Binary found."
-        : "Install Unlim for voice chat (separate from Network Play).";
+        : hybrid
+          ? "Install Unlim for voice chat (LAN stays on Porthole)."
+          : "Install Unlim for voice and Open-to-LAN (no Steam/Porthole).";
 
   async function browseUnlim() {
     const selected = await open({ multiple: false, directory: false });
@@ -197,129 +258,94 @@ export function NetworkPlayPanel({
       <div className={embedded ? "network-embedded-badges" : "page-title-row"}>
         {embedded ? null : <h2 className="page-title">Network Play</h2>}
         <div className="network-status-badges" aria-live="polite">
-          <StatusBadge label="Steam" value={steamValue} tone={steamTone} />
-          <StatusBadge
-            label="Porthole"
-            value={portholeValue}
-            tone={portholeTone}
-          />
           <StatusBadge label="Unlim" value={unlimValue} tone={unlimTone} />
+          {hybrid ? (
+            <>
+              <StatusBadge label="Steam" value={steamValue} tone={steamTone} />
+              <StatusBadge
+                label="Porthole"
+                value={portholeValue}
+                tone={portholeTone}
+              />
+            </>
+          ) : null}
         </div>
       </div>
+
+      <div className="field network-mode-field">
+        <McSelect
+          label="Tunnel mode"
+          value={networkMode}
+          options={[...NETWORK_MODE_OPTIONS]}
+          menuPlacement="down"
+          onChange={(id) => void setMode(id as NetworkMode)}
+        />
+      </div>
+
+      <div className="field">
+        <label htmlFor="lan-port">Open-to-LAN port</label>
+        <div className="field-row">
+          <input
+            id="lan-port"
+            type="number"
+            min={1024}
+            max={65535}
+            inputMode="numeric"
+            spellCheck={false}
+            value={portDraft}
+            onChange={(e) => setPortDraft(e.target.value)}
+            onBlur={() => void commitLanPort()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.currentTarget.blur();
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="btn-mc dim"
+            onClick={() => {
+              setPortDraft(String(DEFAULT_LAN_PORT));
+              void (async () => {
+                await persist({ ...profile, lan_port: DEFAULT_LAN_PORT });
+                if (packId) {
+                  await unlimApplyLanPort(packId, DEFAULT_LAN_PORT).catch(
+                    () => undefined,
+                  );
+                }
+                onToast(`LAN port reset to ${DEFAULT_LAN_PORT}`);
+              })();
+            }}
+          >
+            Default
+          </button>
+        </div>
+      </div>
+
       {voiceLive ? (
         <p className="friends-lead">
           Voice room is live — friends hear you while you play; nothing extra to
           set up.
         </p>
       ) : null}
-      <p className="friends-lead">
-        Play Open-to-LAN worlds with friends over the internet. Remined uses{" "}
-        <strong>Porthole</strong> — a free Steam app that tunnels your LAN port
-        securely. Steam must be installed and logged in on every PC.
-      </p>
-
-      <div className={`network-status ${statusClass}`}>
-        <div className="network-status-copy">
-          <strong>{title}</strong>
-          <p>{body}</p>
-        </div>
-        <div className="network-status-actions">
-          {!installed ? (
-            <button
-              type="button"
-              className="btn-mc ok"
-              disabled={busy || checking}
-              onClick={() => void openSteam(true)}
-            >
-              Install on Steam
-            </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                className="btn-mc ok"
-                disabled={busy || checking}
-                onClick={() => void runCheck()}
-              >
-                {checking ? "Checking…" : "Check"}
-              </button>
-              {check && !check.ok && !check.steam_ok ? (
-                <button
-                  type="button"
-                  className="btn-mc ok"
-                  disabled={busy || checking}
-                  onClick={() => void launchSteamApp()}
-                >
-                  Open Steam
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="btn-mc dim"
-                disabled={busy || checking}
-                onClick={() => void openSteam(false)}
-              >
-                Open Steam page
-              </button>
-            </>
-          )}
-          <button
-            type="button"
-            className="btn-mc dim"
-            disabled={busy || checking}
-            onClick={() => void refresh()}
-          >
-            Refresh
-          </button>
-        </div>
-      </div>
-
-      {error ? <p className="friends-error">{error}</p> : null}
-      {check && !check.ok && check.detail ? (
-        <pre className="network-check-detail">{check.detail}</pre>
-      ) : null}
-
-      {hostingSelf ? (
-        <p className="friends-hosting-banner" role="status">
-          You are hosting
-          {hostingPort ? ` on port ${hostingPort}` : ""} — friends can Join from
-          the Friends tab.
-        </p>
-      ) : null}
-
-      <div className="network-steps">
-        <div className="network-step">
-          <h3 className="settings-heading">Host</h3>
-          <ol>
-            <li>Install Porthole from Steam (button above) and leave Steam running.</li>
-            <li>Play → open a world → pause → <strong>Open to LAN</strong>.</li>
-            <li>
-              Remined detects the port, starts Porthole, and marks you as{" "}
-              <strong>Hosting</strong> for friends.
-            </li>
-          </ol>
-        </div>
-        <div className="network-step">
-          <h3 className="settings-heading">Join a friend</h3>
-          <ol>
-            <li>Same setup: Steam + Porthole installed and logged in.</li>
-            <li>
-              Friends tab → when they show <strong>Hosting</strong>, hit{" "}
-              <strong>Join</strong>.
-            </li>
-            <li>
-              Remined connects the tunnel and launches their pack straight into
-              the world.
-            </li>
-          </ol>
-        </div>
-      </div>
 
       <div className="network-unlim">
-        <h3 className="settings-heading">Unlim (voice)</h3>
+        <h3 className="settings-heading">
+          {hybrid ? "Unlim (voice)" : "Unlim (voice + LAN)"}
+        </h3>
         <p className="friends-lead">
-          Voice chat uses <strong>Unlim</strong>, not Porthole. Free install from{" "}
-          unlim.cc — both host and guests need it.
+          {hybrid ? (
+            <>
+              Voice chat uses <strong>Unlim</strong>, not Porthole. Free from{" "}
+              unlim.cc — both host and guests need it.
+            </>
+          ) : (
+            <>
+              Remined tunnels voice and Open-to-LAN through{" "}
+              <strong>Unlim</strong> (unlim.cc). Friends only need Unlim — no
+              Steam or Porthole.
+            </>
+          )}
         </p>
         <div className={`network-status ${unlimStatusClass}`}>
           <div className="network-status-copy">
@@ -408,6 +434,149 @@ export function NetworkPlayPanel({
             If auto-find misses it: Win → unlim.exe (often %APPDATA%\Unlim\bin\);
             Mac → Unlim/bin/unlim under Application Support.
           </p>
+        </div>
+      </div>
+
+      {hybrid ? (
+        <>
+          <p className="friends-lead">
+            Open-to-LAN uses <strong>Porthole</strong> — a free Steam app.
+            Steam must be installed and logged in on every PC for Network Play.
+          </p>
+
+          <div className={`network-status ${statusClass}`}>
+            <div className="network-status-copy">
+              <strong>{title}</strong>
+              <p>{body}</p>
+            </div>
+            <div className="network-status-actions">
+              {!installed ? (
+                <button
+                  type="button"
+                  className="btn-mc ok"
+                  disabled={busy || checking}
+                  onClick={() => void openSteam(true)}
+                >
+                  Install on Steam
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="btn-mc ok"
+                    disabled={busy || checking}
+                    onClick={() => void runCheck()}
+                  >
+                    {checking ? "Checking…" : "Check"}
+                  </button>
+                  {check && !check.ok && !check.steam_ok ? (
+                    <button
+                      type="button"
+                      className="btn-mc ok"
+                      disabled={busy || checking}
+                      onClick={() => void launchSteamApp()}
+                    >
+                      Open Steam
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="btn-mc dim"
+                    disabled={busy || checking}
+                    onClick={() => void openSteam(false)}
+                  >
+                    Open Steam page
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                className="btn-mc dim"
+                disabled={busy || checking}
+                onClick={() => void refresh()}
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          {error ? <p className="friends-error">{error}</p> : null}
+          {check && !check.ok && check.detail ? (
+            <pre className="network-check-detail">{check.detail}</pre>
+          ) : null}
+        </>
+      ) : null}
+
+      {hostingSelf ? (
+        <p className="friends-hosting-banner" role="status">
+          You are hosting
+          {hostingPort ? ` on port ${hostingPort}` : ""} — friends can Join from
+          the Friends tab.
+        </p>
+      ) : null}
+
+      <div className="network-steps">
+        <div className="network-step">
+          <h3 className="settings-heading">Host</h3>
+          <ol>
+            {hybrid ? (
+              <>
+                <li>
+                  Install Porthole from Steam (button above) and leave Steam
+                  running. Install Unlim for voice.
+                </li>
+                <li>
+                  Play → open a world → pause → <strong>Open to LAN</strong>{" "}
+                  (use the LAN port above in Open to LAN / mcwifipnp).
+                </li>
+                <li>
+                  Remined starts Porthole and marks you as{" "}
+                  <strong>Hosting</strong> for friends.
+                </li>
+              </>
+            ) : (
+              <>
+                <li>Install Unlim (button above) on every PC.</li>
+                <li>
+                  Play → open a world → pause → <strong>Open to LAN</strong>{" "}
+                  (port from the field above).
+                </li>
+                <li>
+                  Remined opens one Unlim lobby (voice-ready) and marks you as{" "}
+                  <strong>Hosting</strong>.
+                </li>
+              </>
+            )}
+          </ol>
+        </div>
+        <div className="network-step">
+          <h3 className="settings-heading">Join a friend</h3>
+          <ol>
+            {hybrid ? (
+              <>
+                <li>Same setup: Steam + Porthole (and Unlim for voice).</li>
+                <li>
+                  Friends tab → when they show <strong>Hosting</strong>, hit{" "}
+                  <strong>Join</strong>.
+                </li>
+                <li>
+                  Remined connects the tunnel and launches their pack into the
+                  world.
+                </li>
+              </>
+            ) : (
+              <>
+                <li>Install Unlim — no Steam required.</li>
+                <li>
+                  Friends tab → when they show <strong>Hosting</strong>, hit{" "}
+                  <strong>Join</strong>.
+                </li>
+                <li>
+                  Remined connects Unlim and launches their pack into the world.
+                </li>
+              </>
+            )}
+          </ol>
         </div>
       </div>
     </Root>

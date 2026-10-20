@@ -2151,6 +2151,9 @@ fn write_mcwifipnp_offline_defaults(instance: &Path) -> Result<(), String> {
     // Offline UUID fixer helps inventory stay stable across offline joins.
     obj.insert("enable-uuid-fixer".into(), json!(true));
     obj.insert("enableUUIDFixer".into(), json!(true));
+    // Fixed LAN port so Unlim-only mode can pre-open the tunnel with voice.
+    let lan = crate::unlim::LAN_TCP_PORT;
+    obj.insert("port".into(), json!(lan));
     let pretty = serde_json::to_vec_pretty(&value).map_err(|e| e.to_string())?;
     fs::write(&path, pretty).map_err(|e| e.to_string())?;
     Ok(())

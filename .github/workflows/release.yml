@@ -82,10 +82,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v0.8.2
-          releaseName: Remined v0.8.2
+          tagName: v0.9.0
+          releaseName: Remined v0.9.0
           releaseBody: |
-            Remined launcher v0.8.2 — Friend desktop toasts (Steam-like, tray background); voice stage grid + sidebar chat; custom themes & Bedrock toggle for friend alerts; skin preview cache fix; enchant burst on rail icons; voice leave status fix.
+            Remined launcher v0.9.0 — Unlim-first networking (voice + Open-to-LAN share one session; hybrid Porthole option); fixed LAN port; friends last-seen presence; startup update modal; profile skin stage with theme background + cyberpunk grid floor; title help hints; Unlim status/API hardening.
             macOS (arm64 + x64) and Windows builds.
           releaseDraft: false
           prerelease: false

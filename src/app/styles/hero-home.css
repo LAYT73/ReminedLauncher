@@ -489,3 +489,61 @@
 .page-title-row .page-title {
   margin: 0;
 }
+
+.page-title-hint-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.page-title-hint-wrap .page-title {
+  margin: 0;
+}
+
+.title-hint-btn {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: var(--mc-stone);
+  color: var(--text-on-stone);
+  border: 2px solid #000;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.28),
+    inset 2px 0 0 rgba(255, 255, 255, 0.1),
+    inset -2px 0 0 rgba(0, 0, 0, 0.16);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  image-rendering: pixelated;
+  cursor: pointer;
+  opacity: 0.7;
+  transition:
+    opacity 0.15s ease,
+    filter 0.15s ease,
+    transform 0.1s ease;
+}
+
+.title-hint-btn:hover {
+  opacity: 1;
+  filter: brightness(1.12);
+}
+
+.title-hint-btn:active {
+  transform: translateY(1px);
+}
+
+.title-hint-btn.is-open {
+  opacity: 1;
+  background: var(--bg-panel);
+  color: var(--text);
+}
+
+.title-hint-panel {
+  margin-top: -6px;
+}
