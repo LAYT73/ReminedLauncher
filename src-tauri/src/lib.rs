@@ -1251,11 +1251,17 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
+            // `RunEvent::Reopen` is macOS-only (Dock click while hidden).
+            #[cfg(target_os = "macos")]
             if let RunEvent::Reopen {
                 has_visible_windows, ..
             } = event
             {
                 tray::on_reopen(app, has_visible_windows);
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = (app, event);
             }
         });
 }
