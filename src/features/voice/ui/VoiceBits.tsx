@@ -135,6 +135,10 @@ export function VideoTileView({ tile, label }: { tile: VoiceVideoTile; label: st
     const media = tile.track.mediaStreamTrack;
     if (!media || media.readyState !== "live") return;
     tile.track.attach(el);
+    const kickPlay = () => {
+      void el.play().catch(() => undefined);
+    };
+    kickPlay();
     const clear = () => {
       try {
         tile.track.detach(el);
@@ -147,9 +151,12 @@ export function VideoTileView({ tile, label }: { tile: VoiceVideoTile; label: st
       el.load();
     };
     const onEnded = () => clear();
+    // Remotes often land muted until the first frame — play again on unmute.
     media.addEventListener("ended", onEnded);
+    media.addEventListener("unmute", kickPlay);
     return () => {
       media.removeEventListener("ended", onEnded);
+      media.removeEventListener("unmute", kickPlay);
       clear();
     };
   }, [tile.track]);

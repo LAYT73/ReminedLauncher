@@ -34,6 +34,8 @@ type Args = {
   setMembers: (members: VoiceMember[]) => void;
   /** Host tunnel key changed after auto-reconnect — keep room UI in sync. */
   onHostShareCodeRepublished?: (roomId: string, shareCode: string) => void;
+  /** Guest: Supabase room closed / vanished — clear lobby UI even off the Voice tab. */
+  onRoomEnded?: (reason: "closed" | "missing") => void;
 };
 
 /** The LiveKit session and everything that mirrors it into UI state. */
@@ -44,6 +46,7 @@ export function useLiveSession({
   onRoomStatusChange,
   setMembers,
   onHostShareCodeRepublished,
+  onRoomEnded,
 }: Args) {
   const sessionRef = useRef<VoiceSession | null>(null);
   const [status, setStatus] = useState("");
@@ -79,10 +82,36 @@ export function useLiveSession({
   );
   const shareRepublishRef = useRef(onHostShareCodeRepublished);
   shareRepublishRef.current = onHostShareCodeRepublished;
+  const onRoomEndedRef = useRef(onRoomEnded);
+  onRoomEndedRef.current = onRoomEnded;
+  /** Set when host ends the room — aborts in-flight guest reconnect. */
+  const roomEndedRef = useRef(false);
 
   const clearPruneTimers = useCallback(() => {
     for (const t of pruneTimers.current.values()) clearTimeout(t);
     pruneTimers.current.clear();
+  }, []);
+
+  /** Guest: room row closed or no longer readable (members purged) → stop reconnect. */
+  const checkGuestRoomAlive = useCallback(async (roomId: string) => {
+    const fresh = await getVoiceRoom(roomId).catch(() => null);
+    if (fresh && fresh.status !== "closed") return fresh;
+    roomEndedRef.current = true;
+    intentionalLeaveRef.current = true;
+    if (reconnectTimer.current) {
+      clearTimeout(reconnectTimer.current);
+      reconnectTimer.current = null;
+    }
+    reconnectingRef.current = false;
+    guestRoomRef.current = null;
+    await sessionRef.current?.disconnect().catch(() => undefined);
+    sessionRef.current = null;
+    joinedCodeRef.current = null;
+    connectingCodeRef.current = null;
+    pendingShareCodeRef.current = null;
+    await voiceGuestDisconnect().catch(() => undefined);
+    onRoomEndedRef.current?.(fresh?.status === "closed" ? "closed" : "missing");
+    return null;
   }, []);
 
   const refreshVideo = useCallback(() => {
@@ -105,6 +134,7 @@ export function useLiveSession({
 
   const disconnect = useCallback(async () => {
     intentionalLeaveRef.current = true;
+    roomEndedRef.current = true;
     if (reconnectTimer.current) {
       clearTimeout(reconnectTimer.current);
       reconnectTimer.current = null;
@@ -156,6 +186,7 @@ export function useLiveSession({
   const connect = useCallback(
     async (room: VoiceRoom, asGuest: boolean) => {
       intentionalLeaveRef.current = false;
+      roomEndedRef.current = false;
       connectingRef.current = true;
       roleRef.current = asGuest ? "guest" : "host";
       setStatus(asGuest ? "Connecting Relay…" : MSG.voice.connectingVoice);
@@ -262,23 +293,36 @@ export function useLiveSession({
             sessionRef.current = null;
             // reconnectGuest/Host own this disconnect — keep Supabase membership
             // so chat + member list survive Relay/LAN tunnel rebuilds.
-            if (reconnectingRef.current) {
+            if (reconnectingRef.current || roomEndedRef.current) {
               return;
             }
             if (!intentionalLeaveRef.current) {
-              // Dev HMR / LiveKit blip / Relay drop — auto-heal instead of
-              // stranding the host on "try Leave, then Create again".
-              setStatus(
-                asGuest
-                  ? "Lobby changed — reconnecting…"
-                  : "Voice dropped — reconnecting…",
-              );
-              void netLog(
-                "ui",
-                asGuest
-                  ? "voice guest disconnected — force reconnect loop"
-                  : "voice host disconnected — auto reconnect",
-              );
+              // Host Leave often kills LiveKit before (or without) the guest
+              // seeing the Realtime "closed" event — especially off the Voice
+              // tab. Probe Supabase before auto-reconnect so we don't stick
+              // the guest alone in a dead room UI.
+              if (asGuest) {
+                void (async () => {
+                  const alive = await checkGuestRoomAlive(liveRoom.id);
+                  if (!alive || roomEndedRef.current || intentionalLeaveRef.current) {
+                    return;
+                  }
+                  setStatus("Lobby changed — reconnecting…");
+                  void netLog(
+                    "ui",
+                    "voice guest disconnected — force reconnect loop",
+                  );
+                  if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+                  reconnectTimer.current = setTimeout(() => {
+                    void reconnectFnRef
+                      .current({ force: true })
+                      .catch(() => undefined);
+                  }, RECONNECT_GRACE_MS);
+                })();
+                return;
+              }
+              setStatus("Voice dropped — reconnecting…");
+              void netLog("ui", "voice host disconnected — auto reconnect");
               if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
               reconnectTimer.current = setTimeout(() => {
                 void reconnectFnRef
@@ -340,7 +384,10 @@ export function useLiveSession({
         }
         // LiveKit can survive a tunnel rebuild while Supabase membership was
         // pruned (or never re-asserted). Chat + member list need the row.
+        // Never upsert into a closed room (that resurrected ghost guests).
         if (asGuest) {
+          const stillOpen = await checkGuestRoomAlive(liveRoom.id);
+          if (!stillOpen) return;
           await ensureVoiceRoomMember(liveRoom.id, userId, "member")
             .then(() => listRoomMembers(liveRoom.id).then(setMembers))
             .catch(() => undefined);
@@ -361,6 +408,8 @@ export function useLiveSession({
           asGuest &&
           pending &&
           !reconnectingRef.current &&
+          !roomEndedRef.current &&
+          !intentionalLeaveRef.current &&
           relaySessionCore(pending) !== relaySessionCore(joinedCodeRef.current)
         ) {
           pendingShareCodeRef.current = null;
@@ -373,6 +422,7 @@ export function useLiveSession({
       }
     },
     [
+      checkGuestRoomAlive,
       clearPruneTimers,
       displayName,
       micId,
@@ -388,9 +438,11 @@ export function useLiveSession({
 
   const reconnectGuest = useCallback(
     async (opts?: { force?: boolean }) => {
-      if (reconnectingRef.current) return;
+      if (reconnectingRef.current || roomEndedRef.current) return;
       const base = guestRoomRef.current;
       if (!base) return;
+      const alive = await checkGuestRoomAlive(base.id);
+      if (!alive) return;
       reconnectingRef.current = true;
       setStatus("Reconnecting to host lobby…");
       // Do not treat this disconnect as Leave — membership must stay for chat.
@@ -406,14 +458,15 @@ export function useLiveSession({
       let lastErr: unknown;
       try {
         for (let i = 0; i < RECONNECT_TRIES; i++) {
+          if (roomEndedRef.current || intentionalLeaveRef.current) return;
           if (i > 0) {
             setStatus(`Reconnecting… (${i + 1}/${RECONNECT_TRIES})`);
             await new Promise((r) => setTimeout(r, 1500));
           }
-          const fresh = await getVoiceRoom(base.id).catch(() => null);
-          const room = fresh
-            ? { ...base, ...fresh }
-            : (guestRoomRef.current ?? base);
+          if (roomEndedRef.current || intentionalLeaveRef.current) return;
+          const fresh = await checkGuestRoomAlive(base.id);
+          if (!fresh) return;
+          const room = { ...base, ...fresh };
           guestRoomRef.current = room;
           const code = room.portholeShareCode?.trim();
           if (!code) {
@@ -432,8 +485,9 @@ export function useLiveSession({
             `voice guest reconnect try=${i + 1} target=${code}`,
           );
           try {
-            // connect() clears intentionalLeaveRef
+            // connect() clears intentionalLeaveRef / roomEndedRef
             await connect(room, true);
+            if (roomEndedRef.current) return;
             onToast("Rejoined voice after lobby update", "ok");
             return;
           } catch (err) {
@@ -442,6 +496,9 @@ export function useLiveSession({
             joinedCodeRef.current = null;
           }
         }
+        // Host gone / tunnel dead — don't leave the guest stuck in-room alone.
+        const still = await checkGuestRoomAlive(base.id);
+        if (!still) return;
         setStatus("Reconnect failed — Leave, then rejoin");
         onToast(`Voice reconnect failed: ${errorMessage(lastErr)}`, "err");
         void netLog(
@@ -452,7 +509,7 @@ export function useLiveSession({
         reconnectingRef.current = false;
       }
     },
-    [connect, onToast],
+    [checkGuestRoomAlive, connect, onToast],
   );
 
   /** Host: restart LiveKit (+ Relay if needed) after unexpected drop / tauri rebuild. */

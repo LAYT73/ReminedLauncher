@@ -110,7 +110,7 @@ Deno.serve(async (req) => {
       headers: {
         ...cors,
         "Content-Type": "image/png",
-        "Cache-Control": "public, max-age=300",
+        "Cache-Control": "public, max-age=60, must-revalidate",
       },
     });
   }

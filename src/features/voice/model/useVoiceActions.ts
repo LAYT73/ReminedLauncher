@@ -83,6 +83,17 @@ export function useVoiceActions({
   const [invitePick, setInvitePick] = useState("");
   /** Sync lock — React `busy` can lag one frame and allow a double Create. */
   const createInFlight = useRef(false);
+  const guestKickInFlight = useRef(false);
+  const liveRef = useRef(live);
+  liveRef.current = live;
+  const roomRef = useRef(room);
+  roomRef.current = room;
+  const listsRef = useRef(lists);
+  listsRef.current = lists;
+  const onToastRef = useRef(onToast);
+  onToastRef.current = onToast;
+  const onRoomStatusChangeRef = useRef(onRoomStatusChange);
+  onRoomStatusChangeRef.current = onRoomStatusChange;
   const { active } = room;
   const isHost = active?.hostId === userId;
   const fail = (err: unknown) => onToast(errorMessage(err), "err");
@@ -92,6 +103,24 @@ export function useVoiceActions({
     live.resetLiveUi();
     useVoiceStatusStore.getState().setHostRoomId(null);
     onRoomStatusChange?.(false);
+  }
+
+  /** Host closed the room — clear guest UI even when Voice tab is display:none. */
+  async function kickGuestRoomEnded(roomId: string, toastMsg = true) {
+    if (guestKickInFlight.current) return;
+    guestKickInFlight.current = true;
+    try {
+      await leaveVoiceRoom(roomId, userId).catch(() => undefined);
+      await liveRef.current.disconnect().catch(() => undefined);
+      await voiceGuestDisconnect().catch(() => undefined);
+      roomRef.current.reset();
+      liveRef.current.resetLiveUi();
+      onRoomStatusChangeRef.current?.(false);
+      await listsRef.current.refreshLists().catch(() => undefined);
+      if (toastMsg) onToastRef.current("Host ended the room", "ok");
+    } finally {
+      guestKickInFlight.current = false;
+    }
   }
 
   async function stopHostKeepingLan() {
@@ -104,6 +133,8 @@ export function useVoiceActions({
   }
 
   // Room row updates: host closed, or new Porthole share code (Voice+LAN merge).
+  // Keep deps stable (refs for live/room) — resubscribing on every speaking
+  // tick drops the Realtime channel and misses "closed" while off the Voice tab.
   const activeId = active?.id ?? null;
   const activeHostId = active?.hostId ?? null;
   useEffect(() => {
@@ -111,21 +142,12 @@ export function useVoiceActions({
     return subscribeVoiceRoom(activeId, (patch) => {
       if (patch.status === "closed") {
         if (activeHostId === userId) return;
-        void (async () => {
-          await leaveVoiceRoom(activeId, userId).catch(() => undefined);
-          await live.disconnect().catch(() => undefined);
-          await voiceGuestDisconnect().catch(() => undefined);
-          room.reset();
-          live.resetLiveUi();
-          onRoomStatusChange?.(false);
-          await lists.refreshLists().catch(() => undefined);
-          onToast("Host ended the room", "ok");
-        })();
+        void kickGuestRoomEnded(activeId);
         return;
       }
       if (patch.portholeShareCode === undefined) return;
       const code = patch.portholeShareCode;
-      room.setActive((prev) => {
+      roomRef.current.setActive((prev) => {
         if (!prev || prev.id !== activeId) return prev;
         // Same-code Realtime echo must not force a guest rejoin — that kills
         // the in-flight Relay connect (localhost:7880 never opens).
@@ -134,21 +156,40 @@ export function useVoiceActions({
         // Guests reconnect only when the relay *session* changes (id/sk),
         // not when a LAN port is merely appended to the share code.
         if (activeHostId !== userId && code) {
-          queueMicrotask(() => live.onHostShareCode(next, code));
+          queueMicrotask(() => liveRef.current.onHostShareCode(next, code));
         }
         return next;
       });
     });
-  }, [
-    activeId,
-    activeHostId,
-    userId,
-    live,
-    lists,
-    onRoomStatusChange,
-    onToast,
-    room,
-  ]);
+  }, [activeId, activeHostId, userId]);
+
+  // Backup while guest is in a room: poll so we still leave if Realtime missed
+  // the closed event (common when Voice slot is display:none).
+  useEffect(() => {
+    if (!activeId || activeHostId === userId) return;
+    let cancelled = false;
+    const tick = () => {
+      void getVoiceRoom(activeId)
+        .then((r) => {
+          if (cancelled) return;
+          if (!r || r.status === "closed") {
+            void kickGuestRoomEnded(activeId);
+          }
+        })
+        .catch(() => undefined);
+    };
+    tick();
+    const id = window.setInterval(tick, 4000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [activeId, activeHostId, userId]);
 
   async function openRoomSession(target: VoiceRoom, asGuest: boolean) {
     room.setActive(target);
@@ -460,5 +501,6 @@ export function useVoiceActions({
     onSend,
     onRejoin,
     onCloseListedRoom,
+    kickGuestRoomEnded,
   };
 }

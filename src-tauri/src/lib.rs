@@ -277,10 +277,11 @@ fn apply_customskinloader_config(instance: &Path) -> Result<(), String> {
         "enableDynamicSkull": true,
         "enableTransparentSkin": true,
         "ignoreHttpsCertificate": false,
-        "cacheExpiry": 30,
+        // Seconds — keep short so Storage/profile changes show up next join.
+        "cacheExpiry": 5,
         "enableUpdateSkull": false,
         "enableLocalProfileCache": false,
-        "enableCacheAutoClean": false,
+        "enableCacheAutoClean": true,
         // When Remined returns skin-only, still pull cape from LocalSkin / later sources.
         "forceLoadAllTextures": true,
         "enableCape": true,
@@ -336,6 +337,18 @@ fn apply_skinshuffle(instance: &Path, skin_src: &Path, skin_model: &str) -> Resu
 
     let skins_dir = instance.join("config").join("skinshuffle").join("skins");
     fs::create_dir_all(&skins_dir).map_err(|e| e.to_string())?;
+    // Drop stale Remined PNGs so SkinShuffle cannot keep serving an old stamp.
+    if skins_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&skins_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                if name.starts_with("remined") && name.ends_with(".png") {
+                    let _ = fs::remove_file(entry.path());
+                }
+            }
+        }
+    }
     fs::write(skins_dir.join(format!("{skin_name}.png")), &bytes).map_err(|e| e.to_string())?;
 
     let presets_path = instance.join("config").join("skinshuffle").join("presets.json");
@@ -357,6 +370,34 @@ fn apply_skinshuffle(instance: &Path, skin_src: &Path, skin_model: &str) -> Resu
         serde_json::to_string_pretty(&presets).map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())
+}
+
+/// Write skin for CustomSkinLoader LocalSkin (self-view when Remined API 404s / offline).
+fn apply_csl_local_skin(instance: &Path, username: &str, skin_src: &Path) -> Result<(), String> {
+    if !skin_src.is_file() {
+        return Err(format!("Skin file not found: {}", skin_src.display()));
+    }
+    let bytes = fs::read(skin_src).map_err(|e| e.to_string())?;
+    if bytes.len() < 100 {
+        return Err("Invalid skin PNG".into());
+    }
+    let dir = instance
+        .join("CustomSkinLoader")
+        .join("LocalSkin")
+        .join("skins");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let dest = dir.join(format!("{username}.png"));
+    fs::write(&dest, &bytes).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn clear_csl_local_skin(instance: &Path, username: &str) {
+    let dest = instance
+        .join("CustomSkinLoader")
+        .join("LocalSkin")
+        .join("skins")
+        .join(format!("{username}.png"));
+    let _ = fs::remove_file(dest);
 }
 
 /// Write cape for CustomSkinLoader LocalSkin fallback (self-view / offline).
@@ -1185,24 +1226,45 @@ async fn launch_pack(
         if let Err(err) = apply_customskinloader_config(&instance) {
             eprintln!("[remined] CustomSkinLoader config: {err}");
         }
-        if let Some(ref skin) = skin_path {
+        // SkinShuffle + CSL LocalSkin must stay in sync. If Remined API 404s,
+        // CSL falls through to LocalSkin/skins/{nick}.png — stale files look like
+        // "old skin still exists" even after Storage/profile cleared.
+        let skin_for_local = if let Some(ref skin) = skin_path {
             match materialize_skin(&root, skin).await {
                 Ok(local) => {
                     if let Err(err) = apply_skinshuffle(&instance, &local, &model) {
                         diag::lock_session(&session).phase = GamePhase::Idle;
                         return Err(err);
                     }
+                    local
                 }
                 Err(err) => {
                     diag::lock_session(&session).phase = GamePhase::Idle;
                     return Err(err);
                 }
             }
-        } else if let Err(err) = apply_default_steve_skin(&instance, &model) {
-            // No cloud skin → Remined default Steve (same as UI), not vanilla blank preset
-            let _ = clear_skinshuffle(&instance);
-            diag::lock_session(&session).phase = GamePhase::Idle;
-            return Err(err);
+        } else {
+            // No cloud skin → Remined default Steve (same as UI), not blank Mojang.
+            if let Err(err) = apply_default_steve_skin(&instance, &model) {
+                let _ = clear_skinshuffle(&instance);
+                clear_csl_local_skin(&instance, name);
+                diag::lock_session(&session).phase = GamePhase::Idle;
+                return Err(err);
+            }
+            let dir = root.join(".remined").join("skins");
+            if let Err(err) = fs::create_dir_all(&dir) {
+                diag::lock_session(&session).phase = GamePhase::Idle;
+                return Err(err.to_string());
+            }
+            let dest = dir.join("default_steve.png");
+            if let Err(err) = fs::write(&dest, default_steve_png()) {
+                diag::lock_session(&session).phase = GamePhase::Idle;
+                return Err(err.to_string());
+            }
+            dest
+        };
+        if let Err(err) = apply_csl_local_skin(&instance, name, &skin_for_local) {
+            eprintln!("[remined] skin LocalSkin: {err}");
         }
         // Cape: CSL Remined API for friends; LocalSkin for self fallback.
         if let Some(ref cape) = cape_path {

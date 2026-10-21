@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useLiveSession } from "../model/useLiveSession";
 import { useRoomData } from "../model/useRoomData";
 import { useRuntimeModal } from "../model/useRuntimeModal";
@@ -22,6 +22,10 @@ export function VoicePanel({
   const [devicesOpen, setDevicesOpen] = useState(false);
   const lists = useVoiceLists(userId, onToast, onInvitesChange);
   const room = useRoomData(userId, displayName);
+  const runtime = useRuntimeModal();
+  const activeRoomIdRef = useRef<string | null>(null);
+  activeRoomIdRef.current = room.active?.id ?? null;
+  const kickRef = useRef<(roomId: string) => Promise<void>>(async () => undefined);
   const live = useLiveSession({
     userId,
     displayName,
@@ -35,8 +39,11 @@ export function VoicePanel({
           : prev,
       );
     },
+    onRoomEnded: () => {
+      const id = activeRoomIdRef.current;
+      if (id) void kickRef.current(id);
+    },
   });
-  const runtime = useRuntimeModal();
   const actions = useVoiceActions({
     userId,
     displayName,
@@ -47,6 +54,7 @@ export function VoicePanel({
     lists,
     runtime,
   });
+  kickRef.current = (roomId) => actions.kickGuestRoomEnded(roomId);
   const { active, members, messages, chatEndRef } = room;
   const { friends, rooms, invites, listsLoading } = lists;
   const { sessionRef, micId, outputId, status } = live;

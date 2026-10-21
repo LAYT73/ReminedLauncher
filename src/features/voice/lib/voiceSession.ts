@@ -286,6 +286,7 @@ export class VoiceSession {
       if (pub.kind === Track.Kind.Video) this.cbs.onVideo?.();
     });
     room.on(RoomEvent.TrackPublished, (pub) => {
+      this.cbs.onParticipants?.();
       if (pub.kind === Track.Kind.Video) this.cbs.onVideo?.();
     });
     room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
@@ -315,11 +316,18 @@ export class VoiceSession {
       RoomEvent.TrackSubscribed,
       (trackRemote, _pub: RemoteTrackPublication, participant: RemoteParticipant) => {
         if (trackRemote.kind === Track.Kind.Video) {
+          // Remote MST often starts muted until the first frame — refresh then too.
+          this.watchRemoteVideoMedia(trackRemote.mediaStreamTrack);
           this.cbs.onVideo?.();
+          voidMicrotask(() => this.cbs.onVideo?.());
+          setTimeout(() => this.cbs.onVideo?.(), 80);
+          setTimeout(() => this.cbs.onVideo?.(), 400);
           return;
         }
         if (trackRemote.kind !== Track.Kind.Audio) return;
         this.ensureRemoteAudioAttached(participant);
+        // Mute badges read pubs here — refresh or "no pubs yet" sticks as muted.
+        this.cbs.onParticipants?.();
         this.scheduleResume();
       },
     );
@@ -341,8 +349,10 @@ export class VoiceSession {
           return;
         }
         for (const el of els) el.remove();
+        if (trackRemote.kind === Track.Kind.Audio) this.cbs.onParticipants?.();
       } catch {
         if (trackRemote.kind === Track.Kind.Video) this.cbs.onVideo?.();
+        else this.cbs.onParticipants?.();
       }
     });
 
@@ -460,10 +470,29 @@ export class VoiceSession {
     const p = room.remoteParticipants.get(identity);
     if (!p) return { muted: false, deafened: false };
     const pubs = [...p.audioTrackPublications.values()];
+    // No audio pub yet ≠ muted (join race). Only show mute when a live pub is muted.
+    const muted =
+      pubs.length > 0 &&
+      pubs.every((x) => x.isMuted || x.track?.isMuted === true);
     return {
-      muted: pubs.length === 0 || pubs.every((x) => x.isMuted),
+      muted,
       deafened: p.attributes?.deafened === "1",
     };
+  }
+
+  /** When MST unmutes (first frame), refresh tiles so the remote cam appears. */
+  private watchRemoteVideoMedia(media: MediaStreamTrack | undefined) {
+    if (!media) return;
+    const bump = () => this.cbs.onVideo?.();
+    if (!media.muted) {
+      bump();
+      return;
+    }
+    const onUnmute = () => {
+      media.removeEventListener("unmute", onUnmute);
+      bump();
+    };
+    media.addEventListener("unmute", onUnmute);
   }
 
   async setCameraEnabled(on: boolean) {
@@ -507,12 +536,14 @@ export class VoiceSession {
       for (const pub of pubs) {
         const track = pub.track;
         if (!track || track.kind !== Track.Kind.Video) continue;
+        // LiveKit mute only — do NOT filter MediaStreamTrack.muted: remotes often
+        // start muted until the first decoded frame, which hid the tile until a
+        // local cam publish forced another refresh.
         if (pub.isMuted || track.isMuted) continue;
         // Remote pubs may linger after unpublish until detach — require a live MST.
         if (pub.isSubscribed === false) continue;
         const media = track.mediaStreamTrack;
         if (!media || media.readyState !== "live") continue;
-        if (media.muted && !local) continue;
         out.push({
           identity,
           local,
