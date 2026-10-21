@@ -11,6 +11,7 @@ export type LaunchArgs = {
   packId: string;
   username: string;
   skinPath: string | null;
+  capePath: string | null;
   skinModel: string;
   quickPlay: string | null;
 };

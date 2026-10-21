@@ -508,6 +508,7 @@ pub fn start_host_server(app: &AppHandle, state: &VoiceRuntimeState) -> Result<(
     emit_progress(app, "Voice", "Starting voice server…", 88);
     apply_loopback_no_proxy();
     let mut cmd = Command::new(&bin);
+    crate::process_ext::hide_console(&mut cmd);
     cmd.arg("--config")
         .arg(&config)
         .current_dir(&dir)

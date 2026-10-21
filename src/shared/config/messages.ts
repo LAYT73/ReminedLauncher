@@ -79,6 +79,7 @@ export const MSG = {
   profile: {
     usernameUpdated: "Username updated",
     skinSaved: "Skin saved",
+    capeSaved: "Cape saved",
     copiedId: "Copied Remined id",
     copyIdTitle: "Copy Remined id",
     copyFailed: "Couldn’t copy",
@@ -106,8 +107,5 @@ export const MSG = {
     clickToHear: "Click to hear",
     clickToHearHint: "Browser blocked voice audio — click to restore sound",
     installUnlim: "Install Unlim from Network settings first",
-  },
-  friends: {
-    openingSteam: "Opening Steam — install Porthole, then Refresh",
   },
 } as const;

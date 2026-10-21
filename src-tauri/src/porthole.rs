@@ -216,7 +216,9 @@ pub fn status() -> PortholeStatus {
     let path = find_binary();
     let installed = path.is_some();
     let version = path.as_ref().and_then(|p| {
-        let out = Command::new(p).arg("-V").output().ok()?;
+        let mut cmd = Command::new(p);
+        crate::process_ext::hide_console(&mut cmd);
+        let out = cmd.arg("-V").output().ok()?;
         let s = String::from_utf8_lossy(&out.stdout);
         let line = s.lines().next()?.trim();
         if line.is_empty() {
@@ -256,6 +258,7 @@ pub fn selftest() -> PortholeCheckResult {
     };
 
     let mut cmd = Command::new(&bin);
+    crate::process_ext::hide_console(&mut cmd);
     cmd.args(["--json", "--render-backend", "software", "selftest"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -635,8 +638,9 @@ pub fn open_steam_client() -> Result<String, String> {
     }
     #[cfg(target_os = "windows")]
     {
-        Command::new("cmd")
-            .args(["/C", "start", "", "steam://open/main"])
+        let mut cmd = Command::new("cmd");
+        crate::process_ext::hide_console(&mut cmd);
+        cmd.args(["/C", "start", "", "steam://open/main"])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -671,6 +675,7 @@ fn spawn_porthole(args: &[&str]) -> Result<Child, String> {
         "Porthole not found — install it from Steam (free), then reopen Remined".to_string()
     })?;
     let mut cmd = Command::new(&bin);
+    crate::process_ext::hide_console(&mut cmd);
     cmd.args(["--json", "--render-backend", "software"])
         .args(args)
         .stdout(Stdio::piped())

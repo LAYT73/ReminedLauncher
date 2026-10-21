@@ -1109,6 +1109,7 @@ pub async fn spawn_game(opts: LaunchOpts) -> Result<LaunchedGame, String> {
     // Match pre-0.4.2 spawn: plain child of Remined (no process_group).
     // `process_group(0)` broke GLFW mouse/keyboard focus on macOS.
     let mut cmd = Command::new(&opts.java);
+    crate::process_ext::hide_console(&mut cmd);
     cmd.args(&jvm)
         .arg(main_class)
         .args(&game)

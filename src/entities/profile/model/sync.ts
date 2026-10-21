@@ -40,11 +40,13 @@ export async function syncCloudProfile(nextSession: Session): Promise<Profile> {
       ...local,
       username: cloud.username.trim() || FALLBACK_USERNAME,
       skin_path: cloud.skin_path ?? null,
+      cape_path: cloud.cape_path ?? null,
       skin_model: cloud.skin_model,
     };
 
     await profileStore.persist(next);
     await skin.applyPreview(cloud.skin_path);
+    await skin.applyCapePreview(cloud.cape_path);
     profileStore.setUsernameDraft(null);
     void rememberOfflineSnapshot({
       offline: useSessionStore.getState().offlineMode,
@@ -53,6 +55,7 @@ export async function syncCloudProfile(nextSession: Session): Promise<Profile> {
       reminedId: cloud.remined_id,
       username: next.username,
       skinPath: next.skin_path,
+      capePath: next.cape_path,
       skinModel: next.skin_model,
     });
     return next;
@@ -62,6 +65,9 @@ export async function syncCloudProfile(nextSession: Session): Promise<Profile> {
     if (cached?.skin_data_url) skin.setPreview(cached.skin_data_url);
     else if (cached?.skin_path) await skin.applyPreview(cached.skin_path);
     else skin.setPreview(null);
+    if (cached?.cape_data_url) skin.setCapePreview(cached.cape_data_url);
+    else if (cached?.cape_path) await skin.applyCapePreview(cached.cape_path);
+    else skin.setCapePreview(null);
     if (cached?.remined_id) session.setReminedId(cached.remined_id);
     return local;
   }
@@ -78,11 +84,14 @@ export async function applyOfflineAccount(): Promise<boolean> {
     ...local,
     username: acct.username.trim() || local.username || FALLBACK_USERNAME,
     skin_path: acct.skin_path ?? local.skin_path,
+    cape_path: acct.cape_path ?? local.cape_path,
     skin_model: normalizeSkinModel(acct.skin_model ?? local.skin_model),
   };
   await useProfileStore.getState().persist(next);
   const skin = useSkinStore.getState();
   if (acct.skin_data_url) skin.setPreview(acct.skin_data_url);
   else await skin.applyPreview(next.skin_path);
+  if (acct.cape_data_url) skin.setCapePreview(acct.cape_data_url);
+  else await skin.applyCapePreview(next.cape_path);
   return true;
 }

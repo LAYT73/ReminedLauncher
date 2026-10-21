@@ -1,5 +1,4 @@
 import { useNavigate } from "react-router";
-import { openPortholeOnSteam } from "@/shared/api/porthole";
 import { MSG } from "@/shared/config/messages";
 import { RAIL } from "@/shared/config/routes";
 import { toast } from "@/shared/lib/toast";
@@ -33,9 +32,6 @@ export function FriendsPage() {
       joiningFriendId={joiningFriendId}
       hostingSelf={hostingSelf}
       onOpenNetworkPlay={() => navigate(`/${RAIL.settings}#network`)}
-      onInstallPorthole={() => {
-        void openPortholeOnSteam().then(() => toast(MSG.friends.openingSteam));
-      }}
       onJoinFriend={(row) => void joinFriendSession(row)}
     />
   );

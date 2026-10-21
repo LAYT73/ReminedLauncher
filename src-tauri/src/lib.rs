@@ -10,6 +10,7 @@ mod onboarding;
 mod pack_sync;
 mod paths;
 mod porthole;
+mod process_ext;
 mod progress;
 mod remined_vanilla;
 mod runtime;
@@ -88,6 +89,9 @@ fn normalize_skin_model(raw: &str) -> &'static str {
 pub struct Profile {
     pub username: String,
     pub skin_path: Option<String>,
+    /// Custom cape PNG URL / path (optional).
+    #[serde(default)]
+    pub cape_path: Option<String>,
     /// `"default"` (classic/wide) or `"slim"`.
     #[serde(default = "default_skin_model")]
     pub skin_model: String,
@@ -117,6 +121,7 @@ impl Default for Profile {
         Self {
             username: "Player".into(),
             skin_path: None,
+            cape_path: None,
             skin_model: default_skin_model(),
             selected_pack: String::new(),
             ram_mb: default_ram_mb(),
@@ -276,7 +281,8 @@ fn apply_customskinloader_config(instance: &Path) -> Result<(), String> {
         "enableUpdateSkull": false,
         "enableLocalProfileCache": false,
         "enableCacheAutoClean": false,
-        "forceLoadAllTextures": false,
+        // When Remined returns skin-only, still pull cape from LocalSkin / later sources.
+        "forceLoadAllTextures": true,
         "enableCape": true,
         "threadPoolSize": 8,
         "loadlist": [
@@ -284,6 +290,14 @@ fn apply_customskinloader_config(instance: &Path) -> Result<(), String> {
                 "name": "Remined",
                 "type": "CustomSkinAPI",
                 "root": root
+            },
+            {
+                "name": "LocalSkin",
+                "type": "Legacy",
+                "skin": "LocalSkin/skins/{USERNAME}.png",
+                "model": "auto",
+                "cape": "LocalSkin/capes/{USERNAME}.png",
+                "elytra": "LocalSkin/elytras/{USERNAME}.png"
             },
             {
                 "name": "Mojang",
@@ -295,7 +309,13 @@ fn apply_customskinloader_config(instance: &Path) -> Result<(), String> {
         path,
         serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?,
     )
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+    // Drop stale profile JSON caches (e.g. skin-only responses before cape existed).
+    let caches = dir.join("caches");
+    if caches.is_dir() {
+        let _ = fs::remove_dir_all(&caches);
+    }
+    Ok(())
 }
 
 fn apply_skinshuffle(instance: &Path, skin_src: &Path, skin_model: &str) -> Result<(), String> {
@@ -337,6 +357,34 @@ fn apply_skinshuffle(instance: &Path, skin_src: &Path, skin_model: &str) -> Resu
         serde_json::to_string_pretty(&presets).map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())
+}
+
+/// Write cape for CustomSkinLoader LocalSkin fallback (self-view / offline).
+fn apply_csl_local_cape(instance: &Path, username: &str, cape_src: &Path) -> Result<(), String> {
+    if !cape_src.is_file() {
+        return Err(format!("Cape file not found: {}", cape_src.display()));
+    }
+    let bytes = fs::read(cape_src).map_err(|e| e.to_string())?;
+    if bytes.len() < 50 {
+        return Err("Invalid cape PNG".into());
+    }
+    let dir = instance
+        .join("CustomSkinLoader")
+        .join("LocalSkin")
+        .join("capes");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let dest = dir.join(format!("{username}.png"));
+    fs::write(&dest, &bytes).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn clear_csl_local_cape(instance: &Path, username: &str) {
+    let dest = instance
+        .join("CustomSkinLoader")
+        .join("LocalSkin")
+        .join("capes")
+        .join(format!("{username}.png"));
+    let _ = fs::remove_file(dest);
 }
 
 pub(crate) fn base64_encode(data: &[u8]) -> String {
@@ -997,6 +1045,7 @@ async fn launch_pack(
     pack_id: String,
     username: String,
     skin_path: Option<String>,
+    cape_path: Option<String>,
     skin_model: Option<String>,
     quick_play: Option<String>,
     session: State<'_, Mutex<GameSession>>,
@@ -1045,6 +1094,7 @@ async fn launch_pack(
     let mut profile = load_profile(&root);
     profile.username = name.to_string();
     profile.skin_path = skin_path.clone();
+    profile.cape_path = cape_path.clone();
     profile.skin_model = model.clone();
     // Keep Remined pack selection stable — vanilla rails are separate.
     if !vanilla::is_vanilla_pack_id(&pack_id) && !remined_vanilla::is_pack_id(&pack_id) {
@@ -1097,9 +1147,20 @@ async fn launch_pack(
             return Err(err);
         }
     } else {
+        // Sync Open-to-LAN default with the player's Network settings before MC starts.
+        if let Err(err) = unlim::write_mcwifipnp_lan_port(&instance, profile.lan_port) {
+            eprintln!("[remined] mcwifipnp port: {err}");
+        }
         if let Err(err) = lock_skinshuffle_ui(&instance) {
             diag::lock_session(&session).phase = GamePhase::Idle;
             return Err(err);
+        }
+        // Re-apply SkinShuffle jar patches (UI lock + live cape from SkinManager).
+        let game_ver = instance::read_meta(&instance)
+            .map(|m| m.version)
+            .unwrap_or_default();
+        if let Err(err) = crate::skinshuffle_patch::prepare_instance(&instance, &game_ver) {
+            eprintln!("[remined] SkinShuffle patch: {err}");
         }
         if let Err(err) = apply_customskinloader_config(&instance) {
             eprintln!("[remined] CustomSkinLoader config: {err}");
@@ -1122,6 +1183,19 @@ async fn launch_pack(
             let _ = clear_skinshuffle(&instance);
             diag::lock_session(&session).phase = GamePhase::Idle;
             return Err(err);
+        }
+        // Cape: CSL Remined API for friends; LocalSkin for self fallback.
+        if let Some(ref cape) = cape_path {
+            match materialize_skin(&root, cape).await {
+                Ok(local) => {
+                    if let Err(err) = apply_csl_local_cape(&instance, name, &local) {
+                        eprintln!("[remined] cape LocalSkin: {err}");
+                    }
+                }
+                Err(err) => eprintln!("[remined] cape materialize: {err}"),
+            }
+        } else {
+            clear_csl_local_cape(&instance, name);
         }
     }
 

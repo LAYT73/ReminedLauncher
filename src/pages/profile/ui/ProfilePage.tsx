@@ -3,8 +3,10 @@ import { PixelCheckIcon, PixelCrossIcon } from "@/shared/ui/PixelIcons";
 import { MSG } from "@/shared/config/messages";
 import { signOut } from "@/features/auth";
 import {
+  clearCape,
   clearSkin,
   copyReminedId,
+  pickCape,
   pickSkin,
   setSkinModel,
   useUsernameEditor,
@@ -19,6 +21,7 @@ export function ProfilePage() {
   const offlineMode = useSessionStore((s) => s.offlineMode);
   const reminedId = useSessionStore((s) => s.reminedId);
   const skinPreview = useSkinStore((s) => s.preview);
+  const capePreview = useSkinStore((s) => s.capePreview);
   const username = useUsernameEditor();
   return (
     <section className="section">
@@ -50,6 +53,7 @@ export function ProfilePage() {
       <div className="skin-layout">
         <SkinModel
           skinUrl={skinPreview}
+          capeUrl={capePreview}
           skinModel={profile.skin_model}
           variant="full"
           className="skin-stage"
@@ -121,8 +125,8 @@ export function ProfilePage() {
               ) : null}
             </div>
           </div>
-          <p className="field-hint">
-            PNG only — 64×64, 64×32 or 128×128, max 256 KB.
+          <p className="field-hint" style={{ marginBottom: 4 }}>
+            Skin PNG — 64×64, 64×32 or 128×128, max 256 KB.
           </p>
           <div className="btn-row">
             <button
@@ -138,7 +142,28 @@ export function ProfilePage() {
                 className="btn-mc danger"
                 onClick={() => void clearSkin()}
               >
-                Remove
+                Remove skin
+              </button>
+            ) : null}
+          </div>
+          <p className="field-hint" style={{ marginTop: 12, marginBottom: 4 }}>
+            Cape PNG — usually 64×32, max 256 KB. 
+          </p>
+          <div className="btn-row">
+            <button
+              type="button"
+              className="btn-mc ok"
+              onClick={() => void pickCape()}
+            >
+              Choose cape
+            </button>
+            {profile.cape_path ? (
+              <button
+                type="button"
+                className="btn-mc danger"
+                onClick={() => void clearCape()}
+              >
+                Remove cape
               </button>
             ) : null}
           </div>

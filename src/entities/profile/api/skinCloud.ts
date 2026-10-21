@@ -1,15 +1,26 @@
 import { call } from "@/shared/api/invoke";
-import { skinPublicUrl, updateCloudSkinUrl } from "./cloudProfile";
+import {
+  capePublicUrl,
+  skinPublicUrl,
+  updateCloudCapeUrl,
+  updateCloudSkinUrl,
+} from "./cloudProfile";
 import { supabase } from "@/shared/api/supabase";
 import { CMD } from "@/shared/config/commands";
 import { BUCKET } from "@/shared/config/supabase";
 
 /** Hard caps — Storage bucket also enforces 256 KB + image/png. */
 const MAX_BYTES = 256 * 1024;
-const ALLOWED_SIZES: Array<[number, number]> = [
+const ALLOWED_SKIN_SIZES: Array<[number, number]> = [
   [64, 32],
   [64, 64],
   [128, 128],
+];
+/** Vanilla cape is 64×32; allow a few common variants. */
+const ALLOWED_CAPE_SIZES: Array<[number, number]> = [
+  [64, 32],
+  [64, 64],
+  [22, 17],
 ];
 
 function dataUrlToBytes(dataUrl: string): Uint8Array {
@@ -51,9 +62,27 @@ export function validateSkinPng(dataUrl: string): Uint8Array {
   }
   assertPngMagic(bytes);
   const { w, h } = readPngSize(bytes);
-  const ok = ALLOWED_SIZES.some(([aw, ah]) => aw === w && ah === h);
+  const ok = ALLOWED_SKIN_SIZES.some(([aw, ah]) => aw === w && ah === h);
   if (!ok) {
     throw new Error("Skin must be 64×64, 64×32, or 128×128 PNG");
+  }
+  return bytes;
+}
+
+/** Reject anything that isn’t a normal Minecraft cape PNG. */
+export function validateCapePng(dataUrl: string): Uint8Array {
+  if (!dataUrl.startsWith("data:image/png")) {
+    throw new Error("Only PNG capes are allowed");
+  }
+  const bytes = dataUrlToBytes(dataUrl);
+  if (bytes.byteLength > MAX_BYTES) {
+    throw new Error(`Cape is too large (max ${MAX_BYTES / 1024} KB)`);
+  }
+  assertPngMagic(bytes);
+  const { w, h } = readPngSize(bytes);
+  const ok = ALLOWED_CAPE_SIZES.some(([aw, ah]) => aw === w && ah === h);
+  if (!ok) {
+    throw new Error("Cape must be 64×32 PNG (64×64 / 22×17 also ok)");
   }
   return bytes;
 }
@@ -94,4 +123,42 @@ export async function clearAccountSkin(
   const objectPath = `${reminedId.toLowerCase()}.png`;
   await supabase.storage.from(BUCKET.skins).remove([objectPath]);
   await updateCloudSkinUrl(userId, null);
+}
+
+/** Upsert cape PNG at `skins/{id}_cape.png`. */
+export async function publishAccountCape(
+  reminedId: string,
+  localPath: string,
+  userId: string,
+): Promise<string> {
+  if (!/^[a-z0-9]{7}$/i.test(reminedId)) {
+    throw new Error("Invalid Remined id");
+  }
+
+  const dataUrl = await call<string | null>(CMD.readSkinDataUrl, {
+    path: localPath,
+  });
+  if (!dataUrl) throw new Error("Could not read cape");
+
+  const bytes = validateCapePng(dataUrl);
+  const blob = new Blob([new Uint8Array(bytes)], { type: "image/png" });
+  const objectPath = `${reminedId.toLowerCase()}_cape.png`;
+
+  const { error: upErr } = await supabase.storage
+    .from(BUCKET.skins)
+    .upload(objectPath, blob, { upsert: true, contentType: "image/png" });
+  if (upErr) throw upErr;
+
+  const url = capePublicUrl(reminedId.toLowerCase(), true).split("?")[0]!;
+  await updateCloudCapeUrl(userId, url);
+  return url;
+}
+
+export async function clearAccountCape(
+  reminedId: string,
+  userId: string,
+): Promise<void> {
+  const objectPath = `${reminedId.toLowerCase()}_cape.png`;
+  await supabase.storage.from(BUCKET.skins).remove([objectPath]);
+  await updateCloudCapeUrl(userId, null);
 }

@@ -13,6 +13,9 @@ use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 const OCB_SUFFIX: &str = "skinshuffle/client/gui/widgets/OpenCarouselButton.class";
 const TOAST_HELPER_SUFFIX: &str = "skinshuffle/util/ToastHelper.class";
+/// Default `Skin.getSkinTextures` freezes cape/elytra from SkinManager at first apply
+/// (often before CSL finishes), so Remined/LocalSkin capes never appear on self.
+const SKIN_INTERFACE_SUFFIX: &str = "skinshuffle/client/skin/Skin.class";
 
 /// Prepare SkinShuffle for an instance: jar patches + disable offline toast in config.
 pub fn prepare_instance(instance: &Path, game: &str) -> Result<usize, String> {
@@ -331,6 +334,7 @@ pub fn patch_jar(jar_path: &Path) -> Result<bool, String> {
 
     let mut ocb_index = None;
     let mut toast_index = None;
+    let mut skin_index = None;
     for i in 0..archive.len() {
         let file = archive.by_index(i).map_err(|e| e.to_string())?;
         let name = file.name().map_err(|e| e.to_string())?.into_owned();
@@ -338,6 +342,8 @@ pub fn patch_jar(jar_path: &Path) -> Result<bool, String> {
             ocb_index = Some(i);
         } else if name.ends_with(TOAST_HELPER_SUFFIX) {
             toast_index = Some(i);
+        } else if name.ends_with(SKIN_INTERFACE_SUFFIX) {
+            skin_index = Some(i);
         }
     }
     let Some(ocb_idx) = ocb_index else {
@@ -369,6 +375,19 @@ pub fn patch_jar(jar_path: &Path) -> Result<bool, String> {
         }
         if rewrite_void_method_to_return(&mut toast_bytes, "showOfflineModeToast")? {
             replacements.push((toast_idx, toast_bytes));
+            any = true;
+        }
+    }
+
+    if let Some(skin_idx) = skin_index {
+        let mut skin_bytes = Vec::new();
+        {
+            let mut file = archive.by_index(skin_idx).map_err(|e| e.to_string())?;
+            file.read_to_end(&mut skin_bytes)
+                .map_err(|e| e.to_string())?;
+        }
+        if patch_skin_live_cape(&mut skin_bytes)? {
+            replacements.push((skin_idx, skin_bytes));
             any = true;
         }
     }
@@ -407,6 +426,54 @@ pub fn patch_jar(jar_path: &Path) -> Result<bool, String> {
     fs::write(jar_path, out_buf.into_inner())
         .map_err(|e| format!("write {}: {e}", jar_path.display()))?;
     Ok(true)
+}
+
+/// Prefer live `SkinManager.get(profile)` for cape/elytra instead of the frozen
+/// `INITIAL_SKIN_TEXTURES` snapshot (which is usually null for Remined capes).
+///
+/// Must keep the existing StackMapTable jump targets at offsets 38/40 intact —
+/// a `goto 40` over nops causes `VerifyError: Expecting a stack map frame`.
+/// Instead NOP the INITIAL branch (16..37) and fall through into the original
+/// `aload_2; astore_3` at 38..39.
+fn patch_skin_live_cape(class: &mut Vec<u8>) -> Result<bool, String> {
+    if class.len() < 10 || class[0..4] != [0xCA, 0xFE, 0xBA, 0xBE] {
+        return Err("not a class file".into());
+    }
+
+    let mut targets = Vec::new();
+    for_each_code_attr(class, |name, _desc, attr_off, attr_len| {
+        if name != "getSkinTextures" || attr_len < 8 {
+            return Ok(());
+        }
+        let info_off = attr_off + 6;
+        let code_len = u32_at(class, info_off + 4)? as usize;
+        let code_off = info_off + 8;
+        if code_len < 40 || code_off + code_len > class.len() {
+            return Ok(());
+        }
+        targets.push(code_off);
+        Ok(())
+    })?;
+
+    let mut changed = false;
+    for code_off in targets {
+        let code = &mut class[code_off..];
+        let already = code[16..38].iter().all(|&b| b == 0x00)
+            && code[38] == 0x2C
+            && code[39] == 0x4E;
+        if already {
+            continue;
+        }
+        // NOP INITIAL_SKIN_TEXTURES.isDone() branch; keep aload_2/astore_3 at 38/39
+        // (or restore them if a previous broken goto-patch overwrote them).
+        for b in &mut code[16..38] {
+            *b = 0x00;
+        }
+        code[38] = 0x2C; // aload_2 — live SkinManager future
+        code[39] = 0x4E; // astore_3
+        changed = true;
+    }
+    Ok(changed)
 }
 
 fn patch_open_carousel_button(class: &mut Vec<u8>) -> Result<bool, String> {

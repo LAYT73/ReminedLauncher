@@ -28,6 +28,7 @@ export function normalizeLanPort(raw: unknown): number {
 export const DEFAULT_PROFILE: Profile = {
   username: FALLBACK_USERNAME,
   skin_path: null,
+  cape_path: null,
   skin_model: "default",
   selected_pack: "",
   ram_mb: 4096,
@@ -52,6 +53,8 @@ export function normalizeProfile(raw: Partial<Profile> | null | undefined): Prof
   return {
     ...DEFAULT_PROFILE,
     ...raw,
+    skin_path: raw?.skin_path ?? null,
+    cape_path: raw?.cape_path ?? null,
     skin_model: normalizeSkinModel(raw?.skin_model),
     ram_mb: Math.max(1024, Number(raw?.ram_mb) || DEFAULT_PROFILE.ram_mb),
     java_path: raw?.java_path ?? null,

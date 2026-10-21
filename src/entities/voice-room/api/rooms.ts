@@ -129,6 +129,19 @@ export async function leaveVoiceRoom(
   if (error) throw new Error(error.message || "Could not leave room");
 }
 
+/** Re-assert membership after LiveKit reconnect (chat + member list need the row). */
+export async function ensureVoiceRoomMember(
+  roomId: string,
+  userId: string,
+  role: "host" | "member" = "member",
+): Promise<void> {
+  const { error } = await supabase.from(TABLE.voiceRoomMembers).upsert(
+    { room_id: roomId, user_id: userId, role },
+    { onConflict: "room_id,user_id" },
+  );
+  if (error) throw new Error(error.message || "Could not join room");
+}
+
 export async function listMyOpenRooms(userId: string): Promise<VoiceRoom[]> {
   const { data: memberRows, error: mErr } = await supabase
     .from(TABLE.voiceRoomMembers)

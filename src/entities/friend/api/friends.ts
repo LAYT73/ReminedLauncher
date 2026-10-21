@@ -162,6 +162,7 @@ export async function listFriendships(userId: string): Promise<FriendRow[]> {
         remined_id,
         username: rawUser || `user${remined_id || String(p.id).slice(0, 7)}`,
         skin_path: (p.skin_path as string | null) ?? null,
+        cape_path: null,
         skin_model: normalizeSkinModel(p.skin_model as string | null),
       };
       return [profile.id, profile] as const;

@@ -19,7 +19,6 @@ type Props = {
   joiningFriendId?: string | null;
   hostingSelf?: boolean;
   onOpenNetworkPlay?: () => void;
-  onInstallPorthole?: () => void;
 };
 
 export function FriendsPanel({
@@ -30,9 +29,8 @@ export function FriendsPanel({
   joiningFriendId,
   hostingSelf,
   onOpenNetworkPlay,
-  onInstallPorthole,
 }: Props) {
-  const { rows, loading, error, setError, phStatus, refresh } = useFriends(userId);
+  const { rows, loading, error, setError, refresh } = useFriends(userId);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -104,35 +102,6 @@ export function FriendsPanel({
         <p className="friends-hosting-banner" role="status">
           You are hosting — friends can Join your LAN world now.
         </p>
-      ) : null}
-
-      {phStatus && !phStatus.installed ? (
-        <div className="friends-zt-banner">
-          <p>
-            Network Join needs free <strong>Porthole</strong> from Steam (leave
-            Steam running).
-          </p>
-          <div className="friends-banner-actions">
-            {onInstallPorthole ? (
-              <button
-                type="button"
-                className="btn-mc ok"
-                onClick={() => onInstallPorthole()}
-              >
-                Install on Steam
-              </button>
-            ) : null}
-            {onOpenNetworkPlay ? (
-              <button
-                type="button"
-                className="btn-mc dim"
-                onClick={() => onOpenNetworkPlay()}
-              >
-                How it works
-              </button>
-            ) : null}
-          </div>
-        </div>
       ) : null}
 
       <form className="friends-add" onSubmit={(e) => void onAdd(e)}>

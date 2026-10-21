@@ -11,6 +11,7 @@ export type CloudProfile = {
   remined_id: string;
   username: string;
   skin_path: string | null;
+  cape_path: string | null;
   skin_model: SkinModelKind;
 };
 
@@ -62,11 +63,18 @@ export function skinPublicUrl(reminedId: string, cacheBust = false): string {
   return cacheBust ? `${base}?t=${Date.now()}` : base;
 }
 
+export function capePublicUrl(reminedId: string, cacheBust = false): string {
+  const id = reminedId.toLowerCase();
+  const base = `${supabase.storage.from(BUCKET.skins).getPublicUrl(`${id}_cape.png`).data.publicUrl}`;
+  return cacheBust ? `${base}?t=${Date.now()}` : base;
+}
+
 type ProfileRow = {
   id: string;
   nick: string | null;
   username: string | null;
   skin_path: string | null;
+  cape_path?: string | null;
   skin_model?: string | null;
 };
 
@@ -81,6 +89,7 @@ function asCloud(row: ProfileRow): CloudProfile {
       id: row.id,
     }),
     skin_path: row.skin_path,
+    cape_path: row.cape_path ?? null,
     skin_model: normalizeSkinModel(row.skin_model),
   };
 }
@@ -89,7 +98,7 @@ function asRow(data: unknown): ProfileRow {
   return data as ProfileRow;
 }
 
-const SELECT = "id, nick, username, skin_path, skin_model";
+const SELECT = "id, nick, username, skin_path, cape_path, skin_model";
 
 async function allocateReminedId(
   userId: string,
@@ -256,6 +265,20 @@ export async function updateCloudSkinUrl(
     .from(TABLE.profiles)
     .update({
       skin_path: skinUrl,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", userId);
+  if (error) throw new Error(error.message);
+}
+
+export async function updateCloudCapeUrl(
+  userId: string,
+  capeUrl: string | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from(TABLE.profiles)
+    .update({
+      cape_path: capeUrl,
       updated_at: new Date().toISOString(),
     })
     .eq("id", userId);

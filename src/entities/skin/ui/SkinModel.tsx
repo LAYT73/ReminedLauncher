@@ -10,6 +10,8 @@ import type { Preset, Variant } from "../lib/viewerTypes";
 
 type Props = {
   skinUrl: string | null;
+  /** Optional cape texture (skinview3d `loadCape`). */
+  capeUrl?: string | null;
   variant?: Variant;
   className?: string;
   /** Camera / controls preset. Default `profile` (git framing). */
@@ -24,6 +26,7 @@ type Props = {
 
 export function SkinModel({
   skinUrl,
+  capeUrl = null,
   variant = "full",
   className,
   preset = "profile",
@@ -57,6 +60,7 @@ export function SkinModel({
         width,
         height,
         skin: source,
+        ...(capeUrl ? { cape: capeUrl } : {}),
         model,
         enableControls: canOrbit,
         animation:
@@ -137,6 +141,25 @@ export function SkinModel({
     if (!viewer || viewer.disposed) return;
     applyNameTag(viewer, nameTag);
   }, [nameTag]);
+
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || viewer.disposed) return;
+    if (!capeUrl) {
+      viewer.loadCape(null);
+      return;
+    }
+    let alive = true;
+    const result = viewer.loadCape(capeUrl);
+    void Promise.resolve(result).then(() => {
+      if (!alive || viewer.disposed) return;
+      if (variant === "bust") frameBust(viewer);
+      else frameFull(viewer, preset);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [capeUrl, variant, preset]);
 
   return <div ref={hostRef} className={className} />;
 }

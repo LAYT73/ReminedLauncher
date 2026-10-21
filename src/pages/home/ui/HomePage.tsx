@@ -19,6 +19,7 @@ export function HomePage() {
   const profile = useProfileStore((s) => s.profile);
   const appVersion = useProfileStore((s) => s.appVersion);
   const skinPreview = useSkinStore((s) => s.preview);
+  const capePreview = useSkinStore((s) => s.capePreview);
   const installedIds = usePackStore((s) => s.installedIds);
   const active = useActiveReminePack();
   const reminePacks = useReminePacks();
@@ -91,6 +92,7 @@ export function HomePage() {
           <SkinModel
             preset="home"
             skinUrl={skinPreview}
+            capeUrl={capePreview}
             skinModel={profile.skin_model}
             variant="full"
             transparent

@@ -150,6 +150,7 @@ pub fn find_binary(app: &AppHandle) -> Option<PathBuf> {
 
 fn run_capture(bin: &Path, args: &[&str]) -> Result<(i32, String, String), String> {
     let mut cmd = Command::new(bin);
+    crate::process_ext::hide_console(&mut cmd);
     cmd.args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -558,6 +559,9 @@ pub fn host_state(app: &AppHandle, state: &UnlimState) -> UnlimHostState {
 }
 
 /// Start or reuse Unlim host. `lan_port` reserves Open-to-LAN TCP in the same key.
+///
+/// Never restart an alive session when the wanted LAN port is already exposed
+/// (voice opens LiveKit + LAN together). Restart only if we must add a missing port.
 pub fn ensure_shared_host(
     app: &AppHandle,
     state: &UnlimState,
@@ -568,12 +572,9 @@ pub fn ensure_shared_host(
 
     if let Some(key) = status_key(app) {
         let have = host_lan_port(state);
-        let ok = match (want, have) {
-            (None, _) => true,
-            (Some(w), Some(h)) if w == h => true,
-            // Memory lost lan (HMR) but daemon still up — verify port in status.
-            (Some(w), None) => status_ports_include(app, w),
-            _ => false,
+        let ok = match want {
+            None => true,
+            Some(w) => have == Some(w) || status_ports_include(app, w),
         };
         if ok {
             if let Ok(mut g) = state.lock() {
@@ -609,6 +610,7 @@ fn start_shared_host(
     ]);
 
     let mut cmd = Command::new(&bin);
+    crate::process_ext::hide_console(&mut cmd);
     cmd.args(&args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -684,6 +686,7 @@ pub fn start_join_wait_port(
     }
 
     let mut cmd = Command::new(&bin);
+    crate::process_ext::hide_console(&mut cmd);
     cmd.args([
         "join",
         key,

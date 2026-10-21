@@ -11,6 +11,7 @@ export type {
 export {
   closeVoiceRoom,
   createVoiceRoom,
+  ensureVoiceRoomMember,
   getVoiceRoom,
   leaveVoiceRoom,
   listMyOpenRooms,

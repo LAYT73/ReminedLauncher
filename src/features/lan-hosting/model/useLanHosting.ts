@@ -135,14 +135,18 @@ export function useLanHosting(): void {
                 ? preferPort
                 : port;
             const host = await unlimHostState().catch(() => null);
-            const keyNow = host?.alive ? host.key : null;
-            const alreadyOpen =
+            const keyNow = host?.alive ? host.key?.trim() || null : null;
+            const voiceLive = voiceBusy();
+            // Voice already reserved LiveKit + LAN in one Unlim session — only
+            // publish presence. Never ensure/restart (that drops voice guests).
+            const reuseOnly =
               Boolean(keyNow) &&
-              (host?.lan_port === reservePort ||
-                (host?.alive === true && host.lan_port == null));
+              (voiceLive ||
+                host?.lan_port === reservePort ||
+                host?.lan_port === port);
 
             busy.current = true;
-            if (!alreadyOpen) {
+            if (!reuseOnly) {
               setStatus(MSG.lan.openingTunnel);
               void netLog(
                 "ui",
@@ -151,7 +155,7 @@ export function useLanHosting(): void {
             } else {
               void netLog(
                 "ui",
-                `Unlim already live key=${keyNow} lan=${host?.lan_port ?? "-"} — publish LAN port=${port}`,
+                `Unlim reuse key=${keyNow} lan=${host?.lan_port ?? "-"} voice=${voiceLive ? 1 : 0} — publish LAN port=${port}`,
               );
             }
             try {
@@ -159,8 +163,19 @@ export function useLanHosting(): void {
               if (!st.installed) {
                 throw new Error(MSG.voice.installUnlim);
               }
-              // ensure reuses daemon via `unlim status` (not Child PID).
-              const rawKey = await unlimEnsureHost(reservePort);
+
+              let rawKey: string;
+              if (reuseOnly && keyNow) {
+                rawKey = keyNow;
+              } else if (voiceLive) {
+                // Voice is up but status briefly empty — do not rebuild Unlim.
+                throw new Error(
+                  "Voice is live but Unlim key is missing — wait a moment and open LAN again",
+                );
+              } else {
+                rawKey = await unlimEnsureHost(reservePort);
+              }
+
               const shareCode = encodeUnlimShareCode(rawKey);
               if (cancelled) return;
               fail.current = null;
@@ -172,10 +187,10 @@ export function useLanHosting(): void {
               });
               void netLog(
                 "ui",
-                `hosting Unlim pack=${packId} code=${shareCode} gamePort=${port} reused=${prevCode === shareCode || alreadyOpen ? 1 : 0}`,
+                `hosting Unlim pack=${packId} code=${shareCode} gamePort=${port} reused=${reuseOnly || prevCode === shareCode ? 1 : 0}`,
               );
               if (prevCode !== shareCode) toast(MSG.lan.hosting);
-              if (!alreadyOpen) setStatus("", "ok");
+              if (!reuseOnly) setStatus("", "ok");
             } catch (err) {
               fail.current = { port, at: Date.now() };
               const msg =

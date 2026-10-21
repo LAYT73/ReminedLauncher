@@ -7,8 +7,10 @@ import {
   warmMediaCache,
 } from "@/shared/lib/mediaCache";
 import {
+  clearAccountCape,
   clearAccountSkin,
   ensureCloudProfile,
+  publishAccountCape,
   publishAccountSkin,
   rememberOfflineSnapshot,
   updateCloudSkinModel,
@@ -87,6 +89,7 @@ export async function pickSkin(): Promise<void> {
       reminedId: id,
       username: next.username,
       skinPath: url,
+      capePath: next.cape_path,
       skinModel: next.skin_model,
     });
     toast(MSG.profile.skinSaved);
@@ -106,6 +109,87 @@ export async function clearSkin(): Promise<void> {
   if (session?.user?.id && reminedId) {
     try {
       await clearAccountSkin(reminedId, session.user.id);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** Pick a PNG cape, upload it, show in 3D preview. */
+export async function pickCape(): Promise<void> {
+  const selected = await open({
+    multiple: false,
+    filters: [{ name: "PNG", extensions: ["png"] }],
+  });
+  if (!selected || Array.isArray(selected)) return;
+
+  const session = useSessionStore.getState();
+  if (session.offlineMode) {
+    toast(MSG.offline.skinSync);
+    return;
+  }
+  const user = session.session?.user;
+  if (!user?.id) {
+    toast(MSG.offline.signInForSkin);
+    return;
+  }
+
+  const skin = useSkinStore.getState();
+  const { profile, persist } = useProfileStore.getState();
+
+  const dataUrl = await skinApi.readDataUrl(selected);
+  if (!dataUrl) {
+    toast("Could not read cape");
+    return;
+  }
+  skin.setCapePreview(dataUrl);
+
+  try {
+    let id = session.reminedId;
+    if (!id) {
+      id = (await ensureCloudProfile(user.id)).remined_id;
+      session.setReminedId(id);
+    }
+    const url = await publishAccountCape(id, selected, user.id);
+    const next = { ...profile, cape_path: url };
+    await persist(next);
+
+    invalidateMedia([url]);
+    seedMedia(url, dataUrl);
+    skin.setCapePreview(dataUrl);
+    void warmMediaCache([url]).then(() => {
+      seedMedia(url, dataUrl);
+    });
+
+    void rememberOfflineSnapshot({
+      offline: useSessionStore.getState().offlineMode,
+      userId: user.id,
+      email: user.email ?? null,
+      reminedId: id,
+      username: next.username,
+      skinPath: next.skin_path,
+      capePath: url,
+      skinModel: next.skin_model,
+    });
+    toast(MSG.profile.capeSaved);
+  } catch (err) {
+    skin.setCapePreview(
+      profile.cape_path && isSkinUrl(profile.cape_path)
+        ? profile.cape_path
+        : null,
+    );
+    toast(errorMessage(err));
+  }
+}
+
+export async function clearCape(): Promise<void> {
+  const { profile, persist } = useProfileStore.getState();
+  await persist({ ...profile, cape_path: null });
+  useSkinStore.getState().setCapePreview(null);
+  const { session, reminedId } = useSessionStore.getState();
+  if (session?.user?.id && reminedId) {
+    try {
+      await clearAccountCape(reminedId, session.user.id);
     } catch {
       /* ignore */
     }
@@ -136,6 +220,7 @@ export async function setSkinModel(model: SkinModelKind): Promise<void> {
       reminedId,
       username: next.username,
       skinPath: next.skin_path,
+      capePath: next.cape_path,
       skinModel: saved,
     });
   } catch (err) {

@@ -15,6 +15,7 @@ export {
   updateCloudUsername,
   updateCloudSkinModel,
   updateCloudSkinUrl,
+  updateCloudCapeUrl,
   findProfileByReminedId,
   isUsernameAvailable,
   generateReminedId,
@@ -23,7 +24,13 @@ export {
   validateUsername,
   displayUsername,
   skinPublicUrl,
+  capePublicUrl,
   type CloudProfile,
 } from "./api/cloudProfile";
-export { publishAccountSkin, clearAccountSkin } from "./api/skinCloud";
+export {
+  publishAccountSkin,
+  clearAccountSkin,
+  publishAccountCape,
+  clearAccountCape,
+} from "./api/skinCloud";
 export { rememberOfflineSnapshot } from "./lib/offlineSnapshot";

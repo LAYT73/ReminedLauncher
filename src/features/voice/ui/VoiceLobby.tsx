@@ -213,7 +213,7 @@ export function VoiceLobby({
             <h3 className="settings-heading">Your open rooms</h3>
             {rooms.length === 0 ? (
               <p className="friends-muted">
-                No open rooms — create one above when Steam is running.
+                No open rooms — create one above.
               </p>
             ) : (
               <ul className="friends-list">

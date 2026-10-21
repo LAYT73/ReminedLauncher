@@ -7,6 +7,8 @@ export type NetworkMode = "unlim" | "hybrid";
 export type Profile = {
   username: string;
   skin_path: string | null;
+  /** Custom cape PNG URL (same skins bucket as `{nick}_cape.png`). */
+  cape_path: string | null;
   skin_model: SkinModelKind;
   selected_pack: string;
   ram_mb: number;

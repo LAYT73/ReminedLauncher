@@ -165,6 +165,7 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
       packId,
       username: name,
       skinPath: profile.skin_path,
+      capePath: profile.cape_path,
       skinModel: profile.skin_model,
       quickPlay: opts.quickPlay ?? null,
     });

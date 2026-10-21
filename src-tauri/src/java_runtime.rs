@@ -62,7 +62,9 @@ fn probe_java_bin_for(java: &Path, want_major: Option<u32>) -> Option<JavaInfo> 
     if !java.is_file() {
         return None;
     }
-    let output = Command::new(java)
+    let mut cmd = Command::new(java);
+    crate::process_ext::hide_console(&mut cmd);
+    let output = cmd
         .arg("-version")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

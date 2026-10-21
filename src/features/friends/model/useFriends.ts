@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { listFriendships, type FriendRow } from "@/entities/friend";
-import { portholeStatus, type PortholeStatus } from "@/shared/api/porthole";
 import { TIMING } from "@/shared/config/timings";
 import { MSG } from "@/shared/config/messages";
 
@@ -13,12 +12,11 @@ export function errText(err: unknown): string {
   return MSG.common.somethingWentWrong;
 }
 
-/** Friendship rows (polled quietly), load/error state and the Porthole install state. */
+/** Friendship rows (polled quietly) plus load/error state. */
 export function useFriends(userId: string) {
   const [rows, setRows] = useState<FriendRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [phStatus, setPhStatus] = useState<PortholeStatus | null>(null);
 
   const refresh = useCallback(
     async (opts?: { quiet?: boolean }) => {
@@ -46,11 +44,5 @@ export function useFriends(userId: string) {
     return () => window.clearInterval(id);
   }, [refresh]);
 
-  useEffect(() => {
-    void portholeStatus()
-      .then(setPhStatus)
-      .catch(() => setPhStatus(null));
-  }, []);
-
-  return { rows, loading, error, setError, phStatus, refresh };
+  return { rows, loading, error, setError, refresh };
 }

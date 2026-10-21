@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ensureVoiceRoomMember,
   getVoiceRoom,
   leaveVoiceRoom,
   listRoomMembers,
@@ -19,7 +20,8 @@ import { VoiceSession, type VoiceVideoTile } from "../lib/voiceSession";
 import { errorMessage, type ToastFn } from "./types";
 import { MSG } from "@/shared/config/messages";
 
-const REMOTE_LEAVE_GRACE_MS = 4000;
+/** Long enough to cover guest Unlim/LiveKit reconnect after host opens LAN. */
+const REMOTE_LEAVE_GRACE_MS = 25_000;
 const RECONNECT_GRACE_MS = 2000;
 const RECONNECT_TRIES = 6;
 
@@ -232,10 +234,14 @@ export function useLiveSession({
             }
           },
           onRemoteLeft: (identity) => {
+            // While we are cycling LiveKit ourselves, ignore remote blips —
+            // pruning here would delete guests who are mid-reconnect.
+            if (reconnectingRef.current) return;
             const prev = pruneTimers.current.get(identity);
             if (prev) clearTimeout(prev);
             const timer = setTimeout(() => {
               pruneTimers.current.delete(identity);
+              if (reconnectingRef.current) return;
               const sess = sessionRef.current;
               if (sess?.participantIds().includes(identity)) return;
               void leaveVoiceRoom(liveRoom.id, identity)
@@ -253,6 +259,11 @@ export function useLiveSession({
             setNeedsAudioUnlock(false);
             joinedCodeRef.current = null;
             sessionRef.current = null;
+            // reconnectGuest/Host own this disconnect — keep Supabase membership
+            // so chat + member list survive Unlim/LAN tunnel rebuilds.
+            if (reconnectingRef.current) {
+              return;
+            }
             if (!intentionalLeaveRef.current) {
               // Dev HMR / LiveKit blip / Unlim drop — auto-heal instead of
               // stranding the host on "try Leave, then Create again".
@@ -326,6 +337,13 @@ export function useLiveSession({
         if (asGuest && connectingCodeRef.current) {
           joinedCodeRef.current = connectingCodeRef.current;
         }
+        // LiveKit can survive a tunnel rebuild while Supabase membership was
+        // pruned (or never re-asserted). Chat + member list need the row.
+        if (asGuest) {
+          await ensureVoiceRoomMember(liveRoom.id, userId, "member")
+            .then(() => listRoomMembers(liveRoom.id).then(setMembers))
+            .catch(() => undefined);
+        }
         setMuted(false);
         setDeafened(false);
         setNeedsAudioUnlock(false);
@@ -372,8 +390,8 @@ export function useLiveSession({
       if (!base) return;
       reconnectingRef.current = true;
       setStatus("Reconnecting to host lobby…");
-      // Swallow LiveKit onDisconnected side-effects while we cycle joins.
-      intentionalLeaveRef.current = true;
+      // Do not treat this disconnect as Leave — membership must stay for chat.
+      intentionalLeaveRef.current = false;
       if (reconnectTimer.current) {
         clearTimeout(reconnectTimer.current);
         reconnectTimer.current = null;
@@ -418,11 +436,9 @@ export function useLiveSession({
           } catch (err) {
             lastErr = err;
             sessionRef.current = null;
-            intentionalLeaveRef.current = true;
             joinedCodeRef.current = null;
           }
         }
-        intentionalLeaveRef.current = false;
         setStatus("Reconnect failed — Leave, then rejoin");
         onToast(`Voice reconnect failed: ${errorMessage(lastErr)}`, "err");
         void netLog(
@@ -442,7 +458,8 @@ export function useLiveSession({
     const base = hostRoomRef.current;
     if (!base) return;
     reconnectingRef.current = true;
-    intentionalLeaveRef.current = true;
+    // Keep membership; onDisconnected skips leave while reconnectingRef is set.
+    intentionalLeaveRef.current = false;
     if (reconnectTimer.current) {
       clearTimeout(reconnectTimer.current);
       reconnectTimer.current = null;
@@ -483,10 +500,8 @@ export function useLiveSession({
         } catch (err) {
           lastErr = err;
           sessionRef.current = null;
-          intentionalLeaveRef.current = true;
         }
       }
-      intentionalLeaveRef.current = false;
       setStatus(
         "Voice disconnected — try Leave, then Create again if needed",
       );

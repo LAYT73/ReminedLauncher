@@ -10,9 +10,11 @@ export type OfflineAccount = {
   remined_id: string | null;
   username: string;
   skin_path: string | null;
+  cape_path?: string | null;
   skin_model?: SkinModelKind;
   /** Local data-URL fallback when CDN is unreachable. */
   skin_data_url: string | null;
+  cape_data_url?: string | null;
 };
 
 export type OfflineCache = {
