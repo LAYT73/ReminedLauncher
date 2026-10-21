@@ -68,6 +68,7 @@ export const CMD = {
   voiceGuestDisconnect: "voice_guest_disconnect",
   voiceMintToken: "voice_mint_token",
   // relay (voice + optional LAN tunnel)
+  relaySetCreds: "relay_set_creds",
   relayStatus: "relay_status",
   relayCheck: "relay_check",
   relayGetPath: "relay_get_path",

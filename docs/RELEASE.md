@@ -30,7 +30,24 @@ GitHub Actions (`.github/workflows/release.yml`) builds **macOS** (arm64 + x64) 
 | `VITE_SUPABASE_URL` | Same as local `VITE_SUPABASE_URL` |
 | `VITE_SUPABASE_ANON_KEY` | Publishable anon key only |
 
-Private key lives only in `.remined-secrets/` (gitignored) and GitHub Secrets — never commit it.
+Private signing key lives only in `.remined-secrets/` (gitignored) and GitHub Secrets — never commit it.
+
+### Remined Relay (frps) secrets
+
+frps auth token is **not** in the app binary. Authenticated clients fetch it from the `relay-creds` Edge Function.
+
+```bash
+# Supabase secrets (Dashboard or CLI) — same project as the launcher:
+supabase secrets set \
+  RELAY_FRPS_ADDR=YOUR_VPS_IP \
+  RELAY_FRPS_PORT=7000 \
+  RELAY_FRPS_TOKEN=YOUR_FRPS_AUTH_TOKEN \
+  --project-ref YOUR_REF
+
+supabase functions deploy relay-creds --project-ref YOUR_REF
+```
+
+Rotate `auth.token` on the VPS and update `RELAY_FRPS_TOKEN` together.
 
 ## Updater
 

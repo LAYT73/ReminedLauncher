@@ -4,14 +4,13 @@ import { TIMING } from "@/shared/config/timings";
 import { netLog } from "@/shared/api/netLog";
 import {
   encodeRelayShareCode,
+  ensureRelayReady,
   relayAttachLan,
   relayDetachLan,
   relayEnsureHost,
   relayHostState,
-  relayStatus,
   relayStopHost,
 } from "@/shared/api/relay";
-import { setVoiceRoomShareCode } from "@/entities/voice-room";
 import { toast } from "@/shared/lib/toast";
 import { useRail } from "@/shared/lib/useRoute";
 import { useGameStore } from "@/entities/game";
@@ -86,13 +85,9 @@ export function useLanHosting(): void {
               );
               game().setHostingLan(null);
               if (voiceBusy()) {
-                const nextKey = await relayDetachLan().catch(() => null);
-                const roomId = useVoiceStatusStore.getState().hostRoomId;
-                if (nextKey && roomId) {
-                  await setVoiceRoomShareCode(roomId, nextKey).catch(
-                    () => undefined,
-                  );
-                }
+                // Keep voice; only drop the LAN proxy. Never rewrite the
+                // voice-room share code — that forces guests to reconnect.
+                await relayDetachLan().catch(() => undefined);
               } else {
                 await relayStopHost().catch(() => undefined);
               }
@@ -135,20 +130,21 @@ export function useLanHosting(): void {
             );
           }
           try {
-            const st = await relayStatus();
-            if (!st.installed) {
-              throw new Error(MSG.voice.installRelay);
-            }
+            await ensureRelayReady();
 
             let rawKey: string;
             if (alreadyAttached && keyNow) {
               rawKey = keyNow;
-            } else if (voiceLive || keyNow) {
-              if (!keyNow && voiceLive) {
+            } else if (voiceLive) {
+              // Never relayEnsureHost while voice is up — that restarts frpc
+              // and drops LiveKit for everyone.
+              if (!keyNow) {
                 throw new Error(
                   "Voice is live but Relay key is missing — wait a moment and open LAN again",
                 );
               }
+              rawKey = await relayAttachLan(port);
+            } else if (keyNow) {
               rawKey = await relayAttachLan(port);
             } else {
               rawKey = await relayEnsureHost(port);
@@ -158,15 +154,13 @@ export function useLanHosting(): void {
             if (cancelled) return;
             fail.current = null;
             const prevCode = existing?.shareCode;
+            // Friends Join uses this presence code (may include LAN).
+            // Voice-room share code stays the original voice-only key.
             game().setHostingLan({
               packId,
               shareCode,
               gamePort: port,
             });
-            const roomId = useVoiceStatusStore.getState().hostRoomId;
-            if (roomId && prevCode !== shareCode) {
-              await setVoiceRoomShareCode(roomId, rawKey).catch(() => undefined);
-            }
             void netLog(
               "ui",
               `hosting Relay pack=${packId} code=${shareCode} gamePort=${port} hot=${voiceLive || alreadyAttached ? 1 : 0}`,

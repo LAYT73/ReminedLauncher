@@ -913,6 +913,11 @@ fn voice_guest_disconnect(
 }
 
 #[tauri::command]
+fn relay_set_creds(addr: String, port: u16, token: String) -> Result<(), String> {
+    relay::set_frps_creds(addr, port, token)
+}
+
+#[tauri::command]
 fn relay_status(app: AppHandle) -> relay::RelayStatus {
     relay::status(&app)
 }
@@ -1410,6 +1415,7 @@ pub fn run() {
             voice_guest_connect,
             voice_guest_disconnect,
             voice_mint_token,
+            relay_set_creds,
             relay_status,
             relay_check,
             relay_get_path,

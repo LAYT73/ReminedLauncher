@@ -1,6 +1,17 @@
 import { call } from "@/shared/api/invoke";
+import { supabase } from "@/shared/api/supabase";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { CMD } from "@/shared/config/commands";
+
+type RelayCredsResponse = {
+  serverAddr: string;
+  serverPort: number;
+  token: string;
+  ttlSec?: number;
+};
+
+let credsFetchedAt = 0;
+let credsTtlMs = 50 * 60 * 1000;
 
 export type RelayStatus = {
   installed: boolean;
@@ -130,4 +141,76 @@ export function decodeRelayShareCode(code: string): string | null {
 /** True when the friends share code is a Remined Relay tunnel (not Porthole). */
 export function looksLikeRelayKey(code: string): boolean {
   return decodeRelayShareCode(code) != null;
+}
+
+/**
+ * Session identity for voice reconnect: `id_sk` only.
+ * LAN port suffix changes must not force a LiveKit reconnect.
+ */
+export function relaySessionCore(code: string | null | undefined): string | null {
+  if (!code?.trim()) return null;
+  const raw = decodeRelayShareCode(code) ?? code.trim();
+  const body = raw.startsWith("rmd1_") ? raw.slice("rmd1_".length) : raw;
+  const parts = body.split("_");
+  if (parts.length >= 2 && parts[0] && parts[1]) {
+    return `${parts[0]}_${parts[1]}`;
+  }
+  return raw;
+}
+
+/** Download frpc if missing (same as Network → Check). */
+export async function ensureRelayInstalled(): Promise<void> {
+  const st = await relayStatus();
+  if (st.installed) return;
+  const check = await relayCheck();
+  if (!check.ok || !check.installed) {
+    throw new Error(check.message || "Failed to install Remined Relay (frpc)");
+  }
+}
+
+/**
+ * Fetch frps credentials from Supabase (authenticated) and push them into Rust.
+ * Cached in-process for ~ttl so we do not hit the edge function every poll.
+ */
+export async function ensureRelayCreds(force = false): Promise<void> {
+  const now = Date.now();
+  if (!force && credsFetchedAt > 0 && now - credsFetchedAt < credsTtlMs) {
+    return;
+  }
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error("Sign in to use Remined Relay");
+  }
+
+  const { data, error } = await supabase.functions.invoke<RelayCredsResponse>(
+    "relay-creds",
+    { method: "POST" },
+  );
+  if (error) {
+    throw new Error(error.message || "Failed to fetch Remined Relay credentials");
+  }
+  if (!data?.serverAddr || !data?.token || !data?.serverPort) {
+    throw new Error("Remined Relay credentials response was empty");
+  }
+
+  await call(CMD.relaySetCreds, {
+    addr: data.serverAddr,
+    port: data.serverPort,
+    token: data.token,
+  });
+
+  credsFetchedAt = now;
+  if (typeof data.ttlSec === "number" && data.ttlSec > 60) {
+    // Refresh a bit before the hinted TTL.
+    credsTtlMs = Math.max(60_000, (data.ttlSec - 120) * 1000);
+  }
+}
+
+/** Creds from Supabase + frpc binary ready. */
+export async function ensureRelayReady(): Promise<void> {
+  await ensureRelayCreds();
+  await ensureRelayInstalled();
 }

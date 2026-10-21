@@ -1,0 +1,2 @@
+# Remined session JWT required — do not disable.
+verify_jwt = true

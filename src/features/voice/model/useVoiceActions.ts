@@ -19,7 +19,7 @@ import {
   type VoiceRoom,
 } from "@/entities/voice-room";
 import { useGameStore } from "@/entities/game";
-import { encodeRelayShareCode, relayStatus } from "@/shared/api/relay";
+import { encodeRelayShareCode, ensureRelayReady } from "@/shared/api/relay";
 import {
   voiceEnsureRuntime,
   voiceGuestDisconnect,
@@ -131,7 +131,8 @@ export function useVoiceActions({
         // the in-flight Relay connect (localhost:7880 never opens).
         if (code === prev.portholeShareCode) return prev;
         const next = { ...prev, portholeShareCode: code };
-        // Guests auto-reconnect when the host publishes a new Relay key.
+        // Guests reconnect only when the relay *session* changes (id/sk),
+        // not when a LAN port is merely appended to the share code.
         if (activeHostId !== userId && code) {
           queueMicrotask(() => live.onHostShareCode(next, code));
         }
@@ -228,10 +229,9 @@ export function useVoiceActions({
       // Clean leftover UI/session only — LiveKit reuse is handled in Rust.
       await live.disconnect();
       resetActiveUi();
-      const relay = await relayStatus();
-      if (!relay.installed) {
-        throw new Error(MSG.voice.installRelay);
-      }
+      step("Preparing Remined Relay…", 20);
+      live.setStatus("Preparing Remined Relay…");
+      await ensureRelayReady();
       await voiceEnsureRuntime();
       step(MSG.voice.startingServer, 85);
       live.setStatus(MSG.voice.startingServer);
@@ -301,6 +301,8 @@ export function useVoiceActions({
         }
         const joined = await respondVoiceInvite(inv.id, true, userId);
         if (!joined) throw new Error("Room unavailable");
+        live.setStatus("Preparing Remined Relay…");
+        await ensureRelayReady();
         // Host may still be publishing the Relay key after create — poll briefly.
         let room = joined;
         for (let i = 0; i < 10 && !room.portholeShareCode; i++) {

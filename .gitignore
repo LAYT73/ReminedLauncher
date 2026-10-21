@@ -9,6 +9,7 @@ src-tauri/target
 .env
 .env.local
 .env.*.local
+.remined-secrets/
 # keep .env.example tracked; prefer `.env.local` for real keys
 *.tsbuildinfo
 supabase/.temp/

@@ -19,13 +19,46 @@ use uuid::Uuid;
 pub const DEFAULT_LAN_TCP_PORT: u16 = 55666;
 pub const LAN_TCP_PORT: u16 = DEFAULT_LAN_TCP_PORT;
 
-/// Remined frps (VPS). Token is shared by all Remined clients; lobby access
-/// is gated by per-session `secretKey` in the share code.
-const FRPS_ADDR: &str = "194.35.112.123";
-const FRPS_PORT: u16 = 7000;
-const FRPS_TOKEN: &str = "787c67f5687f1ec89bdda99641d0b483313150f1b94eabe7";
 /// Share-code prefix: `rmd1_<id>_<sk>_<lanPortOr0>`.
 const SHARE_PREFIX: &str = "rmd1_";
+
+/// frps credentials from Supabase `relay-creds` (never baked into the binary).
+#[derive(Debug, Clone)]
+struct FrpsCreds {
+    addr: String,
+    port: u16,
+    token: String,
+}
+
+fn creds_slot() -> &'static Mutex<Option<FrpsCreds>> {
+    static CREDS: Mutex<Option<FrpsCreds>> = Mutex::new(None);
+    &CREDS
+}
+
+/// Called by the UI after `relay-creds` edge function returns.
+pub fn set_frps_creds(addr: String, port: u16, token: String) -> Result<(), String> {
+    let addr = addr.trim().to_string();
+    let token = token.trim().to_string();
+    if addr.is_empty() || token.is_empty() || port == 0 {
+        return Err("Invalid Remined Relay credentials".into());
+    }
+    let mut g = creds_slot()
+        .lock()
+        .map_err(|_| "Relay credentials lock poisoned".to_string())?;
+    *g = Some(FrpsCreds { addr, port, token });
+    Ok(())
+}
+
+fn frps_creds() -> Result<FrpsCreds, String> {
+    creds_slot()
+        .lock()
+        .map_err(|_| "Relay credentials lock poisoned".to_string())?
+        .clone()
+        .ok_or_else(|| {
+            "Remined Relay credentials missing — sign in and retry (fetched from Supabase)"
+                .into()
+        })
+}
 
 pub fn normalize_lan_port(raw: Option<u16>) -> u16 {
     match raw {
@@ -394,7 +427,9 @@ pub fn check(app: &AppHandle) -> RelayCheckResult {
                 } else {
                     "frpc found but --version failed".into()
                 },
-                detail: format!("{FRPS_ADDR}:{FRPS_PORT}"),
+                detail: frps_creds()
+                    .map(|c| format!("{}:{}", c.addr, c.port))
+                    .unwrap_or_else(|_| "credentials pending (Supabase)".into()),
                 path: Some(bin.display().to_string()),
                 version: ver,
             }
@@ -418,6 +453,7 @@ fn kill_child(slot: &mut Option<Child>) {
 }
 
 fn write_host_toml(path: &Path, spec: &SessionSpec) -> Result<(), String> {
+    let c = frps_creds()?;
     let mut body = format!(
         r#"serverAddr = "{addr}"
 serverPort = {port}
@@ -446,9 +482,9 @@ secretKey = "{sk}"
 localIP = "127.0.0.1"
 localPort = {p2}
 "#,
-        addr = FRPS_ADDR,
-        port = FRPS_PORT,
-        token = FRPS_TOKEN,
+        addr = c.addr,
+        port = c.port,
+        token = c.token,
         sk = spec.sk,
         n0 = spec.proxy_name("lk7880"),
         n1 = spec.proxy_name("lk7881"),
@@ -476,6 +512,7 @@ localPort = {lan}
 }
 
 fn write_lan_host_toml(path: &Path, spec: &SessionSpec, lan: u16) -> Result<(), String> {
+    let c = frps_creds()?;
     let body = format!(
         r#"serverAddr = "{addr}"
 serverPort = {port}
@@ -490,9 +527,9 @@ secretKey = "{sk}"
 localIP = "127.0.0.1"
 localPort = {lan}
 "#,
-        addr = FRPS_ADDR,
-        port = FRPS_PORT,
-        token = FRPS_TOKEN,
+        addr = c.addr,
+        port = c.port,
+        token = c.token,
         n = spec.proxy_name(&format!("lan{lan}")),
         sk = spec.sk,
         lan = lan,
@@ -501,6 +538,7 @@ localPort = {lan}
 }
 
 fn write_lan_visitor_toml(path: &Path, spec: &SessionSpec, lan: u16) -> Result<(), String> {
+    let c = frps_creds()?;
     let body = format!(
         r#"serverAddr = "{addr}"
 serverPort = {port}
@@ -516,9 +554,9 @@ secretKey = "{sk}"
 bindAddr = "127.0.0.1"
 bindPort = {lan}
 "#,
-        addr = FRPS_ADDR,
-        port = FRPS_PORT,
-        token = FRPS_TOKEN,
+        addr = c.addr,
+        port = c.port,
+        token = c.token,
         n = spec.proxy_name(&format!("lan{lan}")),
         sk = spec.sk,
         lan = lan,
@@ -527,6 +565,7 @@ bindPort = {lan}
 }
 
 fn write_visitor_toml(path: &Path, spec: &SessionSpec) -> Result<(), String> {
+    let c = frps_creds()?;
     let mut body = format!(
         r#"serverAddr = "{addr}"
 serverPort = {port}
@@ -558,9 +597,9 @@ secretKey = "{sk}"
 bindAddr = "127.0.0.1"
 bindPort = {p2}
 "#,
-        addr = FRPS_ADDR,
-        port = FRPS_PORT,
-        token = FRPS_TOKEN,
+        addr = c.addr,
+        port = c.port,
+        token = c.token,
         sk = spec.sk,
         n0 = spec.proxy_name("lk7880"),
         n1 = spec.proxy_name("lk7881"),

@@ -82,10 +82,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v0.9.2
-          releaseName: Remined v0.9.2
+          tagName: v0.9.3
+          releaseName: Remined v0.9.3
           releaseBody: |
-            Remined launcher v0.9.2 — Remined Relay (self-hosted frp) for voice + Open-to-LAN; hot LAN attach without voice reconnect; dynamic Minecraft LAN port; Porthole hybrid mode removed.
+            Remined launcher v0.9.3 — frps auth via Supabase relay-creds (no token in binary); auto Relay install; LAN/voice reconnect and webcam fixes.
             macOS (arm64 + x64) and Windows builds.
           releaseDraft: false
           prerelease: false

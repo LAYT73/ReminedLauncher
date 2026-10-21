@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  ensureRelayCreds,
   openRelayDownload,
   relayCheck,
   relayGetPath,
@@ -39,6 +40,7 @@ export function useRelayStatus(onToast: (message: string) => void) {
     setChecking(true);
     setError("");
     try {
+      await ensureRelayCreds(true);
       const result = await relayCheck();
       setCheck(result);
       await refresh();

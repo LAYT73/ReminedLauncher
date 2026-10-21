@@ -50,9 +50,9 @@ HTTP `NO_PROXY` / spawn env stripping helps **HTTP(S) proxy** mode.
 
 ## frps (ops)
 
-- VPS: `194.35.112.123:7000` (`systemd` unit `frps`)
-- Config: `/etc/frp/frps.toml`
-- Clients embed server addr + auth token; lobby access is gated by per-session `secretKey` in the share code
+- VPS runs `frps` (`systemd` unit `frps`, config `/etc/frp/frps.toml`)
+- Addr / port / auth token live in Supabase secrets and are served by Edge Function `relay-creds` (JWT required)
+- Lobby access is gated by per-session `secretKey` in the share code
 
 ## Known gaps
 

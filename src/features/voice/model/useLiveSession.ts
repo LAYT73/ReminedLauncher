@@ -8,6 +8,7 @@ import {
   type VoiceRoom,
 } from "@/entities/voice-room";
 import { netLog } from "@/shared/api/netLog";
+import { relaySessionCore } from "@/shared/api/relay";
 import { setVoiceRoomShareCode } from "@/entities/voice-room";
 import { useGameStore } from "@/entities/game";
 import {
@@ -359,13 +360,15 @@ export function useLiveSession({
         if (
           asGuest &&
           pending &&
-          pending !== joinedCodeRef.current &&
-          !reconnectingRef.current
+          !reconnectingRef.current &&
+          relaySessionCore(pending) !== relaySessionCore(joinedCodeRef.current)
         ) {
           pendingShareCodeRef.current = null;
           queueMicrotask(() => {
             void reconnectFnRef.current({ force: true }).catch(() => undefined);
           });
+        } else if (pending) {
+          pendingShareCodeRef.current = null;
         }
       }
     },
@@ -519,7 +522,7 @@ export function useLiveSession({
     await reconnectGuest(opts);
   };
 
-  /** Host published a new lobby:<id> after Voice+LAN merge — force rejoin. */
+  /** Host published a new relay session — force rejoin only if id/sk changed. */
   const onHostShareCode = useCallback(
     (room: VoiceRoom, shareCode: string | null) => {
       const code = shareCode?.trim();
@@ -527,6 +530,20 @@ export function useLiveSession({
       guestRoomRef.current = { ...room, portholeShareCode: code };
       // Same code we already joined or are joining — ignore Realtime echo.
       if (code === joinedCodeRef.current || code === connectingCodeRef.current) {
+        return;
+      }
+      // LAN attach only changes the port suffix — keep LiveKit session.
+      const nextCore = relaySessionCore(code);
+      const joinedCore = relaySessionCore(joinedCodeRef.current);
+      const connectingCore = relaySessionCore(connectingCodeRef.current);
+      if (
+        nextCore &&
+        (nextCore === joinedCore || nextCore === connectingCore)
+      ) {
+        void netLog(
+          "ui",
+          `voice guest ignore LAN-only share update core=${nextCore}`,
+        );
         return;
       }
       // First join / in-flight connect owns the tunnel — stash a newer lobby

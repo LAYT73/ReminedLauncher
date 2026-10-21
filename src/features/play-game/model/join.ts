@@ -2,8 +2,8 @@ import { create } from "zustand";
 import { netLog } from "@/shared/api/netLog";
 import {
   decodeRelayShareCode,
+  ensureRelayReady,
   looksLikeRelayKey,
-  relayStatus,
   relayStopGameJoin,
 } from "@/shared/api/relay";
 import { MSG } from "@/shared/config/messages";
@@ -49,10 +49,12 @@ export async function joinFriendSession(row: FriendRow): Promise<void> {
       );
     }
 
-    const st = await relayStatus();
-    if (!st.installed) {
-      void netLog("ui", `Join aborted: Relay not installed (${st.message})`);
-      setStatus(st.message, "error");
+    try {
+      await ensureRelayReady();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      void netLog("ui", `Join aborted: Relay not ready (${msg})`);
+      setStatus(msg, "error");
       toast(MSG.voice.installRelay);
       navigateTo(`/${RAIL.settings}#network`);
       return;

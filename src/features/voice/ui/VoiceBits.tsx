@@ -135,9 +135,22 @@ export function VideoTileView({ tile, label }: { tile: VoiceVideoTile; label: st
     const media = tile.track.mediaStreamTrack;
     if (!media || media.readyState !== "live") return;
     tile.track.attach(el);
-    return () => {
-      tile.track.detach(el);
+    const clear = () => {
+      try {
+        tile.track.detach(el);
+      } catch {
+        /* ignore */
+      }
+      el.pause();
+      el.removeAttribute("src");
       el.srcObject = null;
+      el.load();
+    };
+    const onEnded = () => clear();
+    media.addEventListener("ended", onEnded);
+    return () => {
+      media.removeEventListener("ended", onEnded);
+      clear();
     };
   }, [tile.track]);
 

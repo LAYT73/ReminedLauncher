@@ -258,8 +258,12 @@ export class VoiceSession {
     room.on(RoomEvent.ParticipantDisconnected, (p) => {
       this.cbs.onSpeaking?.(p.identity, false);
       this.cbs.onParticipants?.();
+      // Drop frozen last-frame tiles immediately — pubs can linger briefly.
       this.cbs.onVideo?.();
       this.cbs.onRemoteLeft?.(p.identity);
+      // Second pass after LiveKit finishes unpublish/detach.
+      queueMicrotask(() => this.cbs.onVideo?.());
+      setTimeout(() => this.cbs.onVideo?.(), 120);
     });
     room.on(RoomEvent.TrackMuted, (pub) => {
       this.cbs.onParticipants?.();
@@ -326,7 +330,12 @@ export class VoiceSession {
         const els = Array.isArray(detached) ? detached : [detached];
         if (trackRemote.kind === Track.Kind.Video) {
           for (const el of els) {
-            if (el instanceof HTMLVideoElement) el.srcObject = null;
+            if (el instanceof HTMLVideoElement) {
+              el.pause();
+              el.removeAttribute("src");
+              el.srcObject = null;
+              el.load();
+            }
           }
           this.cbs.onVideo?.();
           return;
@@ -503,6 +512,7 @@ export class VoiceSession {
         if (pub.isSubscribed === false) continue;
         const media = track.mediaStreamTrack;
         if (!media || media.readyState !== "live") continue;
+        if (media.muted && !local) continue;
         out.push({
           identity,
           local,
@@ -574,6 +584,15 @@ export class VoiceSession {
   async disconnect() {
     this.unwireResumeHooks();
     try {
+      const lp = this.room?.localParticipant;
+      // Unpublish cam/screen before disconnect so hosts drop tiles instead of
+      // freezing on the last frame.
+      if (lp) {
+        await Promise.allSettled([
+          lp.setCameraEnabled(false),
+          lp.setScreenShareEnabled(false),
+        ]);
+      }
       this.localTrack?.stop();
       this.localTrack = null;
       await this.room?.disconnect();
@@ -581,6 +600,7 @@ export class VoiceSession {
       /* ignore */
     }
     this.room = null;
+    this.cbs.onVideo?.();
     document
       .querySelectorAll("audio[data-identity]")
       .forEach((el) => el.remove());
