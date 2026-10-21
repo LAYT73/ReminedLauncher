@@ -1,58 +1,81 @@
-# Remined launcher releases
+# Release procedure
 
-## Version
+The current release is `0.9.5`.
 
-Bump together:
+## Version surface
 
-- `package.json` → `version`
-- `package-lock.json` → root `version`
-- `src-tauri/tauri.conf.json` → `version`
-- `src-tauri/Cargo.toml` → `version`
-- `src-tauri/Cargo.lock` → `name = "remined"` package version
-- `.github/workflows/release.yml` → `tagName` / `releaseName` / body
-- `src/shared/config/limits.ts` → `FALLBACK_APP_VERSION` (shown until `get_app_version`)
+Update all of the following to the same value:
 
-Tag and push:
+- `package.json`
+- `package-lock.json` root package
+- `src-tauri/Cargo.toml`
+- `src-tauri/Cargo.lock` package entry
+- `src-tauri/tauri.conf.json`
+- `.github/workflows/release.yml`
+- `src/shared/config/limits.ts` (`FALLBACK_APP_VERSION`)
+- user-facing release notes in the workflow
+
+The fallback version is shown until the native `get_app_version` command
+responds.
+
+## Pre-release checks
 
 ```bash
-git tag vX.Y.Z
+npm run typecheck
+npm run check:fsd
+npm run build
+cargo test --lib --manifest-path src-tauri/Cargo.toml
+cargo run --manifest-path src-tauri/Cargo.toml --bin remined-cli -- smoke-rv --all --launch
+```
+
+The smoke harness is network- and disk-intensive. Record the supported-version
+matrix and investigate every failed audit or launch before publishing.
+
+## CI and artifacts
+
+The release workflow builds macOS arm64, macOS x64 and Windows packages,
+publishes a GitHub Release and optionally uploads `latest.json` for the Tauri
+updater. The updater endpoint is:
+
+```text
+https://github.com/LAYT73/ReminedLauncher/releases/latest/download/latest.json
+```
+
+## Signing and secrets
+
+GitHub Actions requires:
+
+| Secret | Use |
+|---|---|
+| `TAURI_SIGNING_PRIVATE_KEY` | Tauri updater signature |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Signing key password |
+| `VITE_SUPABASE_URL` | Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | Publishable client key |
+
+The updater private key belongs only in `.remined-secrets/` locally or GitHub
+Secrets. Never commit it.
+
+## Relay configuration
+
+The `relay-creds` Edge Function reads:
+
+```text
+RELAY_FRPS_ADDR
+RELAY_FRPS_PORT
+RELAY_FRPS_TOKEN
+```
+
+Rotate the VPS `auth.token` and the Supabase secret together. Deploy the
+function after changing its configuration.
+
+## Publish
+
+Create and push an annotated release tag after the checks pass:
+
+```bash
+git tag -a vX.Y.Z -m "Remined vX.Y.Z"
 git push origin vX.Y.Z
 ```
 
-GitHub Actions (`.github/workflows/release.yml`) builds **macOS** (arm64 + x64) and **Windows**, uploads a Release, and publishes `latest.json` for the updater.
-
-## Secrets (GitHub → ReminedLauncher → Settings → Secrets)
-
-| Secret | Purpose |
-|---|---|
-| `TAURI_SIGNING_PRIVATE_KEY` | Contents of `.remined-secrets/remined.key` (updater signatures) |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Empty if key has no password |
-| `VITE_SUPABASE_URL` | Same as local `VITE_SUPABASE_URL` |
-| `VITE_SUPABASE_ANON_KEY` | Publishable anon key only |
-
-Private signing key lives only in `.remined-secrets/` (gitignored) and GitHub Secrets — never commit it.
-
-### Remined Relay (frps) secrets
-
-frps auth token is **not** in the app binary. Authenticated clients fetch it from the `relay-creds` Edge Function.
-
-```bash
-# Supabase secrets (Dashboard or CLI) — same project as the launcher:
-supabase secrets set \
-  RELAY_FRPS_ADDR=YOUR_VPS_IP \
-  RELAY_FRPS_PORT=7000 \
-  RELAY_FRPS_TOKEN=YOUR_FRPS_AUTH_TOKEN \
-  --project-ref YOUR_REF
-
-supabase functions deploy relay-creds --project-ref YOUR_REF
-```
-
-Rotate `auth.token` on the VPS and update `RELAY_FRPS_TOKEN` together.
-
-## Updater
-
-Configured endpoint:
-
-`https://github.com/LAYT73/ReminedLauncher/releases/latest/download/latest.json`
-
-In Settings → **Check for updates**.
+The workflow is responsible for packaging and updater metadata. Verify the
+GitHub Release assets and updater JSON after the workflow completes.

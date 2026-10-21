@@ -1,4 +1,4 @@
-/** Cached WAN IPv4 for copyable LAN address hints (not used for Porthole itself). */
+/** Cached WAN IPv4 for copyable LAN address hints. */
 
 let cached: string | null = null;
 let inflight: Promise<string | null> | null = null;

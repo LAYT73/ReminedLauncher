@@ -226,15 +226,6 @@
     inset -1px -1px 0 #2a5c1a;
 }
 
-.vanilla-skin-badge.is-beta {
-  background: #8a6a18;
-  color: #fff8d8;
-  text-shadow: 1px 1px 0 #3a2a08;
-  box-shadow:
-    inset 1px 1px 0 #d4b45a,
-    inset -1px -1px 0 #5a4210;
-}
-
 .pack-about-blurb {
   margin: 0 0 16px;
   max-width: 46rem;

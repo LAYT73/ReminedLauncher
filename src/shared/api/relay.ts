@@ -138,7 +138,7 @@ export function decodeRelayShareCode(code: string): string | null {
   return null;
 }
 
-/** True when the friends share code is a Remined Relay tunnel (not Porthole). */
+/** True when a friends share code is a Remined Relay tunnel. */
 export function looksLikeRelayKey(code: string): boolean {
   return decodeRelayShareCode(code) != null;
 }

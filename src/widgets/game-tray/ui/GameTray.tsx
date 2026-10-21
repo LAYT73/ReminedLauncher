@@ -48,7 +48,7 @@ function buildChip(
       if (!raw) return { label: "Server" };
       const addr = normalizeServerAddress(raw);
       const [host, port] = addr.split(":");
-      // Connected via Porthole loopback — show WAN:port when we know it.
+      // Connected through the Relay loopback — show WAN:port when known.
       if (host && port && isLoopbackHost(host) && publicIp) {
         const pub = `${publicIp}:${port}`;
         return {

@@ -1,4 +1,4 @@
-//! Network / Porthole / LAN diagnostics — split into small chunk files.
+//! Network / Relay / LAN diagnostics — split into small chunk files.
 //!
 //! Dir: `<remined_root>/.remined/network/`
 //! Active: `current.log` (rotated when large or on `begin_chunk`)
@@ -210,33 +210,4 @@ fn read_file_tail(path: &Path, max_bytes: usize) -> Result<String, String> {
     } else {
         Ok(text.into_owned())
     }
-}
-
-/// Interesting Porthole stdout/stderr lines only (not the full firehose).
-pub fn porthole_line_interesting(line: &str) -> bool {
-    let lower = line.to_ascii_lowercase();
-    // Skip periodic link stats — they drown the signal.
-    if lower.contains("\"event\":\"link\"") || lower.contains("\"event\": \"link\"") {
-        return false;
-    }
-    lower.contains("static_code")
-        || lower.contains("share_code")
-        || lower.contains("lobby_ready")
-        || lower.contains("port_accepted")
-        || lower.contains("port_offered")
-        || lower.contains("port_rejected")
-        || lower.contains("session_opened")
-        || lower.contains("session_closed")
-        || lower.contains("peer_connected")
-        || lower.contains("peer_disconnected")
-        || lower.contains("member")
-        || lower.contains("approv")
-        || lower.contains("forward")
-        || lower.contains("error")
-        || lower.contains("fail")
-        || lower.contains("kick")
-        || lower.contains("mismatch")
-        || lower.contains("steam init")
-        || lower.contains("not logged")
-        || lower.contains("roster")
 }

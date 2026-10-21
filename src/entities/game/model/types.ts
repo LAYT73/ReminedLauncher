@@ -6,7 +6,7 @@ export type LaunchResult = {
   message: string;
 };
 
-/** An active Open-to-LAN tunnel published through Porthole. */
+/** An active Open-to-LAN tunnel published through Remined Relay. */
 export type HostingLan = {
   packId: string;
   shareCode: string;

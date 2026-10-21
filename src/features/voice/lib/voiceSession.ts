@@ -361,7 +361,7 @@ export class VoiceSession {
       await room.connect(opts.wsUrl, token, {
         autoSubscribe: true,
         peerConnectionTimeout: 25_000,
-        // Porthole guests need extra headroom for the first WS after bind.
+        // Relay guests need extra headroom for the first WS after bind.
         websocketTimeout: 20_000,
         maxRetries: 3,
         rtcConfig: {

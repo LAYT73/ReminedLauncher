@@ -1,7 +1,7 @@
 //! Remined Relay — self-hosted frp (STCP/SUDP) tunnel.
 //! Replaces Relay. Voice always uses this relay. In `network_mode=relay`
 //! (legacy id = "relay only"), Open-to-LAN shares the same host session
-//! (LiveKit ports + LAN TCP). Hybrid keeps LAN on Porthole.
+//! (LiveKit ports + LAN TCP).
 
 use crate::paths;
 use crate::voice_runtime::{LK_RTC_TCP_PORT, LK_TCP_PORT, LK_UDP_MUX};

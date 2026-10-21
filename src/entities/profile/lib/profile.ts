@@ -10,7 +10,7 @@ import { FALLBACK_USERNAME } from "@/shared/config/limits";
 
 export const RAM_OPTIONS_GB = [2, 4, 6, 8, 10, 12, 16] as const;
 
-/** Porthole/hybrid removed — always Remined Relay. */
+/** The launcher uses Remined Relay for all network sessions. */
 export function normalizeNetworkMode(_raw: unknown): NetworkMode {
   return "relay";
 }

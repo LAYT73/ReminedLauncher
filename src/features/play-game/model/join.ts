@@ -45,7 +45,7 @@ export async function joinFriendSession(row: FriendRow): Promise<void> {
     const relayKey = decodeRelayShareCode(shareCode);
     if (relayKey == null && !looksLikeRelayKey(shareCode)) {
       throw new Error(
-        "This host is on an old Porthole lobby — ask them to update Remined and Open to LAN again",
+        "This host is on an old network session — ask them to update Remined and Open to LAN again",
       );
     }
 

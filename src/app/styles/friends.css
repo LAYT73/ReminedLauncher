@@ -392,7 +392,8 @@ button.network-pill:hover {
 
 .network-status-copy {
   flex: 1;
-  min-width: 14rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .network-status-copy strong {
@@ -405,12 +406,16 @@ button.network-pill:hover {
   line-height: 1.4;
   color: var(--muted, var(--text));
   opacity: 0.9;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .network-status-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .network-check-detail {

@@ -9,7 +9,6 @@ mod java_runtime;
 mod onboarding;
 mod pack_sync;
 mod paths;
-mod porthole;
 mod process_ext;
 mod progress;
 mod remined_vanilla;
@@ -106,7 +105,7 @@ pub struct Profile {
     pub theme: String,
     #[serde(default = "default_friend_toasts")]
     pub friend_toasts: bool,
-    /// `"relay"` (default) — voice + LAN on Relay; `"hybrid"` — LAN on Porthole.
+    /// `"relay"` — voice and LAN on Remined Relay.
     #[serde(default = "default_network_mode")]
     pub network_mode: String,
     /// Open-to-LAN / mcwifipnp port (Relay-only pre-reserve).
@@ -741,110 +740,6 @@ fn open_pack_folder(app: AppHandle, pack_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn porthole_status() -> porthole::PortholeStatus {
-    porthole::status()
-}
-
-#[tauri::command]
-async fn porthole_selftest() -> porthole::PortholeCheckResult {
-    tauri::async_runtime::spawn_blocking(porthole::selftest)
-        .await
-        .unwrap_or_else(|e| porthole::PortholeCheckResult {
-            ok: false,
-            installed: false,
-            steam_ok: false,
-            message: format!("Check failed: {e}"),
-            detail: String::new(),
-        })
-}
-
-#[tauri::command]
-async fn open_steam_client() -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(porthole::open_steam_client)
-        .await
-        .map_err(|e| e.to_string())?
-}
-
-#[tauri::command]
-async fn porthole_start_host(
-    app: AppHandle,
-    state: State<'_, porthole::PortholeState>,
-    port: u16,
-) -> Result<porthole::PortholeHostInfo, String> {
-    let state = state.inner().clone();
-    let app2 = app.clone();
-    tauri::async_runtime::spawn_blocking(move || porthole::start_host(app2, state, port))
-        .await
-        .map_err(|e| e.to_string())?
-}
-
-#[tauri::command]
-async fn porthole_start_lan_host(
-    app: AppHandle,
-    state: State<'_, porthole::PortholeState>,
-    port: u16,
-) -> Result<porthole::PortholeHostInfo, String> {
-    let state = state.inner().clone();
-    let app2 = app.clone();
-    tauri::async_runtime::spawn_blocking(move || porthole::start_lan_host(app2, state, port))
-        .await
-        .map_err(|e| e.to_string())?
-}
-
-#[tauri::command]
-async fn porthole_start_join(
-    app: AppHandle,
-    state: State<'_, porthole::PortholeState>,
-    share_code: String,
-    port: u16,
-) -> Result<(), String> {
-    let state = state.inner().clone();
-    let app2 = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        porthole::start_join(app2, state, &share_code, port)
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
-#[tauri::command]
-fn porthole_stop_host(app: AppHandle, state: State<'_, porthole::PortholeState>) {
-    net_log::append_ok(&app, "host", "stop_host");
-    porthole::stop_host(&state);
-}
-
-#[tauri::command]
-fn porthole_stop_lan_host(app: AppHandle, state: State<'_, porthole::PortholeState>) {
-    net_log::append_ok(&app, "host", "stop_lan_host");
-    porthole::stop_lan_host(&state);
-}
-
-#[tauri::command]
-fn porthole_stop_join(app: AppHandle, state: State<'_, porthole::PortholeState>) {
-    net_log::append_ok(&app, "join", "stop_join");
-    porthole::stop_join(&state);
-}
-
-#[tauri::command]
-fn porthole_stop_game_join(app: AppHandle, state: State<'_, porthole::PortholeState>) {
-    net_log::append_ok(&app, "join", "stop_game_join");
-    porthole::stop_game_join(&state);
-}
-
-#[tauri::command]
-fn porthole_stop_all(app: AppHandle, state: State<'_, porthole::PortholeState>) {
-    net_log::append_ok(&app, "host", "stop_all");
-    porthole::stop_all(&state);
-}
-
-#[tauri::command]
-fn porthole_current_host(
-    state: State<'_, porthole::PortholeState>,
-) -> Option<porthole::PortholeHostInfo> {
-    porthole::current_host(&state)
-}
-
-#[tauri::command]
 fn voice_log_path(app: AppHandle) -> Result<String, String> {
     voice_log::log_path(&app).map(|p| p.display().to_string())
 }
@@ -882,14 +777,14 @@ async fn voice_start_livekit(
 }
 
 #[tauri::command]
-async fn voice_start_porthole(
+async fn voice_start_relay(
     app: AppHandle,
     relay: State<'_, relay::RelayState>,
     lan_port: Option<u16>,
 ) -> Result<voice_runtime::VoiceHostReady, String> {
     let relay = relay.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        voice_runtime::start_voice_porthole(app, relay, lan_port)
+        voice_runtime::start_voice_relay(app, relay, lan_port)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -915,19 +810,17 @@ async fn voice_start_host(
 fn voice_stop_host(
     app: AppHandle,
     voice: State<'_, voice_runtime::VoiceRuntimeState>,
-    porthole: State<'_, porthole::PortholeState>,
     relay: State<'_, relay::RelayState>,
     keep_lan_port: Option<u16>,
     keep_relay: Option<bool>,
-) -> Option<porthole::PortholeHostInfo> {
+) {
     voice_runtime::stop_voice_host(
         &app,
         &voice,
-        &porthole,
         &relay,
         keep_lan_port,
         keep_relay.unwrap_or(false),
-    )
+    );
 }
 
 #[tauri::command]
@@ -1071,7 +964,7 @@ fn voice_mint_token(room: String, identity: String, name: String) -> Result<Stri
 fn read_lan_port(app: AppHandle, pack_id: String) -> Result<Option<u16>, String> {
     let root = paths::remined_root(&app)?;
     let log = paths::pack_dir(&root, &pack_id).join("logs").join("latest.log");
-    let port = porthole::read_lan_port(&log);
+    let port = gamewatch::read_lan_port(&log);
     net_log::lan_poll(&app, &pack_id, port);
     Ok(port)
 }
@@ -1420,7 +1313,6 @@ pub fn run() {
             Ok(())
         })
         .manage(Mutex::new(GameSession::default()))
-        .manage(porthole::PortholeState::default())
         .manage(relay::RelayState::default())
         .manage(voice_runtime::VoiceRuntimeState::default())
         .invoke_handler(tauri::generate_handler![
@@ -1449,18 +1341,6 @@ pub fn run() {
             install_remined_vanilla_version,
             delete_pack,
             open_pack_folder,
-            porthole_status,
-            porthole_selftest,
-            open_steam_client,
-            porthole_start_host,
-            porthole_start_lan_host,
-            porthole_start_join,
-            porthole_stop_host,
-            porthole_stop_lan_host,
-            porthole_stop_join,
-            porthole_stop_game_join,
-            porthole_stop_all,
-            porthole_current_host,
             diag_logs_dir,
             net_log_dir,
             net_log_append,
@@ -1471,7 +1351,7 @@ pub fn run() {
             voice_log_tail,
             voice_ensure_runtime,
             voice_start_livekit,
-            voice_start_porthole,
+            voice_start_relay,
             voice_start_host,
             voice_stop_host,
             voice_guest_connect,

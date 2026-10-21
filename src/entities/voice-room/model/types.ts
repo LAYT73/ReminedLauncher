@@ -7,7 +7,7 @@ export type VoiceRoom = {
   hostId: string;
   title: string;
   status: VoiceRoomStatus;
-  portholeShareCode: string | null;
+  relayShareCode: string | null;
   lkWsUrl: string;
   lkTcpPort: number;
   lkUdpStart: number;

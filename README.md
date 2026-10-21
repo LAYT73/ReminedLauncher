@@ -1,68 +1,125 @@
 # Remined Launcher
 
-Кастомный лаунчер Minecraft: Java Edition на Tauri 2 (Rust) + React 19. Ставит и запускает ваниль, **Remined Vanilla** (Fabric + оптимизационный стек и скины Remined) и сборки Remine из облака, сам ставит нужную Java. Поверх — аккаунт с облачным профилем и скином, друзья с presence, игра по сети через Steam-приложение Porthole (без проброса портов и VPN) и голосовые комнаты, которые поднимаются на ПК хоста.
+Remined Launcher is a desktop launcher for Minecraft: Java Edition. It manages
+Java runtimes, game installations, Remined packs, vanilla versions, player
+profiles, skins, friends, LAN sessions and voice rooms.
 
-**Текущая версия:** `0.9.2`
+## Product scope
 
-## Запуск (dev)
+- **Game editions:** vanilla, Remined Java packs and Remined Vanilla
+  (Fabric-based).
+- **Installation management:** version discovery, downloads, updates, removal
+  and local instance folders.
+- **Identity:** Supabase authentication, cached offline profile, Remined ID,
+  username, skin and cape.
+- **Social:** friends, presence, invitations and per-pack playtime.
+- **Network play:** Open-to-LAN sessions shared through the Remined Relay.
+- **Voice:** a local LiveKit server exposed through the Remined Relay.
+- **Operations:** diagnostics, crash detection, updater, tray integration and
+  an offline mode after the first successful online setup.
 
-Нужны: Node.js, Rust (`rustup`), Java 25 (`brew install openjdk@25`).
+## Technology
+
+| Area | Technology |
+|---|---|
+| Desktop shell | Tauri 2 |
+| Frontend | React 19, TypeScript, Vite |
+| State | Zustand |
+| Backend | Rust |
+| Cloud | Supabase Auth, Postgres, Storage and Realtime |
+| Voice | LiveKit |
+| Network play and voice | Remined Relay with TCP and UDP forwarding |
+
+## Requirements
+
+- Node.js and npm
+- Rust via `rustup`
+- Java 25 for local development and the Remined Vanilla smoke harness
+- macOS or Windows for the supported desktop flows
+- Supabase project credentials for online features
+
+Install Java 25 on macOS with:
 
 ```bash
-cd app
+brew install openjdk@25
+```
+
+## Development
+
+```bash
 npm install
 npm run tauri dev
 ```
 
-Если Rust старый (< 1.90), обнови:
+Offline frontend mode:
 
 ```bash
-rustup update stable
+npm run tauri:dev:offline
 ```
 
-## Что умеет
+The launcher reads local Supabase configuration from `.env.local`:
 
-- **Home** — обои, логотип, превью скина; вкладки Friends / Network / Voice
-- **Remined Vanilla** (beta) — Fabric + скины Remined, версионный opti-стек (Sodium/Iris и др.), Resourcify где есть на Modrinth
-- **Vanilla** / **Java packs** — чистый ваниль и паки из Supabase
-- **Скины** — ник, PNG-скин, 3D-превью; синк в облако; SkinShuffle / CustomSkinLoader перед стартом
-- **Friends** — Remined id, заявки, presence; Join к хосту через Network Play
-- **Network Play** — туннель через free Steam-приложение [Porthole](docs/PORTHOLE.md)
-- **Voice** — локальный LiveKit + Porthole + чат/инвайты в Supabase ([VOICE.md](docs/VOICE.md))
-- **Installations / Settings** — удаления, тема, Java, апдейты лаунчера
-- **Офлайн** — кэш аккаунта и паков после первого онлайна
+```dotenv
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-publishable-anon-key
+```
 
-## Релиз
+The key must be the publishable anon key. Never commit `.env.local`,
+`.remined-secrets/` or updater signing keys.
 
-Куда поднимать версию и как тегать — в [`docs/RELEASE.md`](docs/RELEASE.md).
-
-Апдейтер: Settings → Check for updates  
-(`latest.json` с GitHub Releases).
-
-## Проверка
+## Verification
 
 ```bash
-npm run typecheck                # типы
-npm run check:fsd                # правила слоёв FSD
-npm run build                    # tsc -b + vite build
+npm run typecheck
+npm run check:fsd
+npm run build
 cargo test --lib --manifest-path src-tauri/Cargo.toml
-cargo run --manifest-path src-tauri/Cargo.toml --bin remined-cli -- smoke-rv   # смоук Remined Vanilla
+cargo run --manifest-path src-tauri/Cargo.toml --bin remined-cli -- smoke-rv
 ```
 
-## Структура
+`check:fsd` validates frontend layer boundaries. `smoke-rv` validates the
+Remined Vanilla installation and launch path for selected versions.
 
-Фронт (`src/`) — Feature-Sliced Design: `app` (роутер, провайдеры) → `pages` → `widgets` → `features` → `entities` → `shared` (константы, api, ui). Импорты только вниз, проверяется `npm run check:fsd`. Бэкенд — `src-tauri/src/`. Подробно — [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+## Repository map
 
-## Docs
+```text
+src/                 React application
+src-tauri/src/       Tauri commands and Rust runtime
+supabase/migrations/ Database schema and RLS changes
+docs/                Operational and technical documentation
+assets/              Launcher-owned static assets
+scripts/             Repository checks
+```
 
-| Файл | О чём |
-|---|---|
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Структура фронта / Rust / Supabase, индекс доков |
-| [`docs/SETUP.md`](docs/SETUP.md) | Репозитории, Supabase, гигиена репо паков |
-| [`docs/RELEASE.md`](docs/RELEASE.md) | Версия, тег, CI, апдейтер |
-| [`docs/PACK_ASSETS.md`](docs/PACK_ASSETS.md) | Ассеты паков |
-| [`docs/PORTHOLE.md`](docs/PORTHOLE.md) | Network Play / Steam |
-| [`docs/VOICE.md`](docs/VOICE.md) | Voice rooms (LiveKit + Porthole) |
-| [`docs/REMINED_VANILLA.md`](docs/REMINED_VANILLA.md) | Opti-стеки, совместимость, смоук-матрица |
-| [`docs/ROADMAP_IMMERSIVE.md`](docs/ROADMAP_IMMERSIVE.md) | Что уже сделано и бэклог идей |
-| [`supabase/migrations/012_pack_playtime.sql`](supabase/migrations/012_pack_playtime.sql) | Часы / last played **на каждую сборку** (SQL Editor) |
+Frontend boundaries and backend responsibilities are documented in
+[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
+
+## Data and diagnostics
+
+The application data root on macOS is:
+
+```text
+~/Library/Application Support/com.remined.launcher/remined/
+```
+
+Important logs:
+
+- launcher: `<root>/.remined/logs/app.log`
+- voice and relay: `<root>/.remined/voice/voice.log`
+- game: `<instance>/logs/latest.log`
+- mod inventory: `<instance>/mods-manifest.json`
+
+## Documentation
+
+- [Architecture](./docs/ARCHITECTURE.md) — application boundaries, runtime and
+  data flows
+- [Setup](./docs/SETUP.md) — local environment, Supabase and pack repository
+- [Release](./docs/RELEASE.md) — versioning, CI and updater
+- [Pack assets](./docs/PACK_ASSETS.md) — catalog media contract
+- [Voice](./docs/VOICE.md) — LiveKit and Remined Relay operations
+- [Remined Vanilla](./docs/REMINED_VANILLA.md) — mod policy and smoke testing
+
+## Release
+
+The current release is **0.9.5**. Release procedure and the complete version
+surface are maintained in [docs/RELEASE.md](./docs/RELEASE.md).

@@ -414,35 +414,6 @@
     0 8px 24px rgba(0, 0, 0, 0.55);
 }
 
-.hero-title-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px 14px;
-}
-
-.hero-beta-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 10px 5px;
-  background: #8a6a18;
-  border: 2px solid #000;
-  box-shadow:
-    inset 1px 1px 0 #d4b45a,
-    inset -1px -1px 0 #5a4210,
-    0 3px 0 rgba(0, 0, 0, 0.45);
-  color: #fff8d8;
-  font-family: var(--font-display);
-  font-size: 12px;
-  font-weight: 400;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  text-shadow: 1px 1px 0 #3a2a08;
-  line-height: 1;
-  image-rendering: pixelated;
-  transform: translateY(2px);
-}
-
 [data-theme^="light"] .hero.home .hero-kicker,
 [data-theme^="light"] .hero.home .hero-title {
   text-shadow: none;

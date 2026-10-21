@@ -1,6 +1,7 @@
 # Remined Vanilla — mod stacks & compatibility
 
-Source of truth: `src-tauri/src/remined_vanilla.rs`.
+Implementation source of truth:
+[`src-tauri/src/remined_vanilla.rs`](../src-tauri/src/remined_vanilla.rs).
 
 ## Goal
 
@@ -53,7 +54,11 @@ env:   REMINED_PROGRESS=1 (stream progress), REMINED_SMOKE_JVM="-Dfoo" (extra JV
 
 Output: markdown table + `smoke-report.json` in the root. Budget ~1 GB of disk per concurrent version; passing packs are deleted unless `--keep`.
 
-### Last full run (macOS 26, Apple Silicon) — all 24 versions launch to the sound engine
+### Last recorded run (macOS 26, Apple Silicon)
+
+All 24 versions below reached the sound engine. “Launch ok” means that the
+client reached the title-screen sound engine; it does not represent a playable
+world test.
 
 | MC | install | audit | launch |
 |---|---|---|---|
@@ -82,7 +87,8 @@ Output: markdown table + `smoke-report.json` in the root. Budget ~1 GB of disk p
 | 1.20.1 | ok | ok (21 mods) | ok |
 | 1.20 | ok | ok (22 mods) | ok |
 
-The 1.21.2 row was re-run alone after its last fix (the other rows come from the full run just before; no code touching them changed). “Launch ok” = reached the title-screen sound engine, not a played world. Re-run after any change to the mod lists or Modrinth resolution — Modrinth publishes new builds constantly.
+The matrix is a recorded result, not a permanent compatibility guarantee.
+Re-run it after changes to mod lists, Java policy or Modrinth resolution.
 
 ## Remaining risk
 
@@ -91,4 +97,3 @@ The 1.21.2 row was re-run alone after its last fix (the other rows come from the
 3. Optional mods get dropped silently when they can't be made compatible (see `mods-manifest.json` of the install for what is actually present).
 
 ## Related bug
-

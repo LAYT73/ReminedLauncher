@@ -3,6 +3,7 @@ import { isReminedVanillaPackId, isVanillaPackId, reminedVanillaPackId, vanillaP
 import { useEditionState } from "@/entities/game-version";
 import { useActiveReminePack, useInstalledPacks, useViewCatalog } from "@/entities/pack";
 import { InstallRow } from "./InstallRow";
+import { EmptyState } from "@/shared/ui/EmptyState";
 
 export function InstallationsPage() {
   const installedPacks = useInstalledPacks();
@@ -37,7 +38,11 @@ export function InstallationsPage() {
     <section className="section">
       <h2 className="page-title">Installations</h2>
       {groups.length === 0 ? (
-        <p className="friends-lead">Nothing installed yet.</p>
+        <EmptyState
+          kind="installations"
+          title="Nothing installed yet"
+          description="Choose a pack from the launcher to build your first installation."
+        />
       ) : (
         <div className="install-groups">
           {groups.map((group, i) => (

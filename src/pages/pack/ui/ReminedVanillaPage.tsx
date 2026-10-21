@@ -27,15 +27,7 @@ export function ReminedVanillaPage() {
         }
       >
         <p className="hero-kicker">Fabric · Skins</p>
-        <h1 className="hero-title hero-title-row">
-          Remined Vanilla
-          <span
-            className="hero-beta-badge"
-            title="Beta — expect bugs and rough edges while we polish this pack."
-          >
-            Beta
-          </span>
-        </h1>
+        <h1 className="hero-title">Remined Vanilla</h1>
       </header>
       <PageMotion viewKey={viewKey}>
         <section className="pack-about">
@@ -55,12 +47,6 @@ export function ReminedVanillaPage() {
                     : "—"}
               </p>
               <PackPlaytime packId={packId} className="pack-playtime" />
-              <p
-                className="vanilla-skin-badge is-beta"
-                title="Beta — expect bugs and rough edges while we polish this pack."
-              >
-                Beta · bugs may happen
-              </p>
               <p
                 className="vanilla-skin-badge is-ok"
                 title="Installs Fabric with SkinShuffle + CustomSkinLoader so your Remined skin works for you and friends, plus Sodium/Iris and other performance mods when available for that version."

@@ -183,6 +183,7 @@ pub fn parse_game_log(text: &str) -> GameLogStatus {
             if st.phase == "none" || st.phase == "loading" {
                 st.phase = "menu".into();
             }
+
         } else if let Some(name) = extract_quoted(line, "Preparing level \"")
             .or_else(|| extract_quoted(line, "Preparing level '"))
         {
@@ -239,6 +240,11 @@ pub fn parse_game_log(text: &str) -> GameLogStatus {
         // Deliberately ignore bare "Stopping server" — too many false positives.
     }
     st
+}
+
+pub fn read_lan_port(log_path: &Path) -> Option<u16> {
+    let text = fs::read_to_string(log_path).ok()?;
+    parse_game_log(&text).lan_port
 }
 
 /// `host, port` / `'127.0.0.1', 25565` / junk around an IP → `host:port`.
@@ -419,7 +425,7 @@ mod tests {
         assert_eq!(s.phase, "lan");
         assert_eq!(s.lan_port, Some(55678));
         // New client boot must clear yesterday's Open-to-LAN (Play must not
-        // rebuild Voice Porthole from a stale publish line).
+        // rebuild a Relay session from a stale publish line).
         let s = parse_game_log(
             "Setting user: A\nPreparing level \"Old\"\nPublished LAN server on port 11111\n\
              Setting user: B\nSound engine started\nPreparing level \"New\"\n",

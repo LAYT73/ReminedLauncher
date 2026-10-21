@@ -12,11 +12,6 @@ export const TIMING = {
   presenceHeartbeat: 40_000,
   /** Quiet re-fetch of the friends list. */
   friendsPoll: 12_000,
-  /** Porthole / Steam status refresh on the Network tab. */
-  portholePoll: 15_000,
-  /** Re-check Porthole after opening its Steam page / Steam itself. */
-  portholeRecheckAfterStore: 2500,
-  portholeRecheckAfterSteam: 4000,
   /** Pack page screenshot carousel. */
   galleryAutoplay: 6000,
   /** Footer status auto-clear. */

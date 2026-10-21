@@ -86,10 +86,10 @@ export function subscribeRoomMembers(
 
 export type VoiceRoomRowPatch = {
   status?: string;
-  portholeShareCode?: string | null;
+  relayShareCode?: string | null;
 };
 
-/** Fires when the room row changes (closed, new Porthole share code, …). */
+/** Fires when the room row changes (closed, new Relay share code, …). */
 export function subscribeVoiceRoom(
   roomId: string,
   onChange: (patch: VoiceRoomRowPatch) => void,
@@ -107,15 +107,15 @@ export function subscribeVoiceRoom(
       (payload) => {
         const row = payload.new as {
           status?: string;
-          porthole_share_code?: string | null;
+          relay_share_code?: string | null;
         } | null;
         if (!row) return;
         onChange({
           status: row.status,
-          portholeShareCode:
-            row.porthole_share_code === undefined
+          relayShareCode:
+            row.relay_share_code === undefined
               ? undefined
-              : row.porthole_share_code,
+              : row.relay_share_code,
         });
       },
     )

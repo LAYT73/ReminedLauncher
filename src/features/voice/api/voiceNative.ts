@@ -47,10 +47,10 @@ export async function voiceStartLivekit(): Promise<VoiceHostReady> {
 
 /** Relay tunnel for voice — call after host has joined LiveKit locally.
  *  Pass `lanPort` in Relay-only mode to pre-reserve Open-to-LAN. */
-export async function voiceStartPorthole(
+export async function voiceStartRelay(
   lanPort?: number | null,
 ): Promise<VoiceHostReady> {
-  return call<VoiceHostReady>(CMD.voiceStartPorthole, {
+  return call<VoiceHostReady>(CMD.voiceStartRelay, {
     lanPort: lanPort && lanPort > 0 ? lanPort : null,
   });
 }
@@ -59,13 +59,12 @@ export async function voiceStartHost(): Promise<VoiceHostReady> {
   return call<VoiceHostReady>(CMD.voiceStartHost);
 }
 
-/** Stop LiveKit. `keepLanPort` restores Porthole LAN (hybrid).
- *  `keepRelay` leaves the shared Relay host running (Relay-only + LAN). */
+/** Stop LiveKit while optionally keeping the shared Relay host for LAN. */
 export async function voiceStopHost(
   keepLanPort?: number | null,
   keepRelay = false,
-): Promise<{ share_code: string; port: number } | null> {
-  return call<{ share_code: string; port: number } | null>(CMD.voiceStopHost, {
+): Promise<void> {
+  await call(CMD.voiceStopHost, {
     keepLanPort: keepLanPort && keepLanPort > 0 ? keepLanPort : null,
     keepRelay,
   });

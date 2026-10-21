@@ -19,13 +19,13 @@ import {
   type VoiceRoom,
 } from "@/entities/voice-room";
 import { useGameStore } from "@/entities/game";
-import { encodeRelayShareCode, ensureRelayReady } from "@/shared/api/relay";
+import { ensureRelayReady } from "@/shared/api/relay";
 import {
   voiceEnsureRuntime,
   voiceGuestDisconnect,
   voiceLog,
   voiceStartLivekit,
-  voiceStartPorthole,
+  voiceStartRelay,
   voiceStopHost,
 } from "../api/voiceNative";
 import { randomVoiceRoomTitle } from "../lib/roomName";
@@ -43,14 +43,6 @@ function lanPortNow(): number | null {
 /** Prefer already-published LAN; attach happens from game log. */
 function reservedLanPort(): number | null {
   return lanPortNow();
-}
-
-/** Keep Friends "Hosting" chip in sync when voice stop re-exposes / keeps LAN. */
-function syncLanShareCode(shareCode: string, gamePort: number) {
-  const game = useGameStore.getState();
-  const prev = game.hostingLan;
-  if (!prev || prev.gamePort !== gamePort) return;
-  game.setHostingLan({ ...prev, shareCode });
 }
 
 type Args = {
@@ -126,13 +118,10 @@ export function useVoiceActions({
   async function stopHostKeepingLan() {
     const lan = lanPortNow();
     const keepRelay = lan != null;
-    const restored = await voiceStopHost(lan, keepRelay).catch(() => null);
-    if (restored && lan && keepRelay) {
-      syncLanShareCode(encodeRelayShareCode(restored.share_code), lan);
-    }
+    await voiceStopHost(lan, keepRelay).catch(() => undefined);
   }
 
-  // Room row updates: host closed, or new Porthole share code (Voice+LAN merge).
+  // Room row updates: host closed, or new Relay share code (Voice+LAN merge).
   // Keep deps stable (refs for live/room) — resubscribing on every speaking
   // tick drops the Realtime channel and misses "closed" while off the Voice tab.
   const activeId = active?.id ?? null;
@@ -145,14 +134,14 @@ export function useVoiceActions({
         void kickGuestRoomEnded(activeId);
         return;
       }
-      if (patch.portholeShareCode === undefined) return;
-      const code = patch.portholeShareCode;
+      if (patch.relayShareCode === undefined) return;
+      const code = patch.relayShareCode;
       roomRef.current.setActive((prev) => {
         if (!prev || prev.id !== activeId) return prev;
         // Same-code Realtime echo must not force a guest rejoin — that kills
         // the in-flight Relay connect (localhost:7880 never opens).
-        if (code === prev.portholeShareCode) return prev;
-        const next = { ...prev, portholeShareCode: code };
+        if (code === prev.relayShareCode) return prev;
+        const next = { ...prev, relayShareCode: code };
         // Guests reconnect only when the relay *session* changes (id/sk),
         // not when a LAN port is merely appended to the share code.
         if (activeHostId !== userId && code) {
@@ -291,13 +280,13 @@ export function useVoiceActions({
       step(MSG.voice.connectingVoice, 93);
       await openRoomSession(created, false);
       useVoiceStatusStore.getState().setHostRoomId(created.id);
-      step(MSG.voice.openingPorthole, 96);
-      live.setStatus(MSG.voice.openingPorthole);
-      const ready = await voiceStartPorthole(reservedLanPort());
+      step(MSG.voice.openingRelay, 96);
+      live.setStatus(MSG.voice.openingRelay);
+      const ready = await voiceStartRelay(reservedLanPort());
       await setVoiceRoomShareCode(created.id, ready.share_code);
       room.setActive((prev) => ({
         ...(prev ?? created),
-        portholeShareCode: ready.share_code,
+        relayShareCode: ready.share_code,
       }));
       live.setStatus("In voice");
       runtime.close();
@@ -346,12 +335,12 @@ export function useVoiceActions({
         await ensureRelayReady();
         // Host may still be publishing the Relay key after create — poll briefly.
         let room = joined;
-        for (let i = 0; i < 10 && !room.portholeShareCode; i++) {
+        for (let i = 0; i < 10 && !room.relayShareCode; i++) {
           live.setStatus("Waiting for host share key…");
           await new Promise((r) => setTimeout(r, 500));
           room = (await getVoiceRoom(joined.id)) ?? room;
         }
-        if (!room.portholeShareCode) {
+        if (!room.relayShareCode) {
           throw new Error(
             "Host share key is not ready yet — ask them to wait until the code appears, then re-accept",
           );
@@ -406,7 +395,7 @@ export function useVoiceActions({
 
   async function onInvite() {
     if (!active || !invitePick) return;
-    if (!active.portholeShareCode) {
+    if (!active.relayShareCode) {
       onToast("Wait until the lobby code appears before inviting", "err");
       throw new Error("Lobby not ready");
     }
@@ -453,13 +442,13 @@ export function useVoiceActions({
       if (!asGuest) {
         useVoiceStatusStore.getState().setHostRoomId(target.id);
         // Host rejoin: ensure Relay tunnel is up.
-        if (!target.portholeShareCode) {
-          const ready = await voiceStartPorthole(reservedLanPort());
+        if (!target.relayShareCode) {
+          const ready = await voiceStartRelay(reservedLanPort());
           await setVoiceRoomShareCode(target.id, ready.share_code);
           room.setActive((prev) =>
             prev
-              ? { ...prev, portholeShareCode: ready.share_code }
-              : { ...target, portholeShareCode: ready.share_code },
+              ? { ...prev, relayShareCode: ready.share_code }
+              : { ...target, relayShareCode: ready.share_code },
           );
         }
       }

@@ -7,7 +7,7 @@ type RoomRow = {
   host_id: string;
   title: string;
   status: VoiceRoomStatus;
-  porthole_share_code: string | null;
+  relay_share_code: string | null;
   lk_ws_url: string;
   lk_tcp_port: number;
   lk_udp_start: number;
@@ -21,7 +21,7 @@ function mapRoom(r: RoomRow): VoiceRoom {
     hostId: r.host_id,
     title: r.title,
     status: r.status,
-    portholeShareCode: r.porthole_share_code,
+    relayShareCode: r.relay_share_code,
     lkWsUrl: r.lk_ws_url || "ws://127.0.0.1:7880",
     lkTcpPort: r.lk_tcp_port ?? 7880,
     lkUdpStart: r.lk_udp_start ?? 7882,
@@ -54,7 +54,7 @@ export async function createVoiceRoom(opts: {
       host_id: hostId,
       title,
       status: "open",
-      porthole_share_code: opts.shareCode,
+      relay_share_code: opts.shareCode,
       lk_ws_url: opts.wsUrl,
       lk_tcp_port: opts.tcpPort,
       lk_udp_start: opts.udpStart,
@@ -110,7 +110,7 @@ export async function setVoiceRoomShareCode(
   const { error } = await supabase
     .from(TABLE.voiceRooms)
     .update({
-      porthole_share_code: shareCode,
+      relay_share_code: shareCode,
       updated_at: new Date().toISOString(),
     })
     .eq("id", roomId);

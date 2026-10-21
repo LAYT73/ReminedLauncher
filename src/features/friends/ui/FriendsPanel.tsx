@@ -10,6 +10,7 @@ import { TitleHint } from "@/shared/ui/TitleHint";
 import { errText, useFriends } from "../model/useFriends";
 import { FriendItem, OutgoingRow, RequestRow } from "./FriendRows";
 import { FriendsSkeletonList } from "./FriendsSkeletonList";
+import { EmptyState } from "@/shared/ui/EmptyState";
 
 type Props = {
   userId: string;
@@ -150,7 +151,11 @@ export function FriendsPanel({
           <div className="friends-block">
             <h3 className="settings-heading">Online circle</h3>
             {friends.length === 0 ? (
-              <p className="friends-muted">No friends yet — send an id above.</p>
+              <EmptyState
+                kind="friends"
+                title="No friends yet"
+                description="Send a Remined id above to start your circle."
+              />
             ) : (
               <ul className="friends-list">
                 {friends.map((row) => (

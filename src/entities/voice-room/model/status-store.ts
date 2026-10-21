@@ -3,7 +3,7 @@ import { create } from "zustand";
 /** Voice state that the shell (top nav, presence) needs outside the Voice tab. */
 type VoiceStatusState = {
   inRoom: boolean;
-  /** Set when the local user is hosting an open voice room (for Porthole merge). */
+  /** Set when the local user is hosting an open voice room (for Relay merge). */
   hostRoomId: string | null;
   pendingInvites: number;
   setInRoom: (inRoom: boolean) => void;

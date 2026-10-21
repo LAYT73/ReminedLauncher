@@ -70,7 +70,7 @@ export function VoiceRoomView(props: Props) {
     children,
   } = props;
   const [inviteOpen, setInviteOpen] = useState(false);
-  const lobbyReady = Boolean(active.portholeShareCode);
+  const lobbyReady = Boolean(active.relayShareCode);
 
   return (
     <section className="section voice-panel is-room">

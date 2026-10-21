@@ -1,0 +1,56 @@
+.empty-state {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 148px;
+  max-width: 640px;
+  padding: 12px 18px 12px 10px;
+  border: 2px dashed color-mix(in srgb, var(--text-muted) 35%, transparent);
+  background: linear-gradient(90deg, var(--accent-wash), transparent 72%);
+}
+
+.empty-state-art {
+  display: block;
+  width: 168px;
+  height: 132px;
+  flex: 0 0 168px;
+  object-fit: contain;
+  object-position: center;
+  pointer-events: none;
+  user-select: none;
+}
+
+.empty-state-copy {
+  min-width: 0;
+}
+
+.empty-state-copy h4 {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+}
+
+.empty-state-copy p {
+  max-width: 250px;
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+@media (max-width: 620px) {
+  .empty-state {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px;
+  }
+
+  .empty-state-art {
+    width: 148px;
+    height: 116px;
+    flex-basis: 116px;
+  }
+}

@@ -45,6 +45,59 @@
   cursor: pointer;
   color: inherit;
   font: inherit;
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 0.14s ease,
+    border-color 0.14s ease,
+    box-shadow 0.14s ease,
+    background-color 0.14s ease;
+}
+
+.screenshot-card::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  pointer-events: none;
+  border: 1px solid transparent;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 30%, transparent),
+    transparent 48%
+  );
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+
+.screenshot-card:hover,
+.screenshot-card:focus-visible {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--bg-input) 86%, var(--accent) 14%);
+  box-shadow:
+    var(--bevel-panel),
+    0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent),
+    0 8px 20px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.screenshot-card:hover::after,
+.screenshot-card:focus-visible::after {
+  opacity: 1;
+}
+
+.screenshot-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.screenshot-card img {
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.screenshot-card:hover img,
+.screenshot-card:focus-visible img {
+  transform: scale(1.025);
+  filter: saturate(1.08) brightness(1.04);
 }
 
 .screenshot-card img,
@@ -150,8 +203,25 @@
   color: #fff;
   font-size: 36px;
   line-height: 1;
+  display: grid;
+  place-items: center;
   cursor: pointer;
   box-shadow: var(--bevel-btn);
+}
+
+.screenshot-viewer-chevron {
+  display: block;
+  width: 20px;
+  height: 28px;
+  overflow: visible;
+}
+
+.screenshot-viewer-chevron polyline {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3.5;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
 }
 
 .screenshot-viewer-nav.is-prev {

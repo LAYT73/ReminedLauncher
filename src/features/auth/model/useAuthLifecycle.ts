@@ -45,7 +45,7 @@ export function useAuthLifecycle(): void {
     const unsub = subscribeConnectivity((online) => {
       const s = useSessionStore.getState();
       if (!online) {
-        // WebRTC / Porthole ICE can briefly flip navigator.onLine when a peer
+        // WebRTC / Relay ICE can briefly flip navigator.onLine when a peer
         // joins. Debounce so we don't tear down cloud state mid-call.
         if (s.gate !== "app" || s.offlineMode || offlineTimer) return;
         offlineTimer = setTimeout(() => {

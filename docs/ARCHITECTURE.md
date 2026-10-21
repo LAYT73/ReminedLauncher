@@ -1,144 +1,170 @@
 # Architecture
 
-**Version:** `0.9.2` · **Stack:** Tauri 2 (Rust) + React 19 / Vite (TypeScript) + Supabase (Auth, Realtime, Postgres)
+**Release:** `0.9.5`
+**Stack:** Tauri 2, Rust, React 19, TypeScript, Vite, Supabase
 
-## Product surfaces
+This document describes the implementation currently in the repository. The
+source code is authoritative when this document and an implementation diverge.
 
-| Rail / tab | Role |
+## Runtime boundaries
+
+```text
+React UI
+  ├─ Zustand entity stores
+  ├─ typed Tauri command adapters
+  └─ Supabase API modules
+        │
+        ▼
+Tauri commands
+  ├─ Minecraft process and instance management
+  ├─ Java runtime and asset installation
+  ├─ Remined Relay
+  ├─ LiveKit runtime
+  └─ diagnostics, tray and updater integration
+```
+
+The frontend never manages Minecraft processes directly. Native operations are
+exposed through Tauri commands registered in
+[`src-tauri/src/lib.rs`](../src-tauri/src/lib.rs).
+
+## Frontend
+
+The frontend follows Feature-Sliced Design. Imports move only from a higher
+layer to a lower layer:
+
+```text
+app → pages → widgets → features → entities → shared
+```
+
+| Layer | Responsibility |
 |---|---|
-| Home | Brand landing, featured pack, skin preview |
-| Remined / Vanilla / Remined Vanilla | Install + Play for each edition (rail buttons) |
-| Friends | Remined id, friend requests, presence, Join |
-| Network | Steam Porthole tunnel for Open-to-LAN |
-| Voice | Local LiveKit SFU + Porthole + Supabase chat/invites |
-| Shots | Local screenshots of the active pack (pack rails only) |
-| Installations | Select / reveal / delete local pack folders |
-| Settings / Profile | Java, RAM, theme, updates · skin, username, account |
+| `app` | Boot gate, router, shell, providers and global styles |
+| `pages` | Route-level screens |
+| `widgets` | Shell blocks shared by multiple screens |
+| `features` | User actions and workflows |
+| `entities` | Domain state, API and domain UI |
+| `shared` | Configuration, native/cloud adapters, utilities and UI primitives |
 
-## Frontend (`src/`) — Feature-Sliced Design
+Each slice may contain `ui/`, `model/`, `api/`, `lib/`, `config/` and a public
+`index.ts`. Cross-slice access uses that public entry point. The repository
+check is `npm run check:fsd`.
 
-Layers, top to bottom. **Imports go only downward.**
+### Boot and navigation
 
-```
-src/
-  app/        providers (AppGate, ToastHost, shell effects), router/, global styles/
-  pages/      one slice per route screen: home, pack, installations, settings,
-              profile, friends, network, voice, screenshots, loading
-  widgets/    composite shell blocks: rail, top-nav, profile-chip, game-tray,
-              playbar, home-video, voice-host
-  features/   user actions: auth, onboarding, play-game, manage-installations,
-              profile-edit, launcher-update, game-watch, lan-hosting, presence,
-              voice, friends, network-play, screenshots
-  entities/   domain state + API: session, skin, profile, pack, game, install,
-              game-version, voice-room, friend, theme
-  shared/     config/ (constants), api/ (invoke, supabase, porthole), lib/, ui/, assets/
+`AppGate` transitions through:
+
+```text
+loading → auth → onboarding → app
 ```
 
-Slice layout: `ui/` (components), `model/` (zustand store, hooks, actions), `api/`, `lib/`, `config/`, and a public `index.ts` barrel.
+The app uses a memory router because a Tauri window has no browser address bar.
+Routes are declared in
+[`src/app/router/routes.tsx`](../src/app/router/routes.tsx) and route values are
+centralized in [`src/shared/config/routes.ts`](../src/shared/config/routes.ts).
 
-Rules (enforced by `npm run check:fsd`, which also runs in CI-style checks):
+Current rails:
 
-- A layer imports only from layers below it.
-- `pages`, `widgets`, `features` never import sibling slices of the same layer.
-- Cross-slice imports go through the slice `index.ts`; inside a slice use relative paths.
-- Pragmatic exception: an entity may import another entity through its barrel (order: session < skin < profile < game-version < game < install < pack).
-- `@/` is an alias for `src/`.
+```text
+/home
+/java
+/vanilla
+/remined-vanilla
+/installations
+/settings
+/profile
+```
 
-### Routing
+Pack rails expose `play`, `screenshots`, `friends` and `voice` tabs. The
+legacy `network` path redirects to the Network section in Settings.
 
-`app/router` uses `react-router` with `createMemoryRouter` (a Tauri window has no URL bar). Paths are built and parsed only through `shared/config/routes.ts` (`routeFor`, `parseRoute`, `RAIL`, `TAB`):
+The voice host remains mounted in the shell while navigation changes. Its
+visual placement is controlled by `VoiceSlot`; changing tabs must not destroy
+the active voice session.
 
-- `/home[/friends|network|voice]`
-- `/java|vanilla|remined-vanilla[/screenshots|friends|network|voice]`
-- `/installations`, `/settings`, `/profile`
+## Native runtime
 
-The shell is `ShellLayout`; the rail and top-nav use `NavLink`. Non-component code navigates via `shared/lib/navigator.ts` (`navigateTo`, `currentPathname`). A route-level `errorElement` catches render crashes.
-
-### State
-
-Each entity owns a `zustand` store; actions outside components use `store.getState()`. Nothing is kept in a god-component.
-
-### Constants
-
-No magic strings in feature code: Tauri commands (`CMD`), events (`EVENT`), Supabase tables/buckets (`TABLE`, `BUCKET`), localStorage keys (`STORAGE_KEY`), timings (`TIMING`), limits, and user-facing messages (`MSG`) all live in `shared/config`. Tauri calls go through the typed `call(CMD.x, args)`.
-
-Things that matter when changing code:
-
-- **Voice survives navigation.** `widgets/voice-host` renders the voice UI via `createPortal` into a detached host node; `VoiceSlot` moves it into the content area on the Voice tab. Never mount the voice view conditionally on the tab.
-- **Pack ids** are `vanilla-<ver>`, `remined-vanilla-<ver>`, anything else is a Remined (Java) pack. Use `shared/lib/packIds.ts`, never string-match.
-- **Offline mode** lives in the session store; online-only tabs render a notice page.
-- **Adding a feature:** create `features/<name>/{ui,model,index.ts}`, expose it through the barrel, mount it from a page or widget, add constants to `shared/config`, then run `npm run check:fsd`.
-- UI language: Minecraft-adjacent stone/bevel CSS, pixel display font for headings.
-
-## Backend (`src-tauri/src/`)
+The Rust application is under `src-tauri/src/`.
 
 | Module | Responsibility |
 |---|---|
-| `lib.rs` | Tauri commands, app setup (`NO_PROXY` for loopback), plugin registration |
-| `main.rs`, `bin/`, `cli.rs` | Entrypoints; `remined-cli` (second client, `smoke-rv`) |
-| `runtime.rs`, `java_runtime.rs` | Launch Minecraft; Java probe / download |
-| `pack_sync.rs` | Remined Java packs: download, sync, delete |
-| `vanilla.rs`, `vanilla_skin_pack.rs` | Official vanilla versions + local skin resource pack |
-| `remined_vanilla.rs`, `mod_audit.rs`, `skinshuffle_patch.rs` | Fabric + skins + opti stack; dependency audit/repair; SkinShuffle presets |
-| `smoke.rs` | Headless launch smoke tests for Remined Vanilla |
-| `gamewatch.rs` | `latest.log` parsing: live game status, LAN port, crash-report lookup |
-| `porthole.rs` | Steam Porthole CLI (Network Play) |
-| `voice_runtime.rs`, `voice_log.rs` | LiveKit binary download/spawn, Porthole expose for voice ports; `voice.log` |
-| `diag.rs` | Panic hook, `app.log`, poison-tolerant session locks |
-| `onboarding.rs`, `progress.rs`, `asset_cache.rs` | First-run setup, `remined-progress` events, media cache |
-| `instance.rs`, `paths.rs`, `config.rs` | Install roots, profile.json |
+| `lib.rs` | Tauri setup, command registration and shared state |
+| `runtime.rs`, `gamewatch.rs` | Minecraft launch, process state and log parsing |
+| `java_runtime.rs` | Java discovery and runtime downloads |
+| `instance.rs`, `paths.rs`, `config.rs` | Install roots and local configuration |
+| `pack_sync.rs`, `vanilla.rs` | Cloud packs and official vanilla versions |
+| `remined_vanilla.rs`, `mod_audit.rs` | Fabric stack resolution and compatibility |
+| `skinshuffle_patch.rs`, `vanilla_skin_pack.rs` | Skin integration and local resources |
+| `relay.rs` | Remined Relay client, host/visitor sessions and share codes |
+| `voice_runtime.rs`, `voice_log.rs` | LiveKit download, startup and diagnostics |
+| `onboarding.rs`, `progress.rs`, `asset_cache.rs` | First run, progress events and media cache |
+| `diag.rs`, `net_log.rs` | Application and network diagnostics |
+| `tray.rs`, `cli.rs`, `smoke.rs` | Tray integration, CLI and smoke harness |
 
-Data root (macOS): `~/Library/Application Support/com.remined.launcher/remined/`
+The native data root is platform-specific. On macOS:
 
-Tauri plugins in use: dialog, updater, process, opener, http, global-shortcut (push-to-talk).
-
-## Cloud (Supabase)
-
-Migrations in `supabase/migrations/` (apply in order):
-
-| File | Adds |
-|---|---|
-| `001_profiles_friends` | Profiles, friendships |
-| `002_packs_catalog`, `002b_packs_seed` | Packs catalog + seed |
-| `003_remined_id_skins`, `004_username`, `007_skin_model` | Remined id, skins, username, skin model |
-| `005_sessions_lan`, `006_sessions_share_code` | Presence sessions, LAN hosting, share code |
-| `008_voice_rooms`, `009_voice_rooms_rls_fix` | Voice rooms, members, invites, messages + RLS |
-| `010_sessions_voice` | `sessions.in_voice` (the client falls back silently if missing) |
-
-## Networking model
-
-```
-Minecraft Open-to-LAN ──► Porthole expose ──► friend: porthole connect ──► 127.0.0.1:port
-LiveKit (ws localhost:7880 + UDP RTC) ──► Porthole expose ──► guest connect ──► LiveKit client
+```text
+~/Library/Application Support/com.remined.launcher/remined/
 ```
 
-Network Play and Voice both need **Steam logged in + Porthole installed**.
+## Cloud contract
 
-## Logs
+Supabase provides authentication, profiles, friendship, presence, pack
+catalog, voice-room metadata, chat, invitations, storage and playtime.
 
-| Area | Where |
+Migrations are applied in filename order:
+
+| Migration | Scope |
 |---|---|
-| Launcher panics / startup | `<root>/.remined/logs/app.log` |
-| Voice (UI + Rust + ICE) | `<root>/.remined/voice/voice.log` |
-| Game | instance `logs/latest.log` |
-| Remined Vanilla mods | `mods-manifest.json` in each install |
+| `001`–`007` | Profiles, friends, packs, IDs, usernames, LAN and skins |
+| `008`–`010` | Voice rooms, RLS and voice presence |
+| `011`–`013` | Playtime and RPC correction |
+| `014` | Cape storage and profile metadata |
+| `015` | Voice Relay share-code column |
+
+The client must tolerate offline mode and older deployments where optional
+columns are not present. Credentials are supplied through `.env.local` during
+development and GitHub Actions secrets during release builds.
+
+## Networking
+
+Minecraft Open-to-LAN uses the Remined Relay:
+
+```text
+Minecraft LAN → Relay host → Relay visitor → localhost
+```
+
+Voice uses the Remined Relay:
+
+```text
+Local LiveKit → Relay host → Relay visitor → localhost LiveKit
+```
+
+The voice runtime uses TCP `7880`, TCP `7881` and UDP `7882`. A LAN game port
+may be attached to the same relay session without restarting LiveKit.
+
+## Operational surfaces
+
+| Area | Location |
+|---|---|
+| Launcher startup and panics | `<root>/.remined/logs/app.log` |
+| Voice and relay | `<root>/.remined/voice/voice.log` |
+| Game state | `<instance>/logs/latest.log` |
+| Installed mod inventory | `<instance>/mods-manifest.json` |
 
 ## Verification
 
 ```bash
-npm run typecheck                     # types
-npm run check:fsd                     # FSD layer/slice import rules
-npm run build                         # tsc -b + vite build
+npm run typecheck
+npm run check:fsd
+npm run build
 cargo test --lib --manifest-path src-tauri/Cargo.toml
-cargo run --manifest-path src-tauri/Cargo.toml --bin remined-cli -- smoke-rv   # see REMINED_VANILLA.md
+cargo run --manifest-path src-tauri/Cargo.toml --bin remined-cli -- smoke-rv
 ```
 
-## Docs index
+## Related documents
 
-- [SETUP.md](./SETUP.md) — repos, Supabase, packs repo hygiene
-- [RELEASE.md](./RELEASE.md) — version bump, tag, CI, updater
-- [PACK_ASSETS.md](./PACK_ASSETS.md) — pack logo / wallpaper / gallery
-- [PORTHOLE.md](./PORTHOLE.md) — Network Play
-- [VOICE.md](./VOICE.md) — voice rooms
-- [REMINED_VANILLA.md](./REMINED_VANILLA.md) — mod stacks, compatibility, smoke matrix
-- [ROADMAP_IMMERSIVE.md](./ROADMAP_IMMERSIVE.md) — shipped and backlog ideas
+- [Setup](./SETUP.md)
+- [Release](./RELEASE.md)
+- [Pack assets](./PACK_ASSETS.md)
+- [Voice](./VOICE.md)
+- [Remined Vanilla](./REMINED_VANILLA.md)

@@ -1,6 +1,6 @@
-# Pack marketing assets
+# Pack catalog assets
 
-Static images for a pack live in **ReminedPacks** (not in the launcher bundle):
+Pack presentation assets live in **ReminedPacks**, not in the launcher bundle:
 
 ```
 assets/<pack_id>/
@@ -15,10 +15,11 @@ Public URL pattern:
 https://raw.githubusercontent.com/LAYT73/ReminedPacks/main/assets/<pack_id>/…
 ```
 
-Then set on the Supabase `packs` row:
+Set the corresponding fields on the Supabase `packs` row:
 
 - `logo_url`
 - `wallpaper_url`
 - `gallery` (jsonb array of URLs)
 
-The launcher only reads these fields — no local gallery/logo imports.
+The launcher reads these URLs from the catalog. It does not import pack
+marketing media from the application repository.

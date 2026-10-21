@@ -18,7 +18,7 @@ export function VoiceHost() {
   const { setInRoom, setPendingInvites } = useVoiceStatusStore.getState();
 
   // Never gate on offlineMode: a brief navigator.onLine blip (common when a
-  // peer joins via WebRTC/Porthole) used to unmount this portal, disconnect
+  // peer joins via WebRTC/Relay) used to unmount this portal, disconnect
   // LiveKit, and look like a full launcher reload.
   if (!userId) return null;
   return createPortal(

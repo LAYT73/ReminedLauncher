@@ -8,6 +8,19 @@ import { TitleHint } from "@/shared/ui/TitleHint";
 
 type Row = { name: string; path: string; modified_ms: number; size: number };
 
+function ViewerChevron({ direction }: { direction: "prev" | "next" }) {
+  const points = direction === "prev" ? "13 3 5 14 13 25" : "7 3 15 14 7 25";
+  return (
+    <svg
+      className="screenshot-viewer-chevron"
+      viewBox="0 0 20 28"
+      aria-hidden
+    >
+      <polyline points={points} />
+    </svg>
+  );
+}
+
 type Props = {
   packId: string | null;
   /** False when the pack folder is not on disk yet. */
@@ -226,7 +239,7 @@ export function ScreenshotsPanel({
                       )
                     }
                   >
-                    ‹
+                    <ViewerChevron direction="prev" />
                   </button>
                 ) : null}
 
@@ -252,7 +265,7 @@ export function ScreenshotsPanel({
                       )
                     }
                   >
-                    ›
+                    <ViewerChevron direction="next" />
                   </button>
                 ) : null}
               </div>
@@ -268,22 +281,12 @@ export function ScreenshotsPanel({
                   <span>{new Date(openRow.modified_ms).toLocaleString()}</span>
                 </div>
                 <div className="screenshot-actions">
-                  <button
-                    type="button"
-                    className="btn-mc dim"
+                  <FolderIconBtn
+                    title="Show file"
                     onClick={() => {
                       void revealItemInDir(openRow.path).catch(() => undefined);
                     }}
-                  >
-                    Show file
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-mc dim"
-                    onClick={() => setIndex(null)}
-                  >
-                    Close
-                  </button>
+                  />
                 </div>
               </div>
             </div>,

@@ -13,8 +13,8 @@ export const MSG = {
     friends: "Friends need an internet connection. You’re in offline mode.",
     friendsSignedOut: "Sign in to see friends.",
     network:
-      "Network Play needs internet and Steam. You’re in offline mode — local worlds still work from Play.",
-    voice: "Voice rooms need internet and Steam. You're in offline mode.",
+      "Network Play needs internet. You’re in offline mode — local worlds still work from Play.",
+    voice: "Voice rooms need an internet connection. You're in offline mode.",
     voiceSignedOut: "Sign in to use voice rooms.",
     chipHint:
       "You’re offline — cached account & packs only. Friends, skins, and updates need internet.",
@@ -66,7 +66,7 @@ export const MSG = {
     joined: "Joined — connecting in Minecraft",
     usernameLength: "3–16 characters",
     connectingNetwork: "Connecting Network Play…",
-    installPorthole: "Install Porthole from Network Play first",
+    installRelay: "Install the Relay client from Network Play first",
     joining: (name: string) => `Joining ${name}…`,
     crashed: (summary: string) => `Minecraft crashed: ${summary}`,
   },
@@ -74,7 +74,7 @@ export const MSG = {
     openingTunnel: "Opening Network Play tunnel…",
     hostingStopped: "Hosting stopped",
     hosting: "Hosting — friends can Join you now",
-    startFailed: "Could not start Network Play — check Steam + Porthole",
+    startFailed: "Could not start Network Play — check the Relay client",
   },
   profile: {
     usernameUpdated: "Username updated",
@@ -100,7 +100,7 @@ export const MSG = {
   voice: {
     connectingVoice: "Connecting voice…",
     startingServer: "Starting voice server…",
-    openingPorthole: "Opening Remined Relay…",
+    openingRelay: "Opening Remined Relay…",
     copiedShareCode: "Copied share code",
     mute: "Mute microphone",
     unmute: "Unmute microphone",

@@ -5,7 +5,7 @@ import { useGameStore } from "@/entities/game";
 import { useSessionStore } from "@/entities/session";
 import { useVoiceStatusStore } from "@/entities/voice-room";
 
-/** Porthole / Network Play setup — lives in Settings instead of a top tab. */
+/** Remined Relay / Network Play setup. */
 export function NetworkSection() {
   const offlineMode = useSessionStore((s) => s.offlineMode);
   const hostingLan = useGameStore((s) => s.hostingLan);

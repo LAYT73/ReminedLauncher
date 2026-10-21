@@ -1,39 +1,109 @@
-# Setup notes
+# Development setup
 
 ## Repositories
 
 - Launcher: <https://github.com/LAYT73/ReminedLauncher>
-- Packs: <https://github.com/LAYT73/ReminedPacks> (see [PACK_ASSETS.md](./PACK_ASSETS.md))
+- Packs: <https://github.com/LAYT73/ReminedPacks>
+
+## Local prerequisites
+
+Install Node.js, Rust through `rustup`, and Java 25. On macOS:
+
+```bash
+brew install openjdk@25
+rustup update stable
+```
+
+Install dependencies and start the desktop app:
+
+```bash
+npm install
+npm run tauri dev
+```
+
+Use `npm run tauri:dev:offline` to exercise the cached-account path without
+making online requests.
 
 ## Environment
 
-Copy the Supabase URL and the publishable **anon** key into `.env.local` (gitignored):
+Create `.env.local` in the repository root:
 
-```
-VITE_SUPABASE_URL=…
-VITE_SUPABASE_ANON_KEY=…
+```dotenv
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-publishable-anon-key
 ```
 
-Never commit keys or `.remined-secrets/`.
+Only the publishable anon key belongs in the client environment. Keep service
+role keys, relay credentials and updater signing keys outside the repository.
 
 ## Supabase
 
-- Auth: email/password with **email confirmation off** (Dashboard → Authentication → Providers → Email).
-- Apply `supabase/migrations/` in order (list in [ARCHITECTURE.md](./ARCHITECTURE.md#cloud-supabase)). Network Play needs `005`/`006`, Voice needs `008`/`009`, and voice presence needs `010`.
+Apply every file in `supabase/migrations/` in lexical order. The current
+sequence ends at `015_voice_relay_share_code.sql`.
 
-## Network Play
+Required product configuration:
 
-Free Steam app `4963920` (Porthole) — see [PORTHOLE.md](./PORTHOLE.md).
+- Email/password authentication with email confirmation disabled for the
+  current onboarding flow.
+- `skins` storage bucket for skin and cape objects.
+- `relay-creds` Edge Function backed by the relay secrets described in
+  [Release](./RELEASE.md).
 
-## Keeping the packs repo clean
+Feature dependencies:
 
-When importing a pack folder into ReminedPacks, **keep**:
+| Feature | Migrations |
+|---|---|
+| Friends and LAN presence | `001`, `005`, `006` |
+| Voice rooms and presence | `008`, `009`, `010` |
+| Playtime | `011`, `012`, `013` |
+| Cape upload | `014` |
+| Voice Relay share code | `015` |
 
-- `mods/`, `config/`, `defaultconfigs/` (if present), `data/`
-- `resourcepacks/`, `shaderpacks/`
-- `options.txt` (+ graphics / keybind settings)
-- pack-specific folders and the pack jar/json (e.g. `VanillaPro.jar`, `VanillaPro.json`, `Notebook/`, `bivrik/`, `frozenlib/`)
+## Pack repository hygiene
 
-**Remove** (runtime or personal data): `saves/`, `screenshots/`, `logs/`, `crash-reports/`, `natives/`, `.cache/`, `.mixin.out/`, `.fabric/`, `usercache.json`, `TLauncherAdditional.json`, and empty temp folders (`downloads/`, `resourcify-temp/`, `server-resource-packs/`).
+The launcher downloads runtime assets during onboarding. The packs repository
+should contain pack content, not a user profile or a generated game directory.
 
-`.run/` assets and libraries are not stored in the packs repo — the launcher's onboarding downloads them.
+Keep pack-owned content such as:
+
+```text
+mods/
+config/
+defaultconfigs/
+data/
+resourcepacks/
+shaderpacks/
+options.txt
+<pack-specific folders and metadata>
+```
+
+Do not publish:
+
+```text
+saves/
+screenshots/
+logs/
+crash-reports/
+natives/
+.cache/
+.mixin.out/
+.fabric/
+usercache.json
+TLauncherAdditional.json
+downloads/
+resourcify-temp/
+server-resource-packs/
+.run/
+```
+
+Marketing assets and their catalog fields are documented in
+[Pack assets](./PACK_ASSETS.md).
+
+## Verification
+
+```bash
+npm run typecheck
+npm run check:fsd
+npm run build
+cargo test --lib --manifest-path src-tauri/Cargo.toml
+```

@@ -15,7 +15,7 @@ import {
   voiceGuestConnect,
   voiceGuestDisconnect,
   voiceStartLivekit,
-  voiceStartPorthole,
+  voiceStartRelay,
 } from "../api/voiceNative";
 import { VoiceSession, type VoiceVideoTile } from "../lib/voiceSession";
 import { errorMessage, type ToastFn } from "./types";
@@ -195,9 +195,9 @@ export function useLiveSession({
         if (!asGuest) hostRoomRef.current = liveRoom;
         if (asGuest) {
           guestRoomRef.current = liveRoom;
-          const portholeAttempts = 3;
-          let portholeErr: unknown;
-          for (let i = 0; i < portholeAttempts; i++) {
+          const relayAttempts = 3;
+          let relayErr: unknown;
+          for (let i = 0; i < relayAttempts; i++) {
             const fresh =
               i === 0
                 ? liveRoom
@@ -207,24 +207,24 @@ export function useLiveSession({
             const pendingCode = pendingShareCodeRef.current;
             pendingShareCodeRef.current = null;
             const code =
-              pendingCode?.trim() || fresh.portholeShareCode?.trim() || "";
+              pendingCode?.trim() || fresh.relayShareCode?.trim() || "";
             if (!code) {
-              portholeErr = new Error(
+              relayErr = new Error(
                 "Room has no share code yet — ask the host to wait for the lobby code",
               );
-              if (i < portholeAttempts - 1) {
+              if (i < relayAttempts - 1) {
                 setStatus("Waiting for host lobby code…");
                 await new Promise((r) => setTimeout(r, 800));
                 continue;
               }
-              throw portholeErr;
+              throw relayErr;
             }
-            liveRoom = { ...fresh, portholeShareCode: code };
+            liveRoom = { ...fresh, relayShareCode: code };
             guestRoomRef.current = liveRoom;
             connectingCodeRef.current = code;
             if (i > 0) {
               setStatus(
-                `Connecting Relay… (retry ${i + 1}/${portholeAttempts})`,
+                `Connecting Relay… (retry ${i + 1}/${relayAttempts})`,
               );
               await new Promise((r) => setTimeout(r, 600 * i));
             }
@@ -232,18 +232,18 @@ export function useLiveSession({
               // Drop a stale join tunnel before binding the new key.
               await voiceGuestDisconnect().catch(() => undefined);
               await voiceGuestConnect(code);
-              portholeErr = null;
+              relayErr = null;
               break;
             } catch (err) {
-              portholeErr = err;
+              relayErr = err;
               connectingCodeRef.current = null;
               void netLog(
                 "ui",
-                `voice guest porthole try=${i + 1} FAILED: ${errorMessage(err)}`,
+                `voice guest relay try=${i + 1} FAILED: ${errorMessage(err)}`,
               );
             }
           }
-          if (portholeErr) throw portholeErr;
+          if (relayErr) throw relayErr;
           // Brief settle — WS can race the bind even after TCP accept.
           await new Promise((r) => setTimeout(r, 250));
           setStatus(MSG.voice.connectingVoice);
@@ -468,7 +468,7 @@ export function useLiveSession({
           if (!fresh) return;
           const room = { ...base, ...fresh };
           guestRoomRef.current = room;
-          const code = room.portholeShareCode?.trim();
+          const code = room.relayShareCode?.trim();
           if (!code) {
             lastErr = new Error("no lobby:<id> from host yet");
             continue;
@@ -543,10 +543,10 @@ export function useLiveSession({
           const liveLan = useGameStore.getState().hostingLan?.gamePort ?? null;
           const lanPort =
             typeof liveLan === "number" && liveLan >= 1024 ? liveLan : null;
-          const ready = await voiceStartPorthole(lanPort);
+          const ready = await voiceStartRelay(lanPort);
           const key = ready.share_code?.trim();
           if (key) {
-            hostRoomRef.current = { ...base, portholeShareCode: key };
+            hostRoomRef.current = { ...base, relayShareCode: key };
             await setVoiceRoomShareCode(base.id, key).catch(() => undefined);
             shareRepublishRef.current?.(base.id, key);
           }
@@ -584,7 +584,7 @@ export function useLiveSession({
     (room: VoiceRoom, shareCode: string | null) => {
       const code = shareCode?.trim();
       if (!code) return;
-      guestRoomRef.current = { ...room, portholeShareCode: code };
+      guestRoomRef.current = { ...room, relayShareCode: code };
       // Same code we already joined or are joining — ignore Realtime echo.
       if (code === joinedCodeRef.current || code === connectingCodeRef.current) {
         return;

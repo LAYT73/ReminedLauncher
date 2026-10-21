@@ -35,7 +35,7 @@ export function VoicePanel({
     onHostShareCodeRepublished: (roomId, shareCode) => {
       room.setActive((prev) =>
         prev && prev.id === roomId
-          ? { ...prev, portholeShareCode: shareCode }
+          ? { ...prev, relayShareCode: shareCode }
           : prev,
       );
     },

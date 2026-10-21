@@ -1,7 +1,6 @@
-//! Local LiveKit server + JWT for Remined voice rooms (tunneled via Porthole).
+//! Local LiveKit server + JWT for Remined voice rooms (tunneled via Relay).
 
 use crate::paths;
-use crate::porthole::{self, PortholeState};
 use crate::relay::{self, RelayState};
 use crate::voice_log;
 use chrono::{Duration, Utc};
@@ -392,7 +391,7 @@ pub fn ensure_runtime(app: &AppHandle) -> Result<PathBuf, String> {
 
 fn write_config(dir: &Path) -> Result<PathBuf, String> {
     let path = dir.join("livekit.yaml");
-    // Loopback-only SFU for host WebView + Porthole tunnel.
+    // Loopback-only SFU for host WebView + Relay tunnel.
     // `enable_loopback_candidate` is required: without it, `ips/interfaces`
     // filters that only leave 127.0.0.1 produce ZERO server ICE candidates
     // (voice fails even with VPN off — only the client's LAN IP appears).
@@ -583,31 +582,7 @@ pub fn start_host_server(app: &AppHandle, state: &VoiceRuntimeState) -> Result<(
     Ok(())
 }
 
-/// Voice LiveKit ports, optionally merged with an Open-to-LAN TCP port so one
-/// Steam lobby can carry both voice and Network Play.
-/// Each UDP port must be listed (ranges like `udp/127.0.0.1:7881-7890` are rejected).
-pub fn porthole_backends_with_lan(lan_port: Option<u16>) -> String {
-    let mut parts = vec![
-        format!("tcp/127.0.0.1:{LK_TCP_PORT}"),
-        format!("tcp/127.0.0.1:{LK_RTC_TCP_PORT}"),
-    ];
-    for port in LK_UDP_START..=LK_UDP_END {
-        parts.push(format!("udp/127.0.0.1:{port}"));
-    }
-    if let Some(port) = lan_port.filter(|p| *p > 0) {
-        parts.push(format!("tcp/127.0.0.1:{port}"));
-    }
-    parts.join(",")
-}
-
-/// Guest `--auto-approve-ports` accepts TCP lists + UDP ranges.
-pub fn porthole_approve() -> String {
-    format!(
-        "tcp/{LK_TCP_PORT},tcp/{LK_RTC_TCP_PORT},udp/{LK_UDP_START}-{LK_UDP_END}"
-    )
-}
-
-/// Start local LiveKit only (no Porthole). Host WebRTC should connect before expose.
+/// Start local LiveKit only. Host WebRTC should connect before Relay expose.
 pub fn start_voice_livekit(app: &AppHandle, voice: &VoiceRuntimeState) -> Result<VoiceHostReady, String> {
     match start_host_server(app, voice) {
         Ok(()) => {
@@ -618,7 +593,6 @@ pub fn start_voice_livekit(app: &AppHandle, voice: &VoiceRuntimeState) -> Result
                     "LiveKit up ws=127.0.0.1:{LK_TCP_PORT} rtc_tcp={LK_RTC_TCP_PORT} udp={LK_UDP_START}-{LK_UDP_END}"
                 ),
             );
-            // Prefer 127.0.0.1 — Porthole binds loopback IPv4; `localhost` can resolve to ::1.
             Ok(VoiceHostReady {
                 share_code: String::new(),
                 ws_url: format!("ws://127.0.0.1:{LK_TCP_PORT}"),
@@ -637,7 +611,7 @@ pub fn start_voice_livekit(app: &AppHandle, voice: &VoiceRuntimeState) -> Result
 /// Expose LiveKit over Relay after the host has joined locally.
 /// When `lan_port` is set (Relay-only network mode), reserve that Open-to-LAN
 /// TCP port so voice→LAN needs no lobby rebuild.
-pub fn start_voice_porthole(
+pub fn start_voice_relay(
     app: AppHandle,
     relay: RelayState,
     lan_port: Option<u16>,
@@ -683,66 +657,32 @@ pub fn start_voice_host(
     relay: RelayState,
 ) -> Result<VoiceHostReady, String> {
     start_voice_livekit(&app, &voice)?;
-    start_voice_porthole(app, relay, None)
+    start_voice_relay(app, relay, None)
 }
 
 /// Stop LiveKit. Relay stops unless `keep_relay` (LAN still using the shared session).
-/// Hybrid: if `keep_lan_port` is set and Relay is stopped, re-expose LAN on Porthole.
 pub fn stop_voice_host(
     app: &AppHandle,
     voice: &VoiceRuntimeState,
-    porthole: &PortholeState,
     relay: &RelayState,
     keep_lan_port: Option<u16>,
     keep_relay: bool,
-) -> Option<porthole::PortholeHostInfo> {
+) {
     stop_host(voice);
     let lan = keep_lan_port.filter(|p| *p > 0);
     if keep_relay {
-        let key = relay::current_host_key(relay);
         voice_log::append_ok(
             app,
             "relay",
-            &format!("voice stopped — keeping Relay host key={}", key.as_deref().unwrap_or("-")),
+            &format!(
+                "voice stopped — keeping Relay host lan={}",
+                lan.map(|p| p.to_string()).unwrap_or_else(|| "-".into())
+            ),
         );
-        if let (Some(key), Some(port)) = (key, lan) {
-            return Some(porthole::PortholeHostInfo {
-                share_code: key,
-                port,
-                lan_port: Some(port),
-            });
-        }
-        return None;
+        return;
     }
     relay::stop_host(app, relay);
-    if let Some(port) = lan {
-        if let Some(live) = porthole::current_host(porthole) {
-            if live.lan_port == Some(port) || live.port == port {
-                return Some(live);
-            }
-        }
-        voice_log::append_ok(
-            app,
-            "porthole",
-            &format!("voice stopped — ensuring LAN expose on {port}"),
-        );
-        match porthole::start_host(app.clone(), porthole.clone(), port) {
-            Ok(info) => {
-                voice_log::append_ok(
-                    app,
-                    "porthole",
-                    &format!("LAN lobby ready code={}", info.share_code),
-                );
-                Some(info)
-            }
-            Err(e) => {
-                voice_log::append_ok(app, "porthole", &format!("LAN restore FAILED: {e}"));
-                None
-            }
-        }
-    } else {
-        None
-    }
+    let _ = lan;
 }
 
 pub fn guest_connect(
@@ -752,13 +692,6 @@ pub fn guest_connect(
 ) -> Result<(), String> {
     voice_log::append_ok(&app, "relay", &format!("guest join key={share_code}"));
     relay::start_voice_join(&app, &relay, share_code)?;
-    if !porthole::wait_port_listening(LK_RTC_TCP_PORT, StdDuration::from_secs(4)) {
-        voice_log::append_ok(
-            &app,
-            "relay",
-            &format!("guest: rtc tcp {LK_RTC_TCP_PORT} not open yet (continuing)"),
-        );
-    }
     Ok(())
 }
 

@@ -15,7 +15,7 @@ export type Profile = {
   java_path: string | null;
   jvm_args: string;
   theme: ThemeId;
-  /** Desktop Steam-like friend play toasts. */
+  /** Desktop friend play toasts. */
   friend_toasts: boolean;
   /** Always Remined Relay (`relay` id kept for profile JSON compat). */
   network_mode: NetworkMode;
