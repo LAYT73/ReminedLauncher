@@ -319,7 +319,7 @@ export class VoiceSession {
           // Remote MST often starts muted until the first frame — refresh then too.
           this.watchRemoteVideoMedia(trackRemote.mediaStreamTrack);
           this.cbs.onVideo?.();
-          voidMicrotask(() => this.cbs.onVideo?.());
+          queueMicrotask(() => this.cbs.onVideo?.());
           setTimeout(() => this.cbs.onVideo?.(), 80);
           setTimeout(() => this.cbs.onVideo?.(), 400);
           return;
