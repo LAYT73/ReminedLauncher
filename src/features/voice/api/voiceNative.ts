@@ -45,8 +45,8 @@ export async function voiceStartLivekit(): Promise<VoiceHostReady> {
   return call<VoiceHostReady>(CMD.voiceStartLivekit);
 }
 
-/** Unlim tunnel for voice — call after host has joined LiveKit locally.
- *  Pass `lanPort` in Unlim-only mode to pre-reserve Open-to-LAN. */
+/** Relay tunnel for voice — call after host has joined LiveKit locally.
+ *  Pass `lanPort` in Relay-only mode to pre-reserve Open-to-LAN. */
 export async function voiceStartPorthole(
   lanPort?: number | null,
 ): Promise<VoiceHostReady> {
@@ -60,14 +60,14 @@ export async function voiceStartHost(): Promise<VoiceHostReady> {
 }
 
 /** Stop LiveKit. `keepLanPort` restores Porthole LAN (hybrid).
- *  `keepUnlim` leaves the shared Unlim host running (Unlim-only + LAN). */
+ *  `keepRelay` leaves the shared Relay host running (Relay-only + LAN). */
 export async function voiceStopHost(
   keepLanPort?: number | null,
-  keepUnlim = false,
+  keepRelay = false,
 ): Promise<{ share_code: string; port: number } | null> {
   return call<{ share_code: string; port: number } | null>(CMD.voiceStopHost, {
     keepLanPort: keepLanPort && keepLanPort > 0 ? keepLanPort : null,
-    keepUnlim,
+    keepRelay,
   });
 }
 

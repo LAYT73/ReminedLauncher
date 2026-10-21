@@ -1,12 +1,11 @@
 import { create } from "zustand";
 import { netLog } from "@/shared/api/netLog";
-import { portholeStatus, portholeStopGameJoin } from "@/shared/api/porthole";
 import {
-  decodeUnlimShareCode,
-  looksLikeUnlimKey,
-  unlimStatus,
-  unlimStopGameJoin,
-} from "@/shared/api/unlim";
+  decodeRelayShareCode,
+  looksLikeRelayKey,
+  relayStatus,
+  relayStopGameJoin,
+} from "@/shared/api/relay";
 import { MSG } from "@/shared/config/messages";
 import { RAIL } from "@/shared/config/routes";
 import { navigateTo } from "@/shared/lib/navigator";
@@ -31,7 +30,6 @@ export async function joinFriendSession(row: FriendRow): Promise<void> {
   useJoiningFriend.setState({ id: row.friendshipId });
   toast(MSG.launch.joining(row.profile.username));
   setStatus(MSG.launch.connectingNetwork);
-  let usedUnlim = false;
   try {
     // Friends list can lag a re-Open-to-LAN — pull live lobby:<id> + port.
     const live = await fetchFriendHosting(row.profile.id).catch(() => null);
@@ -44,49 +42,37 @@ export async function joinFriendSession(row: FriendRow): Promise<void> {
       );
     }
 
-    const unlimKey = decodeUnlimShareCode(shareCode);
-    usedUnlim = unlimKey != null || looksLikeUnlimKey(shareCode);
-    if (usedUnlim) {
-      const st = await unlimStatus();
-      if (!st.installed) {
-        void netLog("ui", `Join aborted: Unlim not installed (${st.message})`);
-        setStatus(st.message, "error");
-        toast(MSG.voice.installUnlim);
-        navigateTo(`/${RAIL.settings}#network`);
-        return;
-      }
-    } else {
-      const st = await portholeStatus();
-      if (!st.installed) {
-        void netLog("ui", `Join aborted: Porthole not installed (${st.message})`);
-        setStatus(st.message, "error");
-        toast(MSG.launch.installPorthole);
-        navigateTo(`/${RAIL.settings}#network`);
-        return;
-      }
+    const relayKey = decodeRelayShareCode(shareCode);
+    if (relayKey == null && !looksLikeRelayKey(shareCode)) {
+      throw new Error(
+        "This host is on an old Porthole lobby — ask them to update Remined and Open to LAN again",
+      );
     }
 
-    const tunnelCode = unlimKey ?? shareCode;
+    const st = await relayStatus();
+    if (!st.installed) {
+      void netLog("ui", `Join aborted: Relay not installed (${st.message})`);
+      setStatus(st.message, "error");
+      toast(MSG.voice.installRelay);
+      navigateTo(`/${RAIL.settings}#network`);
+      return;
+    }
+
+    const tunnelCode = relayKey ?? shareCode;
     void netLog(
       "ui",
-      `Join friend=${row.profile.username} pack=${packId} code=${shareCode} port=${port} tunnel=${usedUnlim ? "unlim" : "porthole"}${live ? " (fresh)" : " (cached)"}`,
+      `Join friend=${row.profile.username} pack=${packId} code=${shareCode} port=${port} tunnel=relay${live ? " (fresh)" : " (cached)"}`,
     );
     await launchWithOpts({
       packId,
       quickPlay: `127.0.0.1:${port}`,
-      ...(usedUnlim
-        ? { unlimJoin: { shareCode: tunnelCode, port } }
-        : { portholeJoin: { shareCode, port } }),
+      relayJoin: { shareCode: tunnelCode, port },
     });
     void netLog("ui", `Join launch issued quickPlay=127.0.0.1:${port}`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     void netLog("ui", `Join FAILED: ${msg}`);
-    if (usedUnlim) {
-      void unlimStopGameJoin().catch(() => undefined);
-    } else {
-      void portholeStopGameJoin().catch(() => undefined);
-    }
+    void relayStopGameJoin().catch(() => undefined);
     setStatus(msg, "error");
     useGameStore.getState().setPhase("idle");
   } finally {

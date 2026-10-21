@@ -56,7 +56,7 @@ export function VoiceLobby({
     <section className="section voice-panel is-lobby">
       <TitleHint
         title="Voice"
-        hint="Host a room on your PC, invite friends over Unlim, keep chat in Remined."
+        hint="Host a room on your PC, invite friends over Remined Relay, keep chat in Remined."
         end={
           status ? (
             <div className="network-status-badges" aria-live="polite">
@@ -70,8 +70,8 @@ export function VoiceLobby({
         }
       />
 
-      <InfoNote id="voice.unlim-setup">
-        Needs Unlim installed (Settings → Network). Friends join via invite —
+      <InfoNote id="voice.relay-setup">
+        Needs Remined Relay (Settings → Network → Check). Friends join via invite —
         they do not need your public IP.
         {onOpenNetworkPlay ? (
           <>

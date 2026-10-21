@@ -9,7 +9,7 @@ import {
 } from "@/entities/voice-room";
 import { netLog } from "@/shared/api/netLog";
 import { setVoiceRoomShareCode } from "@/entities/voice-room";
-import { useProfileStore } from "@/entities/profile";
+import { useGameStore } from "@/entities/game";
 import {
   voiceGuestConnect,
   voiceGuestDisconnect,
@@ -20,7 +20,7 @@ import { VoiceSession, type VoiceVideoTile } from "../lib/voiceSession";
 import { errorMessage, type ToastFn } from "./types";
 import { MSG } from "@/shared/config/messages";
 
-/** Long enough to cover guest Unlim/LiveKit reconnect after host opens LAN. */
+/** Long enough to cover guest Relay/LiveKit reconnect after host opens LAN. */
 const REMOTE_LEAVE_GRACE_MS = 25_000;
 const RECONNECT_GRACE_MS = 2000;
 const RECONNECT_TRIES = 6;
@@ -157,7 +157,7 @@ export function useLiveSession({
       intentionalLeaveRef.current = false;
       connectingRef.current = true;
       roleRef.current = asGuest ? "guest" : "host";
-      setStatus(asGuest ? "Connecting Unlim…" : MSG.voice.connectingVoice);
+      setStatus(asGuest ? "Connecting Relay…" : MSG.voice.connectingVoice);
       let liveRoom = room;
       try {
         if (!asGuest) hostRoomRef.current = liveRoom;
@@ -192,7 +192,7 @@ export function useLiveSession({
             connectingCodeRef.current = code;
             if (i > 0) {
               setStatus(
-                `Connecting Unlim… (retry ${i + 1}/${portholeAttempts})`,
+                `Connecting Relay… (retry ${i + 1}/${portholeAttempts})`,
               );
               await new Promise((r) => setTimeout(r, 600 * i));
             }
@@ -260,12 +260,12 @@ export function useLiveSession({
             joinedCodeRef.current = null;
             sessionRef.current = null;
             // reconnectGuest/Host own this disconnect — keep Supabase membership
-            // so chat + member list survive Unlim/LAN tunnel rebuilds.
+            // so chat + member list survive Relay/LAN tunnel rebuilds.
             if (reconnectingRef.current) {
               return;
             }
             if (!intentionalLeaveRef.current) {
-              // Dev HMR / LiveKit blip / Unlim drop — auto-heal instead of
+              // Dev HMR / LiveKit blip / Relay drop — auto-heal instead of
               // stranding the host on "try Leave, then Create again".
               setStatus(
                 asGuest
@@ -452,7 +452,7 @@ export function useLiveSession({
     [connect, onToast],
   );
 
-  /** Host: restart LiveKit (+ Unlim if needed) after unexpected drop / tauri rebuild. */
+  /** Host: restart LiveKit (+ Relay if needed) after unexpected drop / tauri rebuild. */
   const reconnectHost = useCallback(async () => {
     if (reconnectingRef.current) return;
     const base = hostRoomRef.current;
@@ -480,13 +480,9 @@ export function useLiveSession({
         try {
           await voiceStartLivekit();
           await connect(base, false);
-          const profile = useProfileStore.getState().profile;
+          const liveLan = useGameStore.getState().hostingLan?.gamePort ?? null;
           const lanPort =
-            profile.network_mode !== "hybrid" &&
-            typeof profile.lan_port === "number" &&
-            profile.lan_port >= 1024
-              ? profile.lan_port
-              : null;
+            typeof liveLan === "number" && liveLan >= 1024 ? liveLan : null;
           const ready = await voiceStartPorthole(lanPort);
           const key = ready.share_code?.trim();
           if (key) {

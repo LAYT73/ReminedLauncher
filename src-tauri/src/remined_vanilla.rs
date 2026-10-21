@@ -2153,7 +2153,7 @@ fn write_mcwifipnp_offline_defaults(instance: &Path) -> Result<(), String> {
     obj.insert("enableUUIDFixer".into(), json!(true));
     // Seed default LAN port only when missing — launch overwrites from profile.lan_port.
     if !obj.contains_key("port") {
-        obj.insert("port".into(), json!(crate::unlim::LAN_TCP_PORT));
+        obj.insert("port".into(), json!(crate::relay::LAN_TCP_PORT));
     }
     let pretty = serde_json::to_vec_pretty(&value).map_err(|e| e.to_string())?;
     fs::write(&path, pretty).map_err(|e| e.to_string())?;

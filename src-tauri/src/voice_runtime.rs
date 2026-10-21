@@ -2,7 +2,7 @@
 
 use crate::paths;
 use crate::porthole::{self, PortholeState};
-use crate::unlim::{self, UnlimState};
+use crate::relay::{self, RelayState};
 use crate::voice_log;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
@@ -19,10 +19,12 @@ use tauri::{AppHandle, Emitter};
 pub const LK_API_KEY: &str = "remined";
 pub const LK_API_SECRET: &str = "remined_voice_dev_secret_do_not_use_prod";
 pub const LK_TCP_PORT: u16 = 7880;
-/// ICE/TCP fallback (must not collide with the UDP media range start).
+/// ICE/TCP fallback (must not collide with the UDP media mux).
 pub const LK_RTC_TCP_PORT: u16 = 7881;
-pub const LK_UDP_START: u16 = 7882;
-pub const LK_UDP_END: u16 = 7901;
+/// Single UDP mux for WebRTC (FRP SUDP forwards one port).
+pub const LK_UDP_MUX: u16 = 7882;
+pub const LK_UDP_START: u16 = LK_UDP_MUX;
+pub const LK_UDP_END: u16 = LK_UDP_MUX;
 const LK_VERSION: &str = "1.13.10";
 
 #[derive(Default)]
@@ -400,8 +402,7 @@ bind_addresses:
   - 127.0.0.1
 rtc:
   tcp_port: {rtc_tcp}
-  port_range_start: {udp_start}
-  port_range_end: {udp_end}
+  udp_port: {udp_mux}
   use_external_ip: false
   node_ip: 127.0.0.1
   enable_loopback_candidate: true
@@ -418,8 +419,7 @@ logging:
 "#,
         tcp = LK_TCP_PORT,
         rtc_tcp = LK_RTC_TCP_PORT,
-        udp_start = LK_UDP_START,
-        udp_end = LK_UDP_END,
+        udp_mux = LK_UDP_MUX,
         key = LK_API_KEY,
         secret = LK_API_SECRET,
     );
@@ -634,29 +634,29 @@ pub fn start_voice_livekit(app: &AppHandle, voice: &VoiceRuntimeState) -> Result
     }
 }
 
-/// Expose LiveKit over Unlim after the host has joined locally.
-/// When `lan_port` is set (Unlim-only network mode), reserve that Open-to-LAN
+/// Expose LiveKit over Relay after the host has joined locally.
+/// When `lan_port` is set (Relay-only network mode), reserve that Open-to-LAN
 /// TCP port so voice→LAN needs no lobby rebuild.
 pub fn start_voice_porthole(
     app: AppHandle,
-    unlim: UnlimState,
+    relay: RelayState,
     lan_port: Option<u16>,
 ) -> Result<VoiceHostReady, String> {
     let lan = lan_port.filter(|p| *p > 0);
-    emit_progress(&app, "Voice", "Opening Unlim tunnel…", 92);
+    emit_progress(&app, "Voice", "Opening Relay tunnel…", 92);
     voice_log::append_ok(
         &app,
-        "unlim",
+        "relay",
         &format!(
             "host ports tcp={LK_TCP_PORT},{LK_RTC_TCP_PORT} udp={LK_UDP_START}-{LK_UDP_END} lan={}",
             lan.map(|p| p.to_string()).unwrap_or_else(|| "-".into())
         ),
     );
-    match unlim::ensure_shared_host(&app, &unlim, lan) {
+    match relay::ensure_shared_host(&app, &relay, lan) {
         Ok(key) => {
             voice_log::append_ok(
                 &app,
-                "unlim",
+                "relay",
                 &format!(
                     "host ready key={key} lan={}",
                     lan.map(|p| p.to_string()).unwrap_or_else(|| "-".into())
@@ -671,7 +671,7 @@ pub fn start_voice_porthole(
             })
         }
         Err(e) => {
-            voice_log::append_ok(&app, "unlim", &format!("host FAILED: {e}"));
+            voice_log::append_ok(&app, "relay", &format!("host FAILED: {e}"));
             Err(e)
         }
     }
@@ -680,30 +680,30 @@ pub fn start_voice_porthole(
 pub fn start_voice_host(
     app: AppHandle,
     voice: VoiceRuntimeState,
-    unlim: UnlimState,
+    relay: RelayState,
 ) -> Result<VoiceHostReady, String> {
     start_voice_livekit(&app, &voice)?;
-    start_voice_porthole(app, unlim, None)
+    start_voice_porthole(app, relay, None)
 }
 
-/// Stop LiveKit. Unlim stops unless `keep_unlim` (LAN still using the shared session).
-/// Hybrid: if `keep_lan_port` is set and Unlim is stopped, re-expose LAN on Porthole.
+/// Stop LiveKit. Relay stops unless `keep_relay` (LAN still using the shared session).
+/// Hybrid: if `keep_lan_port` is set and Relay is stopped, re-expose LAN on Porthole.
 pub fn stop_voice_host(
     app: &AppHandle,
     voice: &VoiceRuntimeState,
     porthole: &PortholeState,
-    unlim: &UnlimState,
+    relay: &RelayState,
     keep_lan_port: Option<u16>,
-    keep_unlim: bool,
+    keep_relay: bool,
 ) -> Option<porthole::PortholeHostInfo> {
     stop_host(voice);
     let lan = keep_lan_port.filter(|p| *p > 0);
-    if keep_unlim {
-        let key = unlim::current_host_key(unlim);
+    if keep_relay {
+        let key = relay::current_host_key(relay);
         voice_log::append_ok(
             app,
-            "unlim",
-            &format!("voice stopped — keeping Unlim host key={}", key.as_deref().unwrap_or("-")),
+            "relay",
+            &format!("voice stopped — keeping Relay host key={}", key.as_deref().unwrap_or("-")),
         );
         if let (Some(key), Some(port)) = (key, lan) {
             return Some(porthole::PortholeHostInfo {
@@ -714,7 +714,7 @@ pub fn stop_voice_host(
         }
         return None;
     }
-    unlim::stop_host(app, unlim);
+    relay::stop_host(app, relay);
     if let Some(port) = lan {
         if let Some(live) = porthole::current_host(porthole) {
             if live.lan_port == Some(port) || live.port == port {
@@ -747,24 +747,24 @@ pub fn stop_voice_host(
 
 pub fn guest_connect(
     app: AppHandle,
-    unlim: UnlimState,
+    relay: RelayState,
     share_code: &str,
 ) -> Result<(), String> {
-    voice_log::append_ok(&app, "unlim", &format!("guest join key={share_code}"));
-    unlim::start_voice_join(&app, &unlim, share_code)?;
+    voice_log::append_ok(&app, "relay", &format!("guest join key={share_code}"));
+    relay::start_voice_join(&app, &relay, share_code)?;
     if !porthole::wait_port_listening(LK_RTC_TCP_PORT, StdDuration::from_secs(4)) {
         voice_log::append_ok(
             &app,
-            "unlim",
+            "relay",
             &format!("guest: rtc tcp {LK_RTC_TCP_PORT} not open yet (continuing)"),
         );
     }
     Ok(())
 }
 
-pub fn guest_disconnect(app: &AppHandle, unlim: &UnlimState) {
-    voice_log::append_ok(app, "unlim", "guest disconnect");
-    unlim::stop_join(app, unlim);
+pub fn guest_disconnect(app: &AppHandle, relay: &RelayState) {
+    voice_log::append_ok(app, "relay", "guest disconnect");
+    relay::stop_join(app, relay);
 }
 
 pub fn mint_token(room: &str, identity: &str, name: &str) -> Result<String, String> {

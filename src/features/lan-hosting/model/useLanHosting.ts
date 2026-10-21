@@ -3,24 +3,20 @@ import { MSG } from "@/shared/config/messages";
 import { TIMING } from "@/shared/config/timings";
 import { netLog } from "@/shared/api/netLog";
 import {
-  portholeCurrentHost,
-  portholeStartHost,
-  portholeStopAll,
-  portholeStopHost,
-} from "@/shared/api/porthole";
-import {
-  encodeUnlimShareCode,
-  unlimEnsureHost,
-  unlimHostState,
-  unlimStatus,
-  unlimStopHost,
-} from "@/shared/api/unlim";
+  encodeRelayShareCode,
+  relayAttachLan,
+  relayDetachLan,
+  relayEnsureHost,
+  relayHostState,
+  relayStatus,
+  relayStopHost,
+} from "@/shared/api/relay";
+import { setVoiceRoomShareCode } from "@/entities/voice-room";
 import { toast } from "@/shared/lib/toast";
 import { useRail } from "@/shared/lib/useRoute";
 import { useGameStore } from "@/entities/game";
 import { setStatus } from "@/entities/install";
 import { useCurrentPackId } from "@/entities/pack";
-import { useProfileStore } from "@/entities/profile";
 import { useSessionStore } from "@/entities/session";
 import { useVoiceStatusStore } from "@/entities/voice-room";
 
@@ -38,9 +34,8 @@ function voiceBusy(): boolean {
 }
 
 /**
- * While the game runs, watches for Open-to-LAN and publishes a share code.
- * - `network_mode=unlim`: shared Unlim host (voice ports + LAN).
- * - `network_mode=hybrid`: Steam Porthole for LAN only.
+ * While the game runs, watches for Open-to-LAN and publishes a Remined Relay
+ * share code. LAN attaches hot onto a live voice session (no voice reconnect).
  */
 export function useLanHosting(): void {
   const appActive = useSessionStore((s) => s.gate === "app");
@@ -48,7 +43,6 @@ export function useLanHosting(): void {
   const runningPackId = useGameStore((s) => s.runningPackId);
   const currentPackId = useCurrentPackId(useRail());
   const packId = runningPackId ?? currentPackId;
-  const networkMode = useProfileStore((s) => s.profile.network_mode);
 
   const busy = useRef(false);
   const fail = useRef<{ port: number; at: number } | null>(null);
@@ -59,22 +53,13 @@ export function useLanHosting(): void {
     const game = useGameStore.getState;
     if (!appActive || phase !== "running" || !packId) {
       if (phase === "idle") {
-        const hadLan = game().hostingLan != null;
         game().setRunningPackId(null);
         game().setHostingLan(null);
         busy.current = false;
         miss.current = 0;
-        if (networkMode === "unlim") {
-          if (!voiceBusy()) {
-            void unlimStopHost().catch(() => undefined);
-          }
-        } else {
-          void portholeStopHost().catch(() => undefined);
-          if (!voiceBusy()) {
-            void portholeStopAll().catch(() => undefined);
-          }
+        if (!voiceBusy()) {
+          void relayStopHost().catch(() => undefined);
         }
-        void hadLan;
       }
       return;
     }
@@ -97,15 +82,19 @@ export function useLanHosting(): void {
               fail.current = null;
               void netLog(
                 "ui",
-                `LAN closed → tear tunnel (was port=${publishedPort()} mode=${networkMode})`,
+                `LAN closed → tear tunnel (was port=${publishedPort()})`,
               );
               game().setHostingLan(null);
-              if (networkMode === "unlim") {
-                if (!voiceBusy()) {
-                  await unlimStopHost().catch(() => undefined);
+              if (voiceBusy()) {
+                const nextKey = await relayDetachLan().catch(() => null);
+                const roomId = useVoiceStatusStore.getState().hostRoomId;
+                if (nextKey && roomId) {
+                  await setVoiceRoomShareCode(roomId, nextKey).catch(
+                    () => undefined,
+                  );
                 }
               } else {
-                await portholeStopHost().catch(() => undefined);
+                await relayStopHost().catch(() => undefined);
               }
               if (!cancelled) toast(MSG.lan.hostingStopped);
             }
@@ -113,152 +102,82 @@ export function useLanHosting(): void {
           }
           miss.current = 0;
 
-          if (networkMode === "unlim") {
-            const existing = game().hostingLan;
-            // Already published this LAN — never reopen / re-toast every poll.
-            if (existing && existing.gamePort === port) {
-              return;
-            }
-
-            const last = fail.current;
-            if (
-              last &&
-              last.port === port &&
-              Date.now() - last.at < TIMING.lanHostRetryCooldown
-            ) {
-              return;
-            }
-
-            const preferPort = useProfileStore.getState().profile.lan_port;
-            const reservePort =
-              typeof preferPort === "number" && preferPort > 0
-                ? preferPort
-                : port;
-            const host = await unlimHostState().catch(() => null);
-            const keyNow = host?.alive ? host.key?.trim() || null : null;
-            const voiceLive = voiceBusy();
-            // Voice already reserved LiveKit + LAN in one Unlim session — only
-            // publish presence. Never ensure/restart (that drops voice guests).
-            const reuseOnly =
-              Boolean(keyNow) &&
-              (voiceLive ||
-                host?.lan_port === reservePort ||
-                host?.lan_port === port);
-
-            busy.current = true;
-            if (!reuseOnly) {
-              setStatus(MSG.lan.openingTunnel);
-              void netLog(
-                "ui",
-                `opening Unlim shared host port=${port} reserve=${reservePort}`,
-              );
-            } else {
-              void netLog(
-                "ui",
-                `Unlim reuse key=${keyNow} lan=${host?.lan_port ?? "-"} voice=${voiceLive ? 1 : 0} — publish LAN port=${port}`,
-              );
-            }
-            try {
-              const st = await unlimStatus();
-              if (!st.installed) {
-                throw new Error(MSG.voice.installUnlim);
-              }
-
-              let rawKey: string;
-              if (reuseOnly && keyNow) {
-                rawKey = keyNow;
-              } else if (voiceLive) {
-                // Voice is up but status briefly empty — do not rebuild Unlim.
-                throw new Error(
-                  "Voice is live but Unlim key is missing — wait a moment and open LAN again",
-                );
-              } else {
-                rawKey = await unlimEnsureHost(reservePort);
-              }
-
-              const shareCode = encodeUnlimShareCode(rawKey);
-              if (cancelled) return;
-              fail.current = null;
-              const prevCode = existing?.shareCode;
-              game().setHostingLan({
-                packId,
-                shareCode,
-                gamePort: port,
-              });
-              void netLog(
-                "ui",
-                `hosting Unlim pack=${packId} code=${shareCode} gamePort=${port} reused=${reuseOnly || prevCode === shareCode ? 1 : 0}`,
-              );
-              if (prevCode !== shareCode) toast(MSG.lan.hosting);
-              if (!reuseOnly) setStatus("", "ok");
-            } catch (err) {
-              fail.current = { port, at: Date.now() };
-              const msg =
-                err instanceof Error ? err.message : MSG.lan.startFailed;
-              void netLog("ui", `Unlim LAN FAILED: ${msg}`);
-              if (!cancelled) setStatus(msg, "error");
-            } finally {
-              busy.current = false;
-            }
+          const existing = game().hostingLan;
+          if (existing && existing.gamePort === port) {
             return;
           }
 
-          // Hybrid: Steam Porthole for LAN.
-          const live = await portholeCurrentHost().catch(() => null);
-          const tunnelOk = live != null && Boolean(live.share_code);
-          const liveLan =
-            typeof live?.lan_port === "number" && live.lan_port > 0
-              ? live.lan_port
-              : null;
-          const sameLan =
-            live != null &&
-            (live.port === port || liveLan === port) &&
-            tunnelOk &&
-            publishedPort() === port;
-          if (sameLan) return;
-
-          const lastHy = fail.current;
+          const last = fail.current;
           if (
-            lastHy &&
-            lastHy.port === port &&
-            Date.now() - lastHy.at < TIMING.lanHostRetryCooldown
+            last &&
+            last.port === port &&
+            Date.now() - last.at < TIMING.lanHostRetryCooldown
           ) {
             return;
           }
+
+          const host = await relayHostState().catch(() => null);
+          const keyNow = host?.alive ? host.key?.trim() || null : null;
+          const voiceLive = voiceBusy();
+          const alreadyAttached = Boolean(keyNow) && host?.lan_port === port;
+
           busy.current = true;
-          setStatus(MSG.lan.openingTunnel);
-          void netLog(
-            "ui",
-            `opening Porthole LAN port=${port} liveLan=${liveLan ?? "-"}`,
-          );
+          if (!alreadyAttached) {
+            setStatus(MSG.lan.openingTunnel);
+            void netLog(
+              "ui",
+              `Relay LAN attach port=${port} voice=${voiceLive ? 1 : 0} key=${keyNow ? "yes" : "no"}`,
+            );
+          } else {
+            void netLog(
+              "ui",
+              `Relay LAN already attached port=${port} — publish presence`,
+            );
+          }
           try {
-            if (live && live.port !== port && liveLan !== port) {
-              await portholeStopHost();
+            const st = await relayStatus();
+            if (!st.installed) {
+              throw new Error(MSG.voice.installRelay);
             }
-            const info = await portholeStartHost(port);
-            const shareCode = info.share_code;
-            const gamePort = info.port;
-            if (cancelled) {
-              await portholeStopHost();
-              return;
+
+            let rawKey: string;
+            if (alreadyAttached && keyNow) {
+              rawKey = keyNow;
+            } else if (voiceLive || keyNow) {
+              if (!keyNow && voiceLive) {
+                throw new Error(
+                  "Voice is live but Relay key is missing — wait a moment and open LAN again",
+                );
+              }
+              rawKey = await relayAttachLan(port);
+            } else {
+              rawKey = await relayEnsureHost(port);
             }
+
+            const shareCode = encodeRelayShareCode(rawKey);
+            if (cancelled) return;
             fail.current = null;
+            const prevCode = existing?.shareCode;
             game().setHostingLan({
               packId,
               shareCode,
-              gamePort,
+              gamePort: port,
             });
+            const roomId = useVoiceStatusStore.getState().hostRoomId;
+            if (roomId && prevCode !== shareCode) {
+              await setVoiceRoomShareCode(roomId, rawKey).catch(() => undefined);
+            }
             void netLog(
               "ui",
-              `hosting Porthole pack=${packId} code=${shareCode} gamePort=${gamePort}`,
+              `hosting Relay pack=${packId} code=${shareCode} gamePort=${port} hot=${voiceLive || alreadyAttached ? 1 : 0}`,
             );
-            toast(MSG.lan.hosting);
-            setStatus("", "ok");
+            if (prevCode !== shareCode) toast(MSG.lan.hosting);
+            if (!alreadyAttached) setStatus("", "ok");
           } catch (err) {
             fail.current = { port, at: Date.now() };
             const msg =
               err instanceof Error ? err.message : MSG.lan.startFailed;
-            void netLog("ui", `tunnel FAILED: ${msg}`);
+            void netLog("ui", `Relay LAN FAILED: ${msg}`);
             if (!cancelled) setStatus(msg, "error");
           } finally {
             busy.current = false;
@@ -273,5 +192,5 @@ export function useLanHosting(): void {
       cancelled = true;
       window.clearInterval(tick);
     };
-  }, [appActive, phase, packId, networkMode]);
+  }, [appActive, phase, packId]);
 }

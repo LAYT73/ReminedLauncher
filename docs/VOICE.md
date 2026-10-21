@@ -1,6 +1,8 @@
 # Voice rooms
 
-Local **LiveKit** SFU on the host PC, tunnelled to friends via **Steam Porthole**, with room metadata/chat in **Supabase**.
+Local **LiveKit** SFU on the host PC, tunnelled to friends via **Remined Relay** (self-hosted **frp** STCP/SUDP on the Remined VPS). Room metadata/chat in **Supabase**.
+
+> Legacy docs mentioned Steam Porthole for voice — **code uses Remined Relay for voice always**. Hybrid mode still uses Porthole for Open-to-LAN only.
 
 ## Ports
 
@@ -8,10 +10,9 @@ Local **LiveKit** SFU on the host PC, tunnelled to friends via **Steam Porthole*
 |---|---|---|
 | 7880 | TCP | LiveKit signalling (`ws://127.0.0.1:7880`) |
 | 7881 | TCP | WebRTC ICE/TCP fallback |
-| 7882–7901 | UDP | WebRTC media (ICE host candidates) |
+| 7882 | UDP | WebRTC media (single UDP mux) |
 
-Porthole expose uses **per-port** targets (`udp/127.0.0.1:N`), not a range string.
-Voice and Open-to-LAN share **one** Porthole host process: when both are active the lobby backends include LiveKit + the Minecraft LAN TCP port.
+Relay expose uses **STCP** for TCP ports and **SUDP** for `7882`. Voice starts as a LiveKit-only frpc; when Minecraft publishes Open-to-LAN, a **second** frpc attaches that TCP port hot (same session id/sk) so voice guests are not reconnected. Share code updates to include the real LAN port from the game log — not a hardcoded `55666`.
 
 ## Host flow (`VoicePanel.onCreate`)
 
@@ -19,31 +20,27 @@ Voice and Open-to-LAN share **one** Porthole host process: when both are active 
 2. `voiceStartLivekit` — spawn `livekit-server`, wait HTTP+RTC
 3. `createVoiceRoom` — Supabase row (`lk_ws_url`, ports)
 4. Host `VoiceSession.connect` (mic → room.connect → publish)
-5. `voiceStartPorthole` — expose TCP+UDP, store share code on room
+5. `voiceStartPorthole` — starts **Remined Relay** host (name is legacy), store share code on room
 
-Order matters: WebRTC must succeed **before** Porthole binds the same ports.
+Order matters: WebRTC must succeed **before** the relay binds the same ports.
+
+Share codes look like `rmd:rmd1_<id>_<sk>_<lanOr0>` (stored on presence / voice room).
 
 ## Guest flow
 
-Guests do **not** open Porthole manually — the launcher drives it (`porthole connect` with the room share code). Requirements: Steam running + the free Porthole app installed once (see [PORTHOLE.md](./PORTHOLE.md)).
+Guests do **not** open frpc manually — the launcher drives it (`frpc` visitor config from the share code).
 
-1. Accept invite → `voiceGuestConnect(shareCode)` → launcher runs `porthole connect`
-2. `VoiceSession.connect` to room `lk_ws_url` (loopback via Porthole)
+1. Accept invite → `voiceGuestConnect(shareCode)` → launcher runs frpc visitor
+2. `VoiceSession.connect` to room `lk_ws_url` (loopback via relay)
 
 ## Key files
 
 | Path | Notes |
 |---|---|
-| `src/features/voice/ui/VoicePanel.tsx` + `model/*` | Voice state hooks: lists, room data, live session, PTT, runtime modal, actions |
-| `src/features/voice/ui/` | Views: `VoiceLobby`, `VoiceRoomView`, `VoiceToolbar`, `VoiceMembers`, `VoiceChat`, `VoiceBits` |
-| `src/features/voice/ui/VoiceRuntimeModal.tsx` | Download/setup modal + error |
-| `src/features/voice/ui/VoiceDevicesModal.tsx` | Mic / output device picker |
-| `src/features/voice/lib/voiceSession.ts` | LiveKit client; empty `iceServers`; VPN hint in errors |
+| `src-tauri/src/relay.rs` | Remined Relay (frpc download, host/visitor, share codes) |
+| `src-tauri/src/voice_runtime.rs` | LiveKit binary, spawn, UDP mux, JWT |
+| `src/features/voice/ui/VoicePanel.tsx` + `model/*` | Voice state hooks |
 | `src/entities/voice-room/api/` | Supabase CRUD, invites, members, messages, realtime |
-| `src/features/voice/api/voiceNative.ts` | Tauri invokes |
-| `src/features/voice/lib/pushToTalk.ts` | Global PTT shortcut binding + config |
-| `src-tauri/src/voice_runtime.rs` | Binary, spawn, `NO_PROXY`, `ws://localhost` |
-| `src-tauri/src/voice_log.rs` | Diagnostics file |
 | Migrations `008` / `009` / `010` | Schema, RLS, `sessions.in_voice` |
 
 ## VPN / Happ
@@ -51,35 +48,14 @@ Guests do **not** open Porthole manually — the launcher drives it (`porthole c
 HTTP `NO_PROXY` / spawn env stripping helps **HTTP(S) proxy** mode.  
 **Happ TUN** (and similar) routes **UDP** at the kernel — loopback WebRTC still breaks until Happ exclude routes / per-app bypass include Remined, or Remined forces a TCP-friendly ICE path.
 
+## frps (ops)
+
+- VPS: `194.35.112.123:7000` (`systemd` unit `frps`)
+- Config: `/etc/frp/frps.toml`
+- Clients embed server addr + auth token; lobby access is gated by per-session `secretKey` in the share code
+
 ## Known gaps
 
 - Happ TUN and macOS sleep/wake crash mitigations are best-effort and need verification on affected machines.
 - Screen share depends on WKWebView/OS permission.
-
-## Features (0.5.x)
-
-- **Member grid** — Discord-style tiles with a green speaking ring, mute/deafen badges (synced through LiveKit participant attributes) and a per-person volume slider (`VoiceSession.setParticipantVolume`).
-- **Push-to-talk** — `PTT` toggle in the room toolbar + key select (F8/F9/F10/Ctrl+Space/Alt+V). Registered with `tauri-plugin-global-shortcut`, so it works while Minecraft has focus. Effective mic = `muted || (ptt && !keyDown)`. Config in localStorage `remined.voice.ptt` (`src/features/voice/lib/pushToTalk.ts`).
-- **Camera / screen share** — `Cam` / `Share` buttons; video tiles above the member grid. Peer-to-peer through LiveKit only; nothing is stored. Camera needs the macOS camera permission (`NSCameraUsageDescription`). Screen share inside WKWebView may be refused by the OS — the UI shows a toast instead of failing silently.
-- **Persistence** — `VoicePanel` is rendered through a React portal into a detached host node (`App.tsx` → `voicePortal`; see [ARCHITECTURE.md](./ARCHITECTURE.md)), so switching tabs/rails never tears the LiveKit session down. The Voice tab shows a green dot while you are in a room.
-- **Rich presence** — `sessions.in_voice` (migration `010_sessions_voice.sql`). Friends see “· in voice”. If the migration is not applied the client falls back silently (no column → no voice flag).
-- **No media uploads** — chat is text only (free-tier storage). Screenshots are viewed locally from the game's `screenshots/` folder (Shots tab), never uploaded.
-
-## Guest join
-
-Guests run `porthole connect <code> --bind 127.0.0.1` and then LiveKit at `ws://127.0.0.1:7880`. Join waits until **TCP :7880 accepts** on the guest (not just a Porthole log line) — early “ready” without a bind used to cause `ServerUnreachable` / `Load failed`. Invite is disabled until the host has a share code.
-
-## Diagnostics
-
-- `voice.log` — runtime/LiveKit/Porthole log (see the debug-log path in the Voice runtime modal).
-- `voice.log` also receives `ice` lines from `installRtcDiagnostics()`: every ICE candidate type, ICE/connection state changes and the selected candidate pair. A `relay`/`srflx`-only list while a VPN is on = the tunnel is eating host candidates.
-- `<root>/.remined/logs/app.log` — global panic hook output. Panic strategy is `unwind`, and session mutexes are poison-tolerant, so one failing thread no longer aborts the app.
-
-## Happ / TUN VPN (best effort — not testable without Happ)
-
-What the code does: LiveKit binds `127.0.0.1` only, sets `enable_loopback_candidate: true` + `ips.includes: 127.0.0.1/32`, and advertises no public STUN — so the SFU only offers loopback ICE. (Without `enable_loopback_candidate`, the IP filter yields **zero** server candidates and host join fails even with VPN off.) WKWebView may still pick a TUN fake-IP (`198.18.x`) as its local candidate; those are dropped in `rtcDiagnostics`.
-
-If voice still fails with Happ on:
-1. Add the Remined bundle id / `127.0.0.0/8` to Happ's bypass list (or switch Happ to “proxy” mode instead of TUN).
-2. Reproduce, then read the `ice` lines in `voice.log`.
-3. Guests joining over Porthole are unaffected — Porthole is Steam networking, not the VPN path.
+- All voice/LAN traffic for Relay mode goes through the VPS (not P2P).

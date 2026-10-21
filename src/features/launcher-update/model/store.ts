@@ -53,7 +53,7 @@ export const useLauncherUpdate = create<UpdateState>((set, get) => ({
       pending: {
         version: "1.2.0",
         notes:
-          "• Faster voice lobby\n• Unlim tunnel polish\n• Bug fixes and stability",
+          "• Faster voice lobby\n• Relay tunnel polish\n• Bug fixes and stability",
         update: null,
       },
       promptOpen: true,

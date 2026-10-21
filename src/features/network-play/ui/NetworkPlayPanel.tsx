@@ -1,31 +1,6 @@
-import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { NetworkMode } from "@/entities/profile";
-import {
-  DEFAULT_LAN_PORT,
-  normalizeLanPort,
-  useProfileStore,
-} from "@/entities/profile";
-import { useCurrentPackId } from "@/entities/pack";
-import { unlimApplyLanPort } from "@/shared/api/unlim";
 import { FolderIconBtn } from "@/shared/ui/FolderIconBtn";
-import { McSelect } from "@/shared/ui/McSelect";
-import { useRail } from "@/shared/lib/useRoute";
-import { usePortholeStatus } from "../model/usePortholeStatus";
-import { useUnlimStatus } from "../model/useUnlimStatus";
-
-const NETWORK_MODE_OPTIONS = [
-  {
-    id: "unlim",
-    label: "Unlim only",
-    hint: "Default — voice + LAN, no Porthole",
-  },
-  {
-    id: "hybrid",
-    label: "Hybrid",
-    hint: "Porthole for LAN + Unlim for voice",
-  },
-] as const;
+import { useRelayStatus } from "../model/useRelayStatus";
 
 type Props = {
   hostingSelf?: boolean;
@@ -62,190 +37,65 @@ export function NetworkPlayPanel({
   embedded,
   onToast,
 }: Props) {
-  const networkMode = useProfileStore((s) => s.profile.network_mode);
-  const lanPort = useProfileStore((s) => s.profile.lan_port);
-  const persist = useProfileStore((s) => s.persist);
-  const profile = useProfileStore((s) => s.profile);
-  const packId = useCurrentPackId(useRail());
-  const [portDraft, setPortDraft] = useState(String(lanPort || DEFAULT_LAN_PORT));
+  const relay = useRelayStatus(onToast);
 
-  useEffect(() => {
-    setPortDraft(String(lanPort || DEFAULT_LAN_PORT));
-  }, [lanPort]);
-
-  const {
-    status,
-    check,
-    busy,
-    checking,
-    error,
-    refresh,
-    openSteam,
-    launchSteamApp,
-    runCheck,
-  } = usePortholeStatus(onToast);
-
-  const unlim = useUnlimStatus(onToast);
-  const hybrid = networkMode === "hybrid";
-
-  async function setMode(next: NetworkMode) {
-    if (next === networkMode) return;
-    await persist({ ...profile, network_mode: next });
-    onToast(
-      next === "unlim"
-        ? "Network mode: Unlim only (no Porthole)"
-        : "Network mode: Hybrid (Porthole + Unlim)",
-    );
-  }
-
-  async function commitLanPort() {
-    const next = normalizeLanPort(portDraft.trim() || DEFAULT_LAN_PORT);
-    setPortDraft(String(next));
-    if (next === lanPort) return;
-    await persist({ ...profile, lan_port: next });
-    if (packId) {
-      await unlimApplyLanPort(packId, next).catch(() => undefined);
-    }
-    onToast(`LAN port set to ${next}`);
-  }
-
-  const installed = Boolean(status?.installed);
-  const steamOk =
-    check != null ? check.steam_ok : status?.steam_ok === true;
-  const steamKnown =
-    check != null || status?.steam_ok === true || status?.steam_ok === false;
-
-  const steamTone: "ok" | "warn" | "bad" | "idle" = !status
+  const relayInstalled = Boolean(relay.status?.installed);
+  const relayTone: "ok" | "warn" | "bad" | "idle" = !relay.status
     ? "idle"
-    : checking
+    : relay.checking
       ? "idle"
-      : steamOk
-        ? "ok"
-        : steamKnown
-          ? "bad"
-          : "warn";
-  const steamValue = !status
-    ? "…"
-    : checking
-      ? "Checking"
-      : steamOk
-        ? "Running"
-        : steamKnown
-          ? "Closed"
-          : "Unknown";
-
-  const portholeTone: "ok" | "warn" | "bad" | "idle" = !status
-    ? "idle"
-    : checking
-      ? "idle"
-      : check
-        ? check.ok
+      : relay.check
+        ? relay.check.ok
           ? "ok"
-          : installed
+          : relayInstalled
             ? "warn"
             : "bad"
-        : installed
+        : relayInstalled
           ? "ok"
           : "bad";
-  const portholeValue = !status
+  const relayValue = !relay.status
     ? "…"
-    : checking
+    : relay.checking
       ? "Checking"
-      : check
-        ? check.ok
+      : relay.check
+        ? relay.check.ok
           ? "Ready"
-          : installed
+          : relayInstalled
             ? "Issue"
             : "Missing"
-        : installed
-          ? "Installed"
-          : "Missing";
-
-  const unlimInstalled = Boolean(unlim.status?.installed);
-  const unlimTone: "ok" | "warn" | "bad" | "idle" = !unlim.status
-    ? "idle"
-    : unlim.checking
-      ? "idle"
-      : unlim.check
-        ? unlim.check.ok
-          ? "ok"
-          : unlimInstalled
-            ? "warn"
-            : "bad"
-        : unlimInstalled
-          ? "ok"
-          : "bad";
-  const unlimValue = !unlim.status
-    ? "…"
-    : unlim.checking
-      ? "Checking"
-      : unlim.check
-        ? unlim.check.ok
-          ? "Ready"
-          : unlimInstalled
-            ? "Issue"
-            : "Missing"
-        : unlimInstalled
-          ? unlim.status.version
-            ? `v${unlim.status.version}`
+        : relayInstalled
+          ? relay.status.version
+            ? `v${relay.status.version}`
             : "Found"
           : "Missing";
 
-  const statusClass = check
-    ? check.ok
+  const relayStatusClass = relay.check
+    ? relay.check.ok
       ? "is-ready"
       : "is-missing"
-    : installed
+    : relayInstalled
       ? "is-ready"
       : "is-missing";
-  const title = check
-    ? check.ok
-      ? "All set"
+  const relayTitle = relay.check
+    ? relay.check.ok
+      ? "Ready for voice + LAN"
       : "Needs attention"
-    : installed
-      ? "Ready"
-      : "Not installed";
-  const body = checking
-    ? "Checking Steam connection…"
-    : check
-      ? check.ok
-        ? "Steam and the tunnel look good."
-        : check.message
-      : installed
-        ? "Leave Steam open and logged in to host or join."
-        : "Install free Porthole on Steam to play with friends online.";
-
-  const unlimStatusClass = unlim.check
-    ? unlim.check.ok
-      ? "is-ready"
-      : "is-missing"
-    : unlimInstalled
-      ? "is-ready"
-      : "is-missing";
-  const unlimTitle = unlim.check
-    ? unlim.check.ok
-      ? hybrid
-        ? "Ready for voice"
-        : "Ready for voice + LAN"
-      : "Needs attention"
-    : unlimInstalled
+    : relayInstalled
       ? "Found"
       : "Not found";
-  const unlimBody = unlim.checking
-    ? "Checking Unlim…"
-    : unlim.check
-      ? unlim.check.message
-      : unlimInstalled
-        ? unlim.status?.path ?? "Binary found."
-        : hybrid
-          ? "Install Unlim for voice chat (LAN stays on Porthole)."
-          : "Install Unlim for voice and Open-to-LAN (no Steam/Porthole).";
+  const relayBody = relay.checking
+    ? "Checking Relay…"
+    : relay.check
+      ? relay.check.message
+      : relayInstalled
+        ? relay.status?.path ?? "Binary found."
+        : "Tap Check to download frpc for voice and Open-to-LAN.";
 
-  async function browseUnlim() {
+  async function browseRelay() {
     const selected = await open({ multiple: false, directory: false });
     if (!selected || Array.isArray(selected)) return;
-    unlim.setPathDraft(selected);
-    await unlim.savePath(selected);
+    relay.setPathDraft(selected);
+    await relay.savePath(selected);
   }
 
   const Root = embedded ? "div" : "section";
@@ -258,67 +108,7 @@ export function NetworkPlayPanel({
       <div className={embedded ? "network-embedded-badges" : "page-title-row"}>
         {embedded ? null : <h2 className="page-title">Network Play</h2>}
         <div className="network-status-badges" aria-live="polite">
-          <StatusBadge label="Unlim" value={unlimValue} tone={unlimTone} />
-          {hybrid ? (
-            <>
-              <StatusBadge label="Steam" value={steamValue} tone={steamTone} />
-              <StatusBadge
-                label="Porthole"
-                value={portholeValue}
-                tone={portholeTone}
-              />
-            </>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="field network-mode-field">
-        <McSelect
-          label="Tunnel mode"
-          value={networkMode}
-          options={[...NETWORK_MODE_OPTIONS]}
-          menuPlacement="down"
-          onChange={(id) => void setMode(id as NetworkMode)}
-        />
-      </div>
-
-      <div className="field">
-        <label htmlFor="lan-port">Open-to-LAN port</label>
-        <div className="field-row">
-          <input
-            id="lan-port"
-            type="number"
-            min={1024}
-            max={65535}
-            inputMode="numeric"
-            spellCheck={false}
-            value={portDraft}
-            onChange={(e) => setPortDraft(e.target.value)}
-            onBlur={() => void commitLanPort()}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.currentTarget.blur();
-              }
-            }}
-          />
-          <button
-            type="button"
-            className="btn-mc dim"
-            onClick={() => {
-              setPortDraft(String(DEFAULT_LAN_PORT));
-              void (async () => {
-                await persist({ ...profile, lan_port: DEFAULT_LAN_PORT });
-                if (packId) {
-                  await unlimApplyLanPort(packId, DEFAULT_LAN_PORT).catch(
-                    () => undefined,
-                  );
-                }
-                onToast(`LAN port reset to ${DEFAULT_LAN_PORT}`);
-              })();
-            }}
-          >
-            Default
-          </button>
+          <StatusBadge label="Relay" value={relayValue} tone={relayTone} />
         </div>
       </div>
 
@@ -329,101 +119,89 @@ export function NetworkPlayPanel({
         </p>
       ) : null}
 
-      <div className="network-unlim">
-        <h3 className="settings-heading">
-          {hybrid ? "Unlim (voice)" : "Unlim (voice + LAN)"}
-        </h3>
+      <div className="network-relay">
+        <h3 className="settings-heading">Remined Relay</h3>
         <p className="friends-lead">
-          {hybrid ? (
-            <>
-              Voice chat uses <strong>Unlim</strong>, not Porthole. Free from{" "}
-              unlim.cc — both host and guests need it.
-            </>
-          ) : (
-            <>
-              Remined tunnels voice and Open-to-LAN through{" "}
-              <strong>Unlim</strong> (unlim.cc). Friends only need Unlim — no
-              Steam or Porthole.
-            </>
-          )}
+          Voice and Open-to-LAN go through <strong>Remined Relay</strong> on your
+          server. Friends only need Remined.
         </p>
-        <div className={`network-status ${unlimStatusClass}`}>
+        <div className={`network-status ${relayStatusClass}`}>
           <div className="network-status-copy">
-            <strong>{unlimTitle}</strong>
-            <p>{unlimBody}</p>
+            <strong>{relayTitle}</strong>
+            <p>{relayBody}</p>
           </div>
           <div className="network-status-actions">
-            {!unlimInstalled ? (
+            {!relayInstalled ? (
               <button
                 type="button"
                 className="btn-mc ok"
-                disabled={unlim.busy || unlim.checking}
-                onClick={() => void unlim.openDownload()}
+                disabled={relay.busy || relay.checking}
+                onClick={() => void relay.openDownload()}
               >
-                Get Unlim
+                Get frpc
               </button>
             ) : null}
             <button
               type="button"
               className="btn-mc ok"
-              disabled={unlim.busy || unlim.checking}
-              onClick={() => void unlim.runCheck()}
+              disabled={relay.busy || relay.checking}
+              onClick={() => void relay.runCheck()}
             >
-              {unlim.checking ? "Checking…" : "Check"}
+              {relay.checking ? "Checking…" : "Check"}
             </button>
             <button
               type="button"
               className="btn-mc dim"
-              disabled={unlim.busy || unlim.checking}
-              onClick={() => void unlim.refresh()}
+              disabled={relay.busy || relay.checking}
+              onClick={() => void relay.refresh()}
             >
               Refresh
             </button>
-            {unlimInstalled ? (
+            {relayInstalled ? (
               <button
                 type="button"
                 className="btn-mc dim"
-                disabled={unlim.busy || unlim.checking}
-                onClick={() => void unlim.openDownload()}
+                disabled={relay.busy || relay.checking}
+                onClick={() => void relay.openDownload()}
               >
-                unlim.cc
+                frp releases
               </button>
             ) : null}
           </div>
         </div>
-        {unlim.error ? <p className="friends-error">{unlim.error}</p> : null}
-        {unlim.check && !unlim.check.ok && unlim.check.detail ? (
-          <pre className="network-check-detail">{unlim.check.detail}</pre>
+        {relay.error ? <p className="friends-error">{relay.error}</p> : null}
+        {relay.check && !relay.check.ok && relay.check.detail ? (
+          <pre className="network-check-detail">{relay.check.detail}</pre>
         ) : null}
 
         <div className="field">
-          <label htmlFor="unlim-path">Unlim binary</label>
+          <label htmlFor="relay-path">frpc binary</label>
           <div className="field-row">
             <input
-              id="unlim-path"
+              id="relay-path"
               type="text"
               spellCheck={false}
               placeholder="Auto-detect"
-              value={unlim.pathDraft}
-              onChange={(e) => unlim.setPathDraft(e.target.value)}
+              value={relay.pathDraft}
+              onChange={(e) => relay.setPathDraft(e.target.value)}
               onBlur={() => {
-                const next = unlim.pathDraft.trim();
-                void unlim.savePath(next || null);
+                const next = relay.pathDraft.trim();
+                void relay.savePath(next || null);
               }}
             />
             <FolderIconBtn
-              title="Browse for Unlim binary"
-              disabled={unlim.busy}
-              onClick={() => void browseUnlim()}
+              title="Browse for frpc binary"
+              disabled={relay.busy}
+              onClick={() => void browseRelay()}
             />
-            {unlim.status?.custom_path || unlim.pathDraft.trim() ? (
+            {relay.status?.custom_path || relay.pathDraft.trim() ? (
               <button
                 type="button"
                 className="btn-mc dim"
-                disabled={unlim.busy}
+                disabled={relay.busy}
                 onClick={() => {
-                  unlim.setPathDraft("");
-                  void unlim.savePath(null);
+                  relay.setPathDraft("");
+                  void relay.savePath(null);
                 }}
               >
                 Auto
@@ -431,81 +209,10 @@ export function NetworkPlayPanel({
             ) : null}
           </div>
           <p className="field-hint">
-            If auto-find misses it: Win → unlim.exe (often %APPDATA%\Unlim\bin\);
-            Mac → Unlim/bin/unlim under Application Support.
+            If auto-find misses it: point at frpc (downloaded under .remined/frp/).
           </p>
         </div>
       </div>
-
-      {hybrid ? (
-        <>
-          <p className="friends-lead">
-            Open-to-LAN uses <strong>Porthole</strong> — a free Steam app.
-            Steam must be installed and logged in on every PC for Network Play.
-          </p>
-
-          <div className={`network-status ${statusClass}`}>
-            <div className="network-status-copy">
-              <strong>{title}</strong>
-              <p>{body}</p>
-            </div>
-            <div className="network-status-actions">
-              {!installed ? (
-                <button
-                  type="button"
-                  className="btn-mc ok"
-                  disabled={busy || checking}
-                  onClick={() => void openSteam(true)}
-                >
-                  Install on Steam
-                </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    className="btn-mc ok"
-                    disabled={busy || checking}
-                    onClick={() => void runCheck()}
-                  >
-                    {checking ? "Checking…" : "Check"}
-                  </button>
-                  {check && !check.ok && !check.steam_ok ? (
-                    <button
-                      type="button"
-                      className="btn-mc ok"
-                      disabled={busy || checking}
-                      onClick={() => void launchSteamApp()}
-                    >
-                      Open Steam
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="btn-mc dim"
-                    disabled={busy || checking}
-                    onClick={() => void openSteam(false)}
-                  >
-                    Open Steam page
-                  </button>
-                </>
-              )}
-              <button
-                type="button"
-                className="btn-mc dim"
-                disabled={busy || checking}
-                onClick={() => void refresh()}
-              >
-                Refresh
-              </button>
-            </div>
-          </div>
-
-          {error ? <p className="friends-error">{error}</p> : null}
-          {check && !check.ok && check.detail ? (
-            <pre className="network-check-detail">{check.detail}</pre>
-          ) : null}
-        </>
-      ) : null}
 
       {hostingSelf ? (
         <p className="friends-hosting-banner" role="status">
@@ -519,63 +226,26 @@ export function NetworkPlayPanel({
         <div className="network-step">
           <h3 className="settings-heading">Host</h3>
           <ol>
-            {hybrid ? (
-              <>
-                <li>
-                  Install Porthole from Steam (button above) and leave Steam
-                  running. Install Unlim for voice.
-                </li>
-                <li>
-                  Play → open a world → pause → <strong>Open to LAN</strong>{" "}
-                  (use the LAN port above in Open to LAN / mcwifipnp).
-                </li>
-                <li>
-                  Remined starts Porthole and marks you as{" "}
-                  <strong>Hosting</strong> for friends.
-                </li>
-              </>
-            ) : (
-              <>
-                <li>Install Unlim (button above) on every PC.</li>
-                <li>
-                  Play → open a world → pause → <strong>Open to LAN</strong>{" "}
-                  (port from the field above).
-                </li>
-                <li>
-                  Remined opens one Unlim lobby (voice-ready) and marks you as{" "}
-                  <strong>Hosting</strong>.
-                </li>
-              </>
-            )}
+            <li>Tap Check to install frpc (once per PC).</li>
+            <li>
+              Play → open a world → pause → <strong>Open to LAN</strong>.
+            </li>
+            <li>
+              Remined picks up the port automatically and marks you as{" "}
+              <strong>Hosting</strong>.
+            </li>
           </ol>
         </div>
         <div className="network-step">
           <h3 className="settings-heading">Join a friend</h3>
           <ol>
-            {hybrid ? (
-              <>
-                <li>Same setup: Steam + Porthole (and Unlim for voice).</li>
-                <li>
-                  Friends tab → when they show <strong>Hosting</strong>, hit{" "}
-                  <strong>Join</strong>.
-                </li>
-                <li>
-                  Remined connects the tunnel and launches their pack into the
-                  world.
-                </li>
-              </>
-            ) : (
-              <>
-                <li>Install Unlim — no Steam required.</li>
-                <li>
-                  Friends tab → when they show <strong>Hosting</strong>, hit{" "}
-                  <strong>Join</strong>.
-                </li>
-                <li>
-                  Remined connects Unlim and launches their pack into the world.
-                </li>
-              </>
-            )}
+            <li>
+              Friends tab → when they show <strong>Hosting</strong>, hit{" "}
+              <strong>Join</strong>.
+            </li>
+            <li>
+              Remined connects the relay and launches their pack into the world.
+            </li>
           </ol>
         </div>
       </div>

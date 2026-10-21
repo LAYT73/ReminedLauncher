@@ -1,11 +1,5 @@
 import { netLog } from "@/shared/api/netLog";
-import {
-  portholeStartJoin,
-  portholeStopGameJoin,
-  portholeStopAll,
-  portholeStopHost,
-} from "@/shared/api/porthole";
-import { unlimStartGameJoin, unlimStopGameJoin } from "@/shared/api/unlim";
+import { relayStartGameJoin, relayStopGameJoin } from "@/shared/api/relay";
 import { MSG } from "@/shared/config/messages";
 import { FALLBACK_USERNAME, USERNAME } from "@/shared/config/limits";
 import { RAIL, routeFor, parseRoute, type Rail } from "@/shared/config/routes";
@@ -38,10 +32,8 @@ import { installVersion } from "./versions";
 type LaunchOpts = {
   packId?: string;
   quickPlay?: string | null;
-  /** Open the Steam tunnel after install prep, immediately before the game process. */
-  portholeJoin?: { shareCode: string; port: number };
-  /** Open Unlim tunnel for Network Play (Unlim-only hosts). */
-  unlimJoin?: { shareCode: string; port: number };
+  /** Open Remined Relay tunnel after install prep, before the game process. */
+  relayJoin?: { shareCode: string; port: number };
 };
 
 /** Make sure `packId` is on disk before launching (never throws; returns ready). */
@@ -96,19 +88,12 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
     .getState()
     .beginLaunch(quick ? MSG.launch.joiningFriend : MSG.launch.preparing);
   if (!quick) {
-    // Clear UI LAN chip. Never restart a live voice lobby on Play unless
-    // Porthole is actually still exposing a Minecraft port (stale hostingLan
-    // + old latest.log used to kick every guest here).
+    // Clear UI LAN chip. Never tear a live voice relay on Play.
     game.setHostingLan(null);
     game.setLive(null);
     const voice = useVoiceStatusStore.getState();
-    // Voice (and Unlim-only LAN) ride Unlim — do not tear it on Play.
-    // Only clear leftover Porthole host state from hybrid mode.
     if (voice.hostRoomId || voice.inRoom) {
-      void netLog("ui", "launch: voice live — keep Unlim, stop stale Porthole host");
-      void portholeStopHost().catch(() => undefined);
-    } else {
-      void portholeStopAll().catch(() => undefined);
+      void netLog("ui", "launch: voice live — keep Remined Relay");
     }
   }
 
@@ -137,25 +122,15 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
       return;
     }
     // Tunnel last — die if we open them before a long prepare.
-    if (opts.unlimJoin) {
+    if (opts.relayJoin) {
       setStatus(MSG.launch.connectingNetwork);
       void netLog(
         "ui",
-        `unlimJoin before MC code=${opts.unlimJoin.shareCode} port=${opts.unlimJoin.port}`,
+        `relayJoin before MC code=${opts.relayJoin.shareCode} port=${opts.relayJoin.port}`,
       );
-      await unlimStartGameJoin(
-        opts.unlimJoin.shareCode,
-        opts.unlimJoin.port,
-      );
-    } else if (opts.portholeJoin) {
-      setStatus(MSG.launch.connectingNetwork);
-      void netLog(
-        "ui",
-        `portholeJoin before MC code=${opts.portholeJoin.shareCode} port=${opts.portholeJoin.port}`,
-      );
-      await portholeStartJoin(
-        opts.portholeJoin.shareCode,
-        opts.portholeJoin.port,
+      await relayStartGameJoin(
+        opts.relayJoin.shareCode,
+        opts.relayJoin.port,
       );
     }
     if (opts.quickPlay) {
@@ -172,9 +147,8 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
     game.setPhase(result.phase);
     if (!result.ok) {
       game.setRunningPackId(null);
-      if (quick) {
-        if (opts.unlimJoin) void unlimStopGameJoin().catch(() => undefined);
-        else void portholeStopGameJoin().catch(() => undefined);
+      if (quick && opts.relayJoin) {
+        void relayStopGameJoin().catch(() => undefined);
       }
       void netLog("ui", `game.launch FAILED: ${result.message}`);
       setStatus(result.message, "error");
@@ -193,9 +167,8 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
     if (quick) setStatus(MSG.launch.joined, "ok");
   } catch (err) {
     game.setRunningPackId(null);
-    if (quick) {
-      if (opts.unlimJoin) void unlimStopGameJoin().catch(() => undefined);
-      else void portholeStopGameJoin().catch(() => undefined);
+    if (quick && opts.relayJoin) {
+      void relayStopGameJoin().catch(() => undefined);
     }
     game.setPhase("idle");
     setStatus(String(err), "error");

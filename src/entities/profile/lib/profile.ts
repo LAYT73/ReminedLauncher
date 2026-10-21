@@ -10,8 +10,9 @@ import { FALLBACK_USERNAME } from "@/shared/config/limits";
 
 export const RAM_OPTIONS_GB = [2, 4, 6, 8, 10, 12, 16] as const;
 
-export function normalizeNetworkMode(raw: unknown): NetworkMode {
-  return raw === "hybrid" ? "hybrid" : "unlim";
+/** Porthole/hybrid removed — always Remined Relay. */
+export function normalizeNetworkMode(_raw: unknown): NetworkMode {
+  return "relay";
 }
 
 /** Default Open-to-LAN port (matches Rust `DEFAULT_LAN_TCP_PORT`). */
@@ -36,7 +37,7 @@ export const DEFAULT_PROFILE: Profile = {
   jvm_args: "",
   theme: DEFAULT_THEME,
   friend_toasts: true,
-  network_mode: "unlim",
+  network_mode: "relay",
   lan_port: DEFAULT_LAN_PORT,
   theme_custom: null,
 };

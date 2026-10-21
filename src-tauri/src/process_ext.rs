@@ -1,6 +1,6 @@
 //! Windows console-subsystem helpers.
 //!
-//! `java.exe`, Unlim, Porthole, and LiveKit are console apps. Spawning them from a
+//! `java.exe`, Relay, Porthole, and LiveKit are console apps. Spawning them from a
 //! GUI Remined process without `CREATE_NO_WINDOW` opens a black terminal; closing
 //! that window kills the child (and Minecraft with it). macOS/Linux are unaffected.
 

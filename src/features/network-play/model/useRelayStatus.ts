@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  openUnlimDownload,
-  unlimCheck,
-  unlimGetPath,
-  unlimSetPath,
-  unlimStatus,
-  type UnlimCheckResult,
-  type UnlimStatus,
-} from "@/shared/api/unlim";
+  openRelayDownload,
+  relayCheck,
+  relayGetPath,
+  relaySetPath,
+  relayStatus,
+  type RelayCheckResult,
+  type RelayStatus,
+} from "@/shared/api/relay";
 
-/** Unlim install/path status for Network settings (voice tunnel). */
-export function useUnlimStatus(onToast: (message: string) => void) {
-  const [status, setStatus] = useState<UnlimStatus | null>(null);
-  const [check, setCheck] = useState<UnlimCheckResult | null>(null);
+/** Remined Relay (frpc) status for Network settings. */
+export function useRelayStatus(onToast: (message: string) => void) {
+  const [status, setStatus] = useState<RelayStatus | null>(null);
+  const [check, setCheck] = useState<RelayCheckResult | null>(null);
   const [pathDraft, setPathDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -21,7 +21,7 @@ export function useUnlimStatus(onToast: (message: string) => void) {
   const refresh = useCallback(async () => {
     setError("");
     try {
-      const [st, custom] = await Promise.all([unlimStatus(), unlimGetPath()]);
+      const [st, custom] = await Promise.all([relayStatus(), relayGetPath()]);
       setStatus(st);
       // Only put a custom override in the input — auto path stays in the status line.
       setPathDraft(custom ?? "");
@@ -39,10 +39,10 @@ export function useUnlimStatus(onToast: (message: string) => void) {
     setChecking(true);
     setError("");
     try {
-      const result = await unlimCheck();
+      const result = await relayCheck();
       setCheck(result);
       await refresh();
-      onToast(result.ok ? "Unlim check passed" : "Unlim check failed");
+      onToast(result.ok ? "Relay check passed" : "Relay check failed");
     } catch (err) {
       setCheck(null);
       setError(err instanceof Error ? err.message : String(err));
@@ -55,8 +55,8 @@ export function useUnlimStatus(onToast: (message: string) => void) {
     if (busy) return;
     setBusy(true);
     try {
-      await openUnlimDownload();
-      onToast("Opening unlim.cc");
+      await openRelayDownload();
+      onToast("Opening frp releases (Check auto-downloads frpc)");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -69,10 +69,10 @@ export function useUnlimStatus(onToast: (message: string) => void) {
     setBusy(true);
     setError("");
     try {
-      await unlimSetPath(path);
+      await relaySetPath(path);
       setCheck(null);
       await refresh();
-      onToast(path ? "Unlim path saved" : "Using auto-detect");
+      onToast(path ? "frpc path saved" : "Using auto-detect");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

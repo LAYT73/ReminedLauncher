@@ -82,12 +82,11 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v0.9.1
-          releaseName: Remined v0.9.1
+          tagName: v0.9.2
+          releaseName: Remined v0.9.2
           releaseBody: |
-            Remined launcher v0.9.1 — checkpoint before FRP/self-hosted tunnel work. Cape (CSL + SkinShuffle), profile lan_port → mcwifipnp, Windows hidden consoles, friend toast WebView2 fix, friends/voice Unlim-default UI (no Porthole gate), Unlim/process hardening.
+            Remined launcher v0.9.2 — Remined Relay (self-hosted frp) for voice + Open-to-LAN; hot LAN attach without voice reconnect; dynamic Minecraft LAN port; Porthole hybrid mode removed.
             macOS (arm64 + x64) and Windows builds.
-            Rollback tag if FRP migration goes wrong.
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }} ${{ steps.updater.outputs.extra }}

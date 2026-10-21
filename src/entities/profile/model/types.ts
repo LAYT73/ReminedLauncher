@@ -1,8 +1,8 @@
 import type { SkinModelKind } from "@/entities/skin";
 import type { CustomTheme, ThemeId } from "@/entities/theme";
 
-/** Tunnel backend for Network Play + Voice. */
-export type NetworkMode = "unlim" | "hybrid";
+/** Tunnel backend id (always Remined Relay; legacy `hybrid` coerced away). */
+export type NetworkMode = "relay";
 
 export type Profile = {
   username: string;
@@ -17,12 +17,9 @@ export type Profile = {
   theme: ThemeId;
   /** Desktop Steam-like friend play toasts. */
   friend_toasts: boolean;
-  /**
-   * `unlim` — voice + LAN on Unlim (default, no Porthole).
-   * `hybrid` — voice Unlim + LAN Porthole (legacy).
-   */
+  /** Always Remined Relay (`relay` id kept for profile JSON compat). */
   network_mode: NetworkMode;
-  /** Open-to-LAN / mcwifipnp port (also reserved on Unlim when mode is unlim). */
+  /** Legacy preferred LAN port (unused — tunnel follows Minecraft's real port). */
   lan_port: number;
   /** Used when `theme === "custom"`. */
   theme_custom: CustomTheme | null;

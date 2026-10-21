@@ -100,12 +100,12 @@ export const MSG = {
   voice: {
     connectingVoice: "Connecting voice…",
     startingServer: "Starting voice server…",
-    openingPorthole: "Opening Unlim…",
+    openingPorthole: "Opening Remined Relay…",
     copiedShareCode: "Copied share code",
     mute: "Mute microphone",
     unmute: "Unmute microphone",
     clickToHear: "Click to hear",
     clickToHearHint: "Browser blocked voice audio — click to restore sound",
-    installUnlim: "Install Unlim from Network settings first",
+    installRelay: "Set up Remined Relay from Network settings first (Check downloads frpc)",
   },
 } as const;

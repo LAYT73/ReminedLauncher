@@ -19,8 +19,7 @@ import {
   type VoiceRoom,
 } from "@/entities/voice-room";
 import { useGameStore } from "@/entities/game";
-import { useProfileStore } from "@/entities/profile";
-import { encodeUnlimShareCode, unlimStatus } from "@/shared/api/unlim";
+import { encodeRelayShareCode, relayStatus } from "@/shared/api/relay";
 import {
   voiceEnsureRuntime,
   voiceGuestDisconnect,
@@ -41,14 +40,9 @@ function lanPortNow(): number | null {
   return useGameStore.getState().hostingLan?.gamePort ?? null;
 }
 
-function isUnlimOnly(): boolean {
-  return useProfileStore.getState().profile.network_mode !== "hybrid";
-}
-
+/** Prefer already-published LAN; attach happens from game log. */
 function reservedLanPort(): number | null {
-  if (!isUnlimOnly()) return null;
-  const p = useProfileStore.getState().profile.lan_port;
-  return typeof p === "number" && p >= 1024 && p <= 65535 ? p : 55666;
+  return lanPortNow();
 }
 
 /** Keep Friends "Hosting" chip in sync when voice stop re-exposes / keeps LAN. */
@@ -102,13 +96,10 @@ export function useVoiceActions({
 
   async function stopHostKeepingLan() {
     const lan = lanPortNow();
-    const keepUnlim = isUnlimOnly() && lan != null;
-    const restored = await voiceStopHost(lan, keepUnlim).catch(() => null);
-    if (restored && lan) {
-      const code = keepUnlim
-        ? encodeUnlimShareCode(restored.share_code)
-        : restored.share_code;
-      syncLanShareCode(code, lan);
+    const keepRelay = lan != null;
+    const restored = await voiceStopHost(lan, keepRelay).catch(() => null);
+    if (restored && lan && keepRelay) {
+      syncLanShareCode(encodeRelayShareCode(restored.share_code), lan);
     }
   }
 
@@ -137,10 +128,10 @@ export function useVoiceActions({
       room.setActive((prev) => {
         if (!prev || prev.id !== activeId) return prev;
         // Same-code Realtime echo must not force a guest rejoin — that kills
-        // the in-flight Unlim connect (localhost:7880 never opens).
+        // the in-flight Relay connect (localhost:7880 never opens).
         if (code === prev.portholeShareCode) return prev;
         const next = { ...prev, portholeShareCode: code };
-        // Guests auto-reconnect when the host publishes a new Unlim key.
+        // Guests auto-reconnect when the host publishes a new Relay key.
         if (activeHostId !== userId && code) {
           queueMicrotask(() => live.onHostShareCode(next, code));
         }
@@ -237,14 +228,14 @@ export function useVoiceActions({
       // Clean leftover UI/session only — LiveKit reuse is handled in Rust.
       await live.disconnect();
       resetActiveUi();
-      const unlim = await unlimStatus();
-      if (!unlim.installed) {
-        throw new Error(MSG.voice.installUnlim);
+      const relay = await relayStatus();
+      if (!relay.installed) {
+        throw new Error(MSG.voice.installRelay);
       }
       await voiceEnsureRuntime();
       step(MSG.voice.startingServer, 85);
       live.setStatus(MSG.voice.startingServer);
-      // LiveKit first — host WebRTC must succeed before Unlim binds the same ports.
+      // LiveKit first — host WebRTC must succeed before Relay binds the same ports.
       const livekit = await voiceStartLivekit();
       const created = await createVoiceRoom({
         hostId: userId,
@@ -310,7 +301,7 @@ export function useVoiceActions({
         }
         const joined = await respondVoiceInvite(inv.id, true, userId);
         if (!joined) throw new Error("Room unavailable");
-        // Host may still be publishing the Unlim key after create — poll briefly.
+        // Host may still be publishing the Relay key after create — poll briefly.
         let room = joined;
         for (let i = 0; i < 10 && !room.portholeShareCode; i++) {
           live.setStatus("Waiting for host share key…");
@@ -418,7 +409,7 @@ export function useVoiceActions({
       await openRoomSession(target, asGuest);
       if (!asGuest) {
         useVoiceStatusStore.getState().setHostRoomId(target.id);
-        // Host rejoin: ensure Unlim tunnel is up.
+        // Host rejoin: ensure Relay tunnel is up.
         if (!target.portholeShareCode) {
           const ready = await voiceStartPorthole(reservedLanPort());
           await setVoiceRoomShareCode(target.id, ready.share_code);

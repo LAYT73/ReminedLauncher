@@ -20,7 +20,7 @@ mod vanilla;
 mod vanilla_skin_pack;
 mod net_log;
 mod tray;
-mod unlim;
+mod relay;
 mod voice_log;
 mod voice_runtime;
 
@@ -59,11 +59,11 @@ fn default_friend_toasts() -> bool {
 }
 
 fn default_network_mode() -> String {
-    "unlim".into()
+    "relay".into()
 }
 
 fn default_lan_port() -> u16 {
-    unlim::DEFAULT_LAN_TCP_PORT
+    relay::DEFAULT_LAN_TCP_PORT
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -106,10 +106,10 @@ pub struct Profile {
     pub theme: String,
     #[serde(default = "default_friend_toasts")]
     pub friend_toasts: bool,
-    /// `"unlim"` (default) — voice + LAN on Unlim; `"hybrid"` — LAN on Porthole.
+    /// `"relay"` (default) — voice + LAN on Relay; `"hybrid"` — LAN on Porthole.
     #[serde(default = "default_network_mode")]
     pub network_mode: String,
-    /// Open-to-LAN / mcwifipnp port (Unlim-only pre-reserve).
+    /// Open-to-LAN / mcwifipnp port (Relay-only pre-reserve).
     #[serde(default = "default_lan_port")]
     pub lan_port: u16,
     #[serde(default)]
@@ -843,12 +843,12 @@ async fn voice_start_livekit(
 #[tauri::command]
 async fn voice_start_porthole(
     app: AppHandle,
-    unlim: State<'_, unlim::UnlimState>,
+    relay: State<'_, relay::RelayState>,
     lan_port: Option<u16>,
 ) -> Result<voice_runtime::VoiceHostReady, String> {
-    let unlim = unlim.inner().clone();
+    let relay = relay.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        voice_runtime::start_voice_porthole(app, unlim, lan_port)
+        voice_runtime::start_voice_porthole(app, relay, lan_port)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -858,13 +858,13 @@ async fn voice_start_porthole(
 async fn voice_start_host(
     app: AppHandle,
     voice: State<'_, voice_runtime::VoiceRuntimeState>,
-    unlim: State<'_, unlim::UnlimState>,
+    relay: State<'_, relay::RelayState>,
 ) -> Result<voice_runtime::VoiceHostReady, String> {
     let voice = voice.inner().clone();
-    let unlim = unlim.inner().clone();
+    let relay = relay.inner().clone();
     let app2 = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        voice_runtime::start_voice_host(app2, voice, unlim)
+        voice_runtime::start_voice_host(app2, voice, relay)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -875,30 +875,30 @@ fn voice_stop_host(
     app: AppHandle,
     voice: State<'_, voice_runtime::VoiceRuntimeState>,
     porthole: State<'_, porthole::PortholeState>,
-    unlim: State<'_, unlim::UnlimState>,
+    relay: State<'_, relay::RelayState>,
     keep_lan_port: Option<u16>,
-    keep_unlim: Option<bool>,
+    keep_relay: Option<bool>,
 ) -> Option<porthole::PortholeHostInfo> {
     voice_runtime::stop_voice_host(
         &app,
         &voice,
         &porthole,
-        &unlim,
+        &relay,
         keep_lan_port,
-        keep_unlim.unwrap_or(false),
+        keep_relay.unwrap_or(false),
     )
 }
 
 #[tauri::command]
 async fn voice_guest_connect(
     app: AppHandle,
-    unlim: State<'_, unlim::UnlimState>,
+    relay: State<'_, relay::RelayState>,
     share_code: String,
 ) -> Result<(), String> {
-    let unlim = unlim.inner().clone();
+    let relay = relay.inner().clone();
     let app2 = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        voice_runtime::guest_connect(app2, unlim, &share_code)
+        voice_runtime::guest_connect(app2, relay, &share_code)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -907,96 +907,113 @@ async fn voice_guest_connect(
 #[tauri::command]
 fn voice_guest_disconnect(
     app: AppHandle,
-    unlim: State<'_, unlim::UnlimState>,
+    relay: State<'_, relay::RelayState>,
 ) {
-    voice_runtime::guest_disconnect(&app, &unlim);
+    voice_runtime::guest_disconnect(&app, &relay);
 }
 
 #[tauri::command]
-fn unlim_status(app: AppHandle) -> unlim::UnlimStatus {
-    unlim::status(&app)
+fn relay_status(app: AppHandle) -> relay::RelayStatus {
+    relay::status(&app)
 }
 
 #[tauri::command]
-fn unlim_check(app: AppHandle) -> unlim::UnlimCheckResult {
-    unlim::check(&app)
+fn relay_check(app: AppHandle) -> relay::RelayCheckResult {
+    relay::check(&app)
 }
 
 #[tauri::command]
-fn unlim_get_path(app: AppHandle) -> Option<String> {
-    unlim::get_custom_path(&app)
+fn relay_get_path(app: AppHandle) -> Option<String> {
+    relay::get_custom_path(&app)
 }
 
 #[tauri::command]
-fn unlim_set_path(app: AppHandle, path: Option<String>) -> Result<(), String> {
-    unlim::set_custom_path(&app, path)
+fn relay_set_path(app: AppHandle, path: Option<String>) -> Result<(), String> {
+    relay::set_custom_path(&app, path)
 }
 
 #[tauri::command]
-fn unlim_lan_port() -> u16 {
-    unlim::DEFAULT_LAN_TCP_PORT
+fn relay_lan_port() -> u16 {
+    relay::DEFAULT_LAN_TCP_PORT
 }
 
 #[tauri::command]
-fn unlim_current_key(unlim: State<'_, unlim::UnlimState>) -> Option<String> {
-    unlim::current_host_key(unlim.inner())
+fn relay_current_key(relay: State<'_, relay::RelayState>) -> Option<String> {
+    relay::current_host_key(relay.inner())
 }
 
 #[tauri::command]
-fn unlim_host_state(
+fn relay_host_state(
     app: AppHandle,
-    unlim: State<'_, unlim::UnlimState>,
-) -> unlim::UnlimHostState {
-    unlim::host_state(&app, unlim.inner())
+    relay: State<'_, relay::RelayState>,
+) -> relay::RelayHostState {
+    relay::host_state(&app, relay.inner())
 }
 
 #[tauri::command]
-async fn unlim_ensure_host(
+async fn relay_ensure_host(
     app: AppHandle,
-    unlim: State<'_, unlim::UnlimState>,
+    relay: State<'_, relay::RelayState>,
     lan_port: Option<u16>,
 ) -> Result<String, String> {
-    let unlim = unlim.inner().clone();
+    let relay = relay.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        unlim::ensure_shared_host(&app, &unlim, lan_port)
+        relay::ensure_shared_host(&app, &relay, lan_port)
     })
     .await
     .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn unlim_apply_lan_port(app: AppHandle, pack_id: String, port: u16) -> Result<(), String> {
+async fn relay_attach_lan(
+    app: AppHandle,
+    relay: State<'_, relay::RelayState>,
+    port: u16,
+) -> Result<String, String> {
+    let relay = relay.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || relay::attach_lan_port(&app, &relay, port))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn relay_detach_lan(relay: State<'_, relay::RelayState>) -> Option<String> {
+    relay::detach_lan_port(relay.inner())
+}
+
+#[tauri::command]
+fn relay_apply_lan_port(app: AppHandle, pack_id: String, port: u16) -> Result<(), String> {
     let root = paths::remined_root(&app)?;
     let instance = paths::pack_dir(&root, &pack_id);
     if !instance.is_dir() {
         return Ok(());
     }
-    unlim::write_mcwifipnp_lan_port(&instance, port)
+    relay::write_mcwifipnp_lan_port(&instance, port)
 }
 
 #[tauri::command]
-async fn unlim_start_game_join(
+async fn relay_start_game_join(
     app: AppHandle,
-    unlim: State<'_, unlim::UnlimState>,
+    relay: State<'_, relay::RelayState>,
     key: String,
     port: u16,
 ) -> Result<(), String> {
-    let unlim = unlim.inner().clone();
+    let relay = relay.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        unlim::start_game_join(&app, &unlim, &key, port)
+        relay::start_game_join(&app, &relay, &key, port)
     })
     .await
     .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn unlim_stop_game_join(app: AppHandle, unlim: State<'_, unlim::UnlimState>) {
-    unlim::stop_join(&app, unlim.inner());
+fn relay_stop_game_join(app: AppHandle, relay: State<'_, relay::RelayState>) {
+    relay::stop_join(&app, relay.inner());
 }
 
 #[tauri::command]
-fn unlim_stop_host(app: AppHandle, unlim: State<'_, unlim::UnlimState>) {
-    unlim::stop_host(&app, unlim.inner());
+fn relay_stop_host(app: AppHandle, relay: State<'_, relay::RelayState>) {
+    relay::stop_host(&app, relay.inner());
 }
 
 #[tauri::command]
@@ -1147,10 +1164,8 @@ async fn launch_pack(
             return Err(err);
         }
     } else {
-        // Sync Open-to-LAN default with the player's Network settings before MC starts.
-        if let Err(err) = unlim::write_mcwifipnp_lan_port(&instance, profile.lan_port) {
-            eprintln!("[remined] mcwifipnp port: {err}");
-        }
+        // Do not force a fixed LAN port here — tunnel follows whatever port
+        // Minecraft actually publishes (see useLanHosting + relay_attach_lan).
         if let Err(err) = lock_skinshuffle_ui(&instance) {
             diag::lock_session(&session).phase = GamePhase::Idle;
             return Err(err);
@@ -1339,7 +1354,7 @@ pub fn run() {
         })
         .manage(Mutex::new(GameSession::default()))
         .manage(porthole::PortholeState::default())
-        .manage(unlim::UnlimState::default())
+        .manage(relay::RelayState::default())
         .manage(voice_runtime::VoiceRuntimeState::default())
         .invoke_handler(tauri::generate_handler![
             list_packs,
@@ -1395,18 +1410,20 @@ pub fn run() {
             voice_guest_connect,
             voice_guest_disconnect,
             voice_mint_token,
-            unlim_status,
-            unlim_check,
-            unlim_get_path,
-            unlim_set_path,
-            unlim_lan_port,
-            unlim_current_key,
-            unlim_host_state,
-            unlim_ensure_host,
-            unlim_apply_lan_port,
-            unlim_start_game_join,
-            unlim_stop_game_join,
-            unlim_stop_host,
+            relay_status,
+            relay_check,
+            relay_get_path,
+            relay_set_path,
+            relay_lan_port,
+            relay_current_key,
+            relay_host_state,
+            relay_ensure_host,
+            relay_attach_lan,
+            relay_detach_lan,
+            relay_apply_lan_port,
+            relay_start_game_join,
+            relay_stop_game_join,
+            relay_stop_host,
             read_lan_port,
             gamewatch::latest_crash_report,
             gamewatch::game_log_status,
