@@ -26,19 +26,19 @@
 
 /* Success reconnect — fixed MC green (not theme accent) */
 .toast.is-ok {
-  background: #3c8527;
-  color: #fff;
-  text-shadow: 1px 1px 0 #1a4a12;
+  background: var(--mc-green);
+  color: var(--text-on-accent);
+  text-shadow: 1px 1px 0 var(--accent-shadow);
   box-shadow:
-    inset 2px 2px 0 #6cc349,
-    inset -2px -2px 0 #2a5c1a,
+    inset 2px 2px 0 var(--mc-green-hi),
+    inset -2px -2px 0 var(--accent-shadow),
     0 8px 0 rgba(0, 0, 0, 0.45);
 }
 
 /* Offline / error — fixed MC red */
 .toast.is-err {
   background: #8b1e1e;
-  color: #fff;
+  color: var(--text-on-accent);
   text-shadow: 1px 1px 0 #3d0c0c;
   box-shadow:
     inset 2px 2px 0 #c94a4a,

@@ -1,111 +1,127 @@
+import { t } from "@/shared/i18n";
+
 /**
- * User-facing copy that is reused or produced by non-UI code. Keep strings
- * here instead of inlining them, so wording stays consistent.
+ * User-facing copy that is reused or produced by non-UI code. Strings live in
+ * `shared/i18n/en|ru`; each group below is a getter so values resolve through
+ * the current locale at access time. Call sites are unchanged.
  */
 export const MSG = {
-  offline: {
-    packUpdates: "Pack updates need internet",
-    updateCheck: "Update check needs internet",
-    install: "Install needs internet",
-    usernameSync: "Username sync needs internet",
-    skinSync: "Skins sync needs internet — go online and sign in",
-    signInForSkin: "Sign in to save a skin",
-    friends: "Friends need an internet connection. You’re in offline mode.",
-    friendsSignedOut: "Sign in to see friends.",
-    network:
-      "Network Play needs internet. You’re in offline mode — local worlds still work from Play.",
-    voice: "Voice rooms need an internet connection. You're in offline mode.",
-    voiceSignedOut: "Sign in to use voice rooms.",
-    chipHint:
-      "You’re offline — cached account & packs only. Friends, skins, and updates need internet.",
-    accountNote:
-      "Offline — playing with your cached account. Sign in when online to sync friends and skins.",
-    leaveOffline: "Leave offline",
-    signOut: "Sign out",
+  get offline() {
+    return {
+      packUpdates: t("common.offline.packUpdates"),
+      updateCheck: t("common.offline.updateCheck"),
+      install: t("common.offline.install"),
+      usernameSync: t("common.offline.usernameSync"),
+      skinSync: t("common.offline.skinSync"),
+      signInForSkin: t("common.offline.signInForSkin"),
+      friends: t("common.offline.friends"),
+      friendsSignedOut: t("common.offline.friendsSignedOut"),
+      network: t("common.offline.network"),
+      voice: t("common.offline.voice"),
+      voiceSignedOut: t("common.offline.voiceSignedOut"),
+      chipHint: t("common.offline.chipHint"),
+      accountNote: t("common.offline.accountNote"),
+      leaveOffline: t("common.offline.leaveOffline"),
+      signOut: t("common.offline.signOut"),
+    };
   },
-  boot: {
-    usingCache: "You’re offline — using cached account",
-    cloudUnreachable: "Cloud unreachable — offline mode",
-    cloudUnreachableAfterAuth: "Couldn’t reach cloud — offline mode",
-    offlineMode: "Offline mode",
-    noCachedAccount: "No cached account for offline play",
-    hintOfflineCanContinue:
-      "No network — you can continue offline with your last account.",
-    hintOfflineNeedsSignIn:
-      "No network. Sign in once online to enable offline play.",
-    hintCloudUnreachable: "Cloud unreachable. Try again when you’re online.",
-    connectionLost: "Connection lost — offline mode",
-    backOnlineSignIn: "Back online — sign in again to sync friends & skins",
-    backOnlineSignInShort: "Back online — sign in to sync",
-    backOnline: "Back online",
-    stillOffline: "Still can’t reach the cloud — staying offline",
+  get boot() {
+    return {
+      usingCache: t("auth.boot.usingCache"),
+      cloudUnreachable: t("auth.boot.cloudUnreachable"),
+      cloudUnreachableAfterAuth: t("auth.boot.cloudUnreachableAfterAuth"),
+      offlineMode: t("auth.boot.offlineMode"),
+      noCachedAccount: t("auth.boot.noCachedAccount"),
+      hintOfflineCanContinue: t("auth.boot.hintOfflineCanContinue"),
+      hintOfflineNeedsSignIn: t("auth.boot.hintOfflineNeedsSignIn"),
+      hintCloudUnreachable: t("auth.boot.hintCloudUnreachable"),
+      connectionLost: t("auth.boot.connectionLost"),
+      backOnlineSignIn: t("auth.boot.backOnlineSignIn"),
+      backOnlineSignInShort: t("auth.boot.backOnlineSignInShort"),
+      backOnline: t("auth.boot.backOnline"),
+      stillOffline: t("auth.boot.stillOffline"),
+    };
   },
-  install: {
-    preparing: "Preparing…",
-    updatingPack: "Updating pack…",
-    packReady: "Pack ready",
-    readyToPlay: "Ready to play",
-    cancelled: "Cancelled",
-    deletingPack: "Deleting pack…",
-    packDeleted: "Pack deleted",
-    installationRemoved: "Installation removed",
-    checkingPackUpdate: "Checking pack update…",
-    updatingTo: (v: string) => `Updating to ${v}…`,
-    downloading: (v: string) => `Downloading ${v}…`,
-    installingVersion: (v: string) => `Installing ${v}…`,
-    installingReminedVanilla: (v: string) => `Installing Remined Vanilla ${v}…`,
-    deleteConfirm: (id: string) =>
-      `Delete installation “${id}”? Saves in that folder will be removed.`,
-    deleteTitle: "Delete installation",
-    deleteOk: "Delete",
-    deleteCancel: "Cancel",
+  get install() {
+    return {
+      preparing: t("pack.install.preparing"),
+      updatingPack: t("pack.install.updatingPack"),
+      packReady: t("pack.install.packReady"),
+      readyToPlay: t("pack.install.readyToPlay"),
+      cancelled: t("pack.install.cancelled"),
+      deletingPack: t("pack.install.deletingPack"),
+      packDeleted: t("pack.install.packDeleted"),
+      installationRemoved: t("pack.install.installationRemoved"),
+      checkingPackUpdate: t("pack.install.checkingPackUpdate"),
+      updatingTo: (v: string) => t("pack.install.updatingTo", { v }),
+      downloading: (v: string) => t("pack.install.downloading", { v }),
+      installingVersion: (v: string) => t("pack.install.installingVersion", { v }),
+      installingReminedVanilla: (v: string) =>
+        t("pack.install.installingReminedVanilla", { v }),
+      deleteConfirm: (id: string) => t("pack.install.deleteConfirm", { id }),
+      deleteTitle: t("pack.install.deleteTitle"),
+      deleteOk: t("pack.install.deleteOk"),
+      deleteCancel: t("pack.install.deleteCancel"),
+    };
   },
-  launch: {
-    preparing: "Preparing to launch…",
-    joiningFriend: "Joining friend…",
-    joined: "Joined — connecting in Minecraft",
-    usernameLength: "3–16 characters",
-    connectingNetwork: "Connecting Network Play…",
-    installRelay: "Install the Relay client from Network Play first",
-    joining: (name: string) => `Joining ${name}…`,
-    crashed: (summary: string) => `Minecraft crashed: ${summary}`,
+  get launch() {
+    return {
+      preparing: t("pack.launch.preparing"),
+      joiningFriend: t("pack.launch.joiningFriend"),
+      joined: t("pack.launch.joined"),
+      usernameLength: t("pack.launch.usernameLength"),
+      connectingNetwork: t("pack.launch.connectingNetwork"),
+      installRelay: t("pack.launch.installRelay"),
+      joining: (name: string) => t("pack.launch.joining", { name }),
+      crashed: (summary: string) => t("pack.launch.crashed", { summary }),
+      prepareFailed: t("pack.launch.prepareFailed"),
+    };
   },
-  lan: {
-    openingTunnel: "Opening Network Play tunnel…",
-    hostingStopped: "Hosting stopped",
-    hosting: "Hosting — friends can Join you now",
-    startFailed: "Could not start Network Play — check the Relay client",
+  get lan() {
+    return {
+      openingTunnel: t("network.lan.openingTunnel"),
+      hostingStopped: t("network.lan.hostingStopped"),
+      hosting: t("network.lan.hosting"),
+      startFailed: t("network.lan.startFailed"),
+    };
   },
-  profile: {
-    usernameUpdated: "Username updated",
-    skinSaved: "Skin saved",
-    capeSaved: "Cape saved",
-    copiedId: "Copied Remined id",
-    copyIdTitle: "Copy Remined id",
-    copyFailed: "Couldn’t copy",
+  get profile() {
+    return {
+      usernameUpdated: t("profile.usernameUpdated"),
+      skinSaved: t("profile.skinSaved"),
+      capeSaved: t("profile.capeSaved"),
+      copiedId: t("profile.copiedId"),
+      copyIdTitle: t("profile.copyIdTitle"),
+      copyFailed: t("profile.copyFailed"),
+    };
   },
-  update: {
-    checking: "Checking for launcher updates…",
-    latest: "Already on the latest launcher",
-    available: (v: string) => `Launcher ${v} is available`,
-    downloading: (v: string) => `Downloading ${v}…`,
-    restarting: "Restarting…",
+  get update() {
+    return {
+      checking: t("settings.update.checking"),
+      latest: t("settings.update.latest"),
+      available: (v: string) => t("settings.update.available", { v }),
+      downloading: (v: string) => t("settings.update.downloading", { v }),
+      restarting: t("settings.update.restarting"),
+    };
   },
-  common: {
-    somethingWentWrong: "Something went wrong",
+  get common() {
+    return { somethingWentWrong: t("common.somethingWentWrong") };
   },
-  auth: {
-    usernameTaken: "Username taken — try another",
+  get auth() {
+    return { usernameTaken: t("auth.usernameTaken") };
   },
-  voice: {
-    connectingVoice: "Connecting voice…",
-    startingServer: "Starting voice server…",
-    openingRelay: "Opening Remined Relay…",
-    copiedShareCode: "Copied share code",
-    mute: "Mute microphone",
-    unmute: "Unmute microphone",
-    clickToHear: "Click to hear",
-    clickToHearHint: "Browser blocked voice audio — click to restore sound",
-    installRelay: "Set up Remined Relay from Network settings first (Check downloads frpc)",
+  get voice() {
+    return {
+      connectingVoice: t("voice.connectingVoice"),
+      startingServer: t("voice.startingServer"),
+      openingRelay: t("voice.openingRelay"),
+      copiedShareCode: t("voice.copiedShareCode"),
+      mute: t("voice.mute"),
+      unmute: t("voice.unmute"),
+      clickToHear: t("voice.clickToHear"),
+      clickToHearHint: t("voice.clickToHearHint"),
+      installRelay: t("voice.installRelay"),
+      alreadyInRoom: t("voice.alreadyInRoom"),
+    };
   },
-} as const;
+};

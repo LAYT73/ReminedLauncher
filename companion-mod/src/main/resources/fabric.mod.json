@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "remined-companion",
+  "version": "1.0.0",
+  "name": "Remined Companion",
+  "description": "Reports the local player's game state to the Remined launcher so friends can see statuses.",
+  "authors": ["Remined"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["dev.remined.companion.Companion"]
+  },
+  "depends": {
+    "fabricloader": ">=0.12"
+  }
+}

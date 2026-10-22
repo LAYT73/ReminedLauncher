@@ -24,6 +24,26 @@
   min-width: 0;
 }
 
+/* Compact text-only variant (no pixel art). */
+.empty-state.is-generic {
+  min-height: 0;
+  max-width: none;
+  padding: 14px 16px;
+}
+
+.empty-state.is-generic .empty-state-copy h4 {
+  margin-bottom: 4px;
+  font-size: 15px;
+}
+
+.empty-state.is-generic .empty-state-copy p {
+  max-width: none;
+}
+
+.empty-state-action {
+  margin-top: 12px;
+}
+
 .empty-state-copy h4 {
   margin: 0 0 6px;
   color: var(--text);

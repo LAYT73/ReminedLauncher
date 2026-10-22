@@ -1,7 +1,9 @@
+import { localizeServerError } from "@/shared/lib/errors";
 import { call } from "@/shared/api/invoke";
 import { supabase } from "@/shared/api/supabase";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { CMD } from "@/shared/config/commands";
+import { t } from "@/shared/i18n";
 
 type RelayCredsResponse = {
   serverAddr: string;
@@ -164,7 +166,7 @@ export async function ensureRelayInstalled(): Promise<void> {
   if (st.installed) return;
   const check = await relayCheck();
   if (!check.ok || !check.installed) {
-    throw new Error(check.message || "Failed to install Remined Relay (frpc)");
+    throw new Error(check.message || t("network.relay.installFailed"));
   }
 }
 
@@ -182,7 +184,7 @@ export async function ensureRelayCreds(force = false): Promise<void> {
     data: { session },
   } = await supabase.auth.getSession();
   if (!session?.access_token) {
-    throw new Error("Sign in to use Remined Relay");
+    throw new Error(t("network.relay.signInRequired"));
   }
 
   const { data, error } = await supabase.functions.invoke<RelayCredsResponse>(
@@ -190,10 +192,10 @@ export async function ensureRelayCreds(force = false): Promise<void> {
     { method: "POST" },
   );
   if (error) {
-    throw new Error(error.message || "Failed to fetch Remined Relay credentials");
+    throw new Error(localizeServerError(error.message) || t("network.relay.credsFailed"));
   }
   if (!data?.serverAddr || !data?.token || !data?.serverPort) {
-    throw new Error("Remined Relay credentials response was empty");
+    throw new Error(t("network.relay.credsEmpty"));
   }
 
   await call(CMD.relaySetCreds, {

@@ -1,6 +1,8 @@
+import { useT } from "@/shared/i18n";
 import vanillaLogo from "@/shared/assets/vanilla.png";
 import reminedVanillaLogo from "@/shared/assets/remined-vanilla-logo.png";
 import { isReminedVanillaPackId, isVanillaPackId } from "@/shared/lib/packIds";
+import { PixelCheckIcon, PixelFolderIcon, PixelTrashIcon } from "@/shared/ui/PixelIcons";
 import {
   deleteInstalledPack,
   revealPackFolder,
@@ -17,6 +19,7 @@ type Props = {
 };
 
 export function InstallRow({ pack, active, logo }: Props) {
+  const t = useT();
   const vanilla = isVanillaPackId(pack.id);
   const rv = isReminedVanillaPackId(pack.id);
   return (
@@ -43,26 +46,35 @@ export function InstallRow({ pack, active, logo }: Props) {
           <strong>{pack.name}</strong>
           <span>{pack.version}</span>
         </span>
-        {active ? <span className="install-badge">Selected</span> : null}
+        {active ? (
+          <span
+            className="install-badge"
+            role="img"
+            title={t("pack.installations.selected")}
+            aria-label={t("pack.installations.selected")}
+          >
+            <PixelCheckIcon />
+          </span>
+        ) : null}
       </button>
       <div className="install-actions">
         <button
           type="button"
           className="btn-mc dim install-folder"
-          title="Open folder"
-          aria-label="Open folder"
+          title={t("pack.installations.openFolder")}
+          aria-label={t("pack.installations.openFolder")}
           onClick={() => void revealPackFolder(pack.id)}
         >
-          <svg viewBox="0 0 20 16" aria-hidden>
-            <path d="M0 2h7l2 2h11v12H0V2z" />
-          </svg>
+          <PixelFolderIcon />
         </button>
         <button
           type="button"
           className="btn-mc danger install-delete"
+          title={t("pack.installations.delete")}
+          aria-label={t("pack.installations.delete")}
           onClick={() => void deleteInstalledPack(pack.id)}
         >
-          Delete
+          <PixelTrashIcon />
         </button>
       </div>
     </li>

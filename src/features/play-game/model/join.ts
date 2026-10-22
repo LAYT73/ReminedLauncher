@@ -6,8 +6,10 @@ import {
   looksLikeRelayKey,
   relayStopGameJoin,
 } from "@/shared/api/relay";
+import { t } from "@/shared/i18n";
 import { MSG } from "@/shared/config/messages";
 import { RAIL } from "@/shared/config/routes";
+import { errorMessage } from "@/shared/lib/errors";
 import { navigateTo } from "@/shared/lib/navigator";
 import { toast } from "@/shared/lib/toast";
 import {
@@ -38,21 +40,21 @@ export async function joinFriendSession(row: FriendRow): Promise<void> {
     const port = live?.gamePort || row.sessionGamePort!;
     if (!shareCode || !port) {
       throw new Error(
-        "Host lobby is not ready yet — ask them to Open to LAN again",
+        t("pack.launch.hostNotReady"),
       );
     }
 
     const relayKey = decodeRelayShareCode(shareCode);
     if (relayKey == null && !looksLikeRelayKey(shareCode)) {
       throw new Error(
-        "This host is on an old network session — ask them to update Remined and Open to LAN again",
+        t("pack.launch.oldSession"),
       );
     }
 
     try {
       await ensureRelayReady();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = errorMessage(err);
       void netLog("ui", `Join aborted: Relay not ready (${msg})`);
       setStatus(msg, "error");
       toast(MSG.voice.installRelay);
@@ -72,7 +74,7 @@ export async function joinFriendSession(row: FriendRow): Promise<void> {
     });
     void netLog("ui", `Join launch issued quickPlay=127.0.0.1:${port}`);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errorMessage(err);
     void netLog("ui", `Join FAILED: ${msg}`);
     void relayStopGameJoin().catch(() => undefined);
     setStatus(msg, "error");

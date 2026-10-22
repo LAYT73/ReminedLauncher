@@ -59,11 +59,16 @@
   margin-bottom: 10px;
 }
 
+.voice-panel {
+  /* ~380px sidebar; shrinks on narrow windows so the stage keeps room. */
+  --voice-sidebar-w: clamp(280px, 36vw, 380px);
+}
+
 .voice-room-layout {
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--voice-sidebar-w, 340px);
+  grid-template-columns: minmax(0, 1fr) var(--voice-sidebar-w);
   gap: 14px;
   align-items: stretch;
 }
@@ -147,8 +152,8 @@
 }
 
 .voice-reroll-name svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   display: block;
 }
 
@@ -222,7 +227,7 @@
   justify-content: center;
   border: 3px solid #000;
   box-shadow: var(--bevel-btn);
-  color: #fff;
+  color: var(--text-on-accent);
   cursor: pointer;
   image-rendering: pixelated;
   transition:
@@ -247,7 +252,7 @@
 
 .voice-icon-btn.is-on {
   background: var(--mc-green);
-  text-shadow: 1px 1px 0 #1a4d12;
+  text-shadow: 1px 1px 0 var(--accent-shadow);
 }
 
 .voice-icon-btn.is-off {
@@ -265,9 +270,15 @@
 }
 
 .voice-icon-svg {
-  width: 20px;
-  height: 20px;
+  /* Pixel glyphs stay crisp only at multiples of their 16px grid. */
+  width: 16px;
+  height: 16px;
   display: block;
+}
+
+.voice-sidebar-controls .voice-icon-svg {
+  width: 16px;
+  height: 16px;
 }
 
 .voice-col {
@@ -297,7 +308,7 @@
 }
 
 .voice-member-row.is-speaking {
-  outline: 2px solid rgba(125, 206, 85, 0.65);
+  outline: 2px solid color-mix(in srgb, var(--mc-green-hi) 65%, transparent);
   outline-offset: -3px;
 }
 
@@ -332,9 +343,68 @@
   text-overflow: ellipsis;
 }
 
-.voice-member-status {
+.voice-member-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  min-width: 0;
+}
+
+.voice-member-tags .friend-status-badge {
+  padding: 1px 6px;
+  font-size: 9px;
+  max-width: 100%;
+}
+
+.friend-status-badge.is-host {
+  color: #2a1c00;
+  background: var(--mc-gold, #f2c230);
+  box-shadow: var(--bevel-btn);
+}
+
+.friend-status-badge.is-guest,
+.friend-status-badge.is-connecting {
+  color: var(--text-muted);
+}
+
+.friend-status-badge.is-speaking {
+  color: var(--text-on-accent);
+  background: var(--mc-green);
+  box-shadow: var(--bevel-btn);
+}
+
+.voice-badge-dot {
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+  animation: voice-badge-pulse 1s steps(2, end) infinite;
+}
+
+@keyframes voice-badge-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-badge-dot {
+    animation: none;
+  }
+}
+
+.voice-member-join {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 2px 8px;
+  min-height: 0;
   font-size: 11px;
-  opacity: 0.78;
+}
+
+.voice-member-join .voice-icon-svg {
+  width: 12px;
+  height: 12px;
 }
 
 .voice-member-badges {
@@ -404,7 +474,7 @@
 }
 
 .voice-chat-line.is-mine {
-  outline: 2px solid rgba(125, 206, 85, 0.65);
+  outline: 2px solid color-mix(in srgb, var(--mc-green-hi) 65%, transparent);
   outline-offset: -4px;
 }
 
@@ -501,8 +571,8 @@
 }
 
 .voice-modal-close .btn-pixel-icon {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .voice-meter-block {
@@ -565,7 +635,7 @@
 }
 
 .voice-icon-btn.voice-unlock-audio {
-  background: var(--mc-gold, #e6b422);
+  background: var(--mc-gold);
   color: #1a1200;
   text-shadow: none;
   animation: voice-unlock-pulse 1.4s ease-in-out infinite;
@@ -583,7 +653,7 @@
 
 .voice-icon-btn.voice-ptt-btn.is-talking {
   filter: brightness(1.25);
-  box-shadow: var(--bevel-btn), 0 0 0 2px rgba(125, 206, 85, 0.8);
+  box-shadow: var(--bevel-btn), 0 0 0 2px color-mix(in srgb, var(--mc-green-hi) 80%, transparent);
 }
 
 .voice-ptt-key {
@@ -592,7 +662,7 @@
   padding: 0 6px;
   border: 3px solid #000;
   background: var(--bg-input);
-  color: var(--text-on-stone, #fff);
+  color: var(--text-on-stone);
   font-family: inherit;
 }
 
@@ -624,8 +694,8 @@
 }
 
 .voice-tile.is-speaking .voice-tile-avatar {
-  border-color: #7dce55;
-  box-shadow: 0 0 10px rgba(125, 206, 85, 0.7);
+  border-color: var(--mc-green-hi);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--mc-green-hi) 70%, transparent);
 }
 
 .voice-tile-badges {
@@ -641,14 +711,14 @@
   height: 20px;
   display: grid;
   place-items: center;
-  background: var(--mc-red, #b3261e);
+  background: var(--mc-red);
   border: 2px solid #000;
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 .voice-tile-badge .voice-icon-svg {
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
 }
 
 .voice-tile-name {
@@ -665,7 +735,7 @@
   gap: 6px;
   margin: 0;
   padding: 4px 6px;
-  background: color-mix(in srgb, var(--mc-stone, #5a5a5a) 88%, #000 12%);
+  background: color-mix(in srgb, var(--mc-stone) 88%, #000 12%);
   border: 2px solid #000;
   box-shadow: var(--bevel-inset);
   box-sizing: border-box;
@@ -677,11 +747,16 @@
   width: 100%;
   height: 8px;
   margin: 0;
-  background: #2a2a2a;
+  background: var(--mc-stone);
   border: 2px solid #000;
   box-shadow: inset 1px 1px 0 #000, inset -1px -1px 0 #777;
   outline: none;
   cursor: pointer;
+}
+
+.voice-vol input[type="range"]:focus-visible {
+  outline: 2px solid var(--mc-green-hi);
+  outline-offset: 2px;
 }
 
 .voice-vol input[type="range"]::-webkit-slider-thumb {
@@ -689,7 +764,7 @@
   appearance: none;
   width: 16px;
   height: 16px;
-  background: #7dce55;
+  background: var(--mc-green-hi);
   border: 2px solid #000;
   box-shadow: var(--bevel-btn);
   cursor: pointer;
@@ -698,7 +773,7 @@
 .voice-vol input[type="range"]::-moz-range-thumb {
   width: 16px;
   height: 16px;
-  background: #7dce55;
+  background: var(--mc-green-hi);
   border: 2px solid #000;
   border-radius: 0;
   box-shadow: var(--bevel-btn);
@@ -707,7 +782,7 @@
 
 .voice-vol input[type="range"]::-moz-range-track {
   height: 8px;
-  background: #2a2a2a;
+  background: var(--mc-stone);
   border: 2px solid #000;
 }
 
@@ -778,7 +853,7 @@
   min-width: 0;
   width: 100%;
   height: auto;
-  background: #111;
+  background: var(--bg-sidebar);
   border: 3px solid #000;
   box-shadow: var(--bevel-panel);
   aspect-ratio: 16 / 9;
@@ -806,7 +881,7 @@
   height: 100%;
   object-fit: cover;
   display: block;
-  background: #111;
+  background: var(--bg-sidebar);
 }
 
 .voice-video-tile.is-screen video,
@@ -820,7 +895,7 @@
   bottom: 6px;
   padding: 2px 6px;
   background: rgba(0, 0, 0, 0.65);
-  color: #fff;
+  color: var(--text-on-accent);
   font-family: var(--font-display);
   font-size: 12px;
   letter-spacing: 0.03em;
@@ -841,7 +916,7 @@
   padding: 0;
   border: 2px solid #000;
   background: rgba(0, 0, 0, 0.65);
-  color: #fff;
+  color: var(--text-on-accent);
   cursor: pointer;
   box-shadow: var(--bevel-btn);
 }

@@ -1,6 +1,7 @@
 export type VoiceDeviceLists = {
   inputs: MediaDeviceInfo[];
   outputs: MediaDeviceInfo[];
+  cams: MediaDeviceInfo[];
 };
 
 export async function listAudioDevices(): Promise<VoiceDeviceLists> {
@@ -13,5 +14,6 @@ export async function listAudioDevices(): Promise<VoiceDeviceLists> {
   return {
     inputs: all.filter((d) => d.kind === "audioinput"),
     outputs: all.filter((d) => d.kind === "audiooutput"),
+    cams: all.filter((d) => d.kind === "videoinput"),
   };
 }

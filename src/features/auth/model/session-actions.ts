@@ -2,6 +2,7 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/shared/api/supabase";
 import { MSG } from "@/shared/config/messages";
 import { TIMING } from "@/shared/config/timings";
+import { bootElapsed } from "@/shared/lib/bootClock";
 import {
   isBrowserOnline,
   probeOnline,
@@ -35,6 +36,8 @@ let reconnecting = false;
 
 /** Fade out the boot splash, then switch gate. */
 export async function leaveBoot(next: Exclude<Gate, "loading">): Promise<void> {
+  const wait = TIMING.bootIntroMin - bootElapsed();
+  if (wait > 0) await new Promise((r) => window.setTimeout(r, wait));
   session().setBootLeaving(true);
   await new Promise((r) => window.setTimeout(r, TIMING.bootLeave));
   session().setGate(next);

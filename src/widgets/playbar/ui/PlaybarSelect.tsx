@@ -1,3 +1,4 @@
+import { useT } from "@/shared/i18n";
 import { RAIL, type Rail } from "@/shared/config/routes";
 import { writeLastPlayed } from "@/shared/lib/lastPlayed";
 import {
@@ -16,14 +17,17 @@ import {
 import { useProfileStore } from "@/entities/profile";
 
 function EditionSelect({ edition }: { edition: Edition }) {
+  const t = useT();
   const showProgress = useShowProgress();
   const packs = usePackStore((s) => s.packs);
   const { versions, pick, busy } = useEditionState(edition);
   const select = useVersionStore((s) => s.select);
+  const options = editionOptions(edition, versions, packs);
   return (
     <PackSelect
-      label="Version"
-      packs={editionOptions(edition, versions, packs)}
+      label={t("pack.select.version")}
+      packs={options}
+      placeholder={options.length ? undefined : t("pack.select.noVersions")}
       value={pick}
       onChange={(id) => select(edition, id)}
       disabled={showProgress || busy}
@@ -32,12 +36,14 @@ function EditionSelect({ edition }: { edition: Edition }) {
 }
 
 function ReminePackSelect() {
+  const t = useT();
   const showProgress = useShowProgress();
   const packs = useReminePacks();
   const active = useActiveReminePack();
   return (
     <PackSelect
       packs={packs}
+      placeholder={packs.length ? undefined : t("pack.select.noPacks")}
       value={active?.id ?? ""}
       onChange={(id) => {
         writeLastPlayed({ java: id });

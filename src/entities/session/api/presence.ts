@@ -15,6 +15,15 @@ export function markVoiceColumnMissing() {
   voiceColumnMissing = true;
 }
 
+/** Set once the server tells us `activity` doesn't exist (migration 017 not applied). */
+let activityColumnMissing = false;
+export function sessionsHaveActivityColumn(): boolean {
+  return !activityColumnMissing;
+}
+export function markActivityColumnMissing() {
+  activityColumnMissing = true;
+}
+
 export async function setPresence(opts: {
   userId: string;
   status: PresenceStatus;
@@ -22,6 +31,8 @@ export async function setPresence(opts: {
   shareCode?: string | null;
   gamePort?: number | null;
   inVoice?: boolean;
+  /** Friend-safe activity code (see migration 017); null when not playing. */
+  activity?: string | null;
 }): Promise<void> {
   if (!supabaseConfigured) return;
   const hosting = opts.status === "hosting";
@@ -36,10 +47,18 @@ export async function setPresence(opts: {
     zt_ip: null,
     updated_at: new Date().toISOString(),
   };
+  if (!activityColumnMissing) row.activity = playing ? opts.activity || null : null;
   if (!voiceColumnMissing) row.in_voice = Boolean(opts.inVoice);
   let { error } = await supabase.from(TABLE.sessions).upsert(row, {
     onConflict: "user_id",
   });
+  if (error && !activityColumnMissing && /activity/i.test(error.message)) {
+    activityColumnMissing = true;
+    delete row.activity;
+    ({ error } = await supabase.from(TABLE.sessions).upsert(row, {
+      onConflict: "user_id",
+    }));
+  }
   if (error && !voiceColumnMissing && /in_voice/i.test(error.message)) {
     voiceColumnMissing = true;
     delete row.in_voice;

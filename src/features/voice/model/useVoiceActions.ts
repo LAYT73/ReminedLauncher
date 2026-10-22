@@ -29,12 +29,14 @@ import {
   voiceStopHost,
 } from "../api/voiceNative";
 import { randomVoiceRoomTitle } from "../lib/roomName";
-import { errorMessage, type ToastFn } from "./types";
+import { errorMessage } from "@/shared/lib/errors";
+import type { ToastFn } from "./types";
 import type { LiveSession } from "./useLiveSession";
 import type { useRoomData } from "./useRoomData";
 import type { useRuntimeModal } from "./useRuntimeModal";
 import type { useVoiceLists } from "./useVoiceLists";
 import { MSG } from "@/shared/config/messages";
+import { t } from "@/shared/i18n";
 
 function lanPortNow(): number | null {
   return useGameStore.getState().hostingLan?.gamePort ?? null;
@@ -88,7 +90,7 @@ export function useVoiceActions({
   onRoomStatusChangeRef.current = onRoomStatusChange;
   const { active } = room;
   const isHost = active?.hostId === userId;
-  const fail = (err: unknown) => onToast(errorMessage(err), "err");
+  const fail = (err: unknown) => onToast(errorMessage(err, ""), "err");
 
   function resetActiveUi() {
     room.reset();
@@ -109,7 +111,7 @@ export function useVoiceActions({
       liveRef.current.resetLiveUi();
       onRoomStatusChangeRef.current?.(false);
       await listsRef.current.refreshLists().catch(() => undefined);
-      if (toastMsg) onToastRef.current("Host ended the room", "ok");
+      if (toastMsg) onToastRef.current(t("voice.toasts.hostEnded"), "ok");
     } finally {
       guestKickInFlight.current = false;
     }
@@ -225,14 +227,14 @@ export function useVoiceActions({
   async function onCreate() {
     if (busy || createInFlight.current) return;
     if (active && live.sessionRef.current) {
-      onToast("Already in a voice room — leave it first", "err");
+      onToast(MSG.voice.alreadyInRoom, "err");
       return;
     }
     createInFlight.current = true;
     setCreating(true);
     setBusy(true);
     runtime.begin();
-    live.setStatus("Preparing voice…");
+    live.setStatus(t("voice.s.preparingVoice"));
     let createdRoomId: string | null = null;
     const step = (message: string, percent: number) =>
       runtime.setState((prev) => ({
@@ -240,27 +242,28 @@ export function useVoiceActions({
         message,
         percent: Math.max(prev.percent, percent),
       }));
-    const unlisten = await listen<{ phase: string; message: string; percent: number }>(
-      EVENT.voiceRuntimeProgress,
-      (ev) =>
-        runtime.setState((prev) =>
-          prev.open
-            ? {
-                ...prev,
-                phase: ev.payload.phase || prev.phase,
-                message: ev.payload.message || prev.message,
-                percent: ev.payload.percent ?? prev.percent,
-                error: null,
-              }
-            : prev,
-        ),
-    );
+    let unlisten: (() => void) | undefined;
     try {
+      unlisten = await listen<{ phase: string; message: string; percent: number }>(
+        EVENT.voiceRuntimeProgress,
+        (ev) =>
+          runtime.setState((prev) =>
+            prev.open
+              ? {
+                  ...prev,
+                  phase: ev.payload.phase || prev.phase,
+                  message: ev.payload.message || prev.message,
+                  percent: ev.payload.percent ?? prev.percent,
+                  error: null,
+                }
+              : prev,
+          ),
+      );
       // Clean leftover UI/session only — LiveKit reuse is handled in Rust.
       await live.disconnect();
       resetActiveUi();
-      step("Preparing Remined Relay…", 20);
-      live.setStatus("Preparing Remined Relay…");
+      step(t("voice.s.preparingRelay"), 20);
+      live.setStatus(t("voice.s.preparingRelay"));
       await ensureRelayReady();
       await voiceEnsureRuntime();
       step(MSG.voice.startingServer, 85);
@@ -288,24 +291,24 @@ export function useVoiceActions({
         ...(prev ?? created),
         relayShareCode: ready.share_code,
       }));
-      live.setStatus("In voice");
+      live.setStatus(t("voice.inVoice"));
       runtime.close();
       setTitle(randomVoiceRoomTitle());
-      onToast("Voice room live", "ok");
+      onToast(t("voice.toasts.roomLive"), "ok");
       unlockAchievement("first-voice-room", onToast);
     } catch (err) {
       await teardownFailedCreate(createdRoomId);
-      const msg = errorMessage(err);
+      const msg = errorMessage(err, "");
       void voiceLog("ui", `onCreate FAILED: ${msg}`);
       runtime.setState((prev) => ({
         ...prev,
         open: true,
         error: msg,
         percent: 0,
-        message: "Failed",
+        message: t("voice.runtime.failed"),
       }));
     } finally {
-      unlisten();
+      unlisten?.();
       createInFlight.current = false;
       setCreating(false);
       setBusy(false);
@@ -314,7 +317,7 @@ export function useVoiceActions({
 
   const onAcceptInvite = (inv: VoiceInvite) =>
     guarded(async () => {
-      live.setStatus("Accepting invite…");
+      live.setStatus(t("voice.s.acceptingInvite"));
       try {
         // Switching rooms: leave the current one first so the old session/SFU
         // does not linger (and so we don't keep hosting a dead room).
@@ -330,23 +333,21 @@ export function useVoiceActions({
           resetActiveUi();
         }
         const joined = await respondVoiceInvite(inv.id, true, userId);
-        if (!joined) throw new Error("Room unavailable");
-        live.setStatus("Preparing Remined Relay…");
+        if (!joined) throw new Error(t("voice.errors.roomUnavailable"));
+        live.setStatus(t("voice.s.preparingRelay"));
         await ensureRelayReady();
         // Host may still be publishing the Relay key after create — poll briefly.
         let room = joined;
         for (let i = 0; i < 10 && !room.relayShareCode; i++) {
-          live.setStatus("Waiting for host share key…");
+          live.setStatus(t("voice.s.waitingShareKey"));
           await new Promise((r) => setTimeout(r, 500));
           room = (await getVoiceRoom(joined.id)) ?? room;
         }
         if (!room.relayShareCode) {
-          throw new Error(
-            "Host share key is not ready yet — ask them to wait until the code appears, then re-accept",
-          );
+          throw new Error(t("voice.errors.hostKeyNotReady"));
         }
         await openRoomSession(room, true);
-        onToast("Joined voice room", "ok");
+        onToast(t("voice.toasts.joined"), "ok");
         unlockAchievement("first-voice-room", onToast);
       } catch (err) {
         void voiceGuestDisconnect().catch(() => undefined);
@@ -396,13 +397,13 @@ export function useVoiceActions({
   async function onInvite() {
     if (!active || !invitePick) return;
     if (!active.relayShareCode) {
-      onToast("Wait until the lobby code appears before inviting", "err");
-      throw new Error("Lobby not ready");
+      onToast(t("voice.toasts.waitLobbyCode"), "err");
+      throw new Error(t("voice.errors.lobbyNotReady"));
     }
     try {
       await inviteFriendToRoom({ roomId: active.id, fromId: userId, toId: invitePick });
       setInvitePick("");
-      onToast("Invite sent", "ok");
+      onToast(t("voice.toasts.inviteSent"), "ok");
     } catch (err) {
       fail(err);
       throw err;
@@ -438,20 +439,24 @@ export function useVoiceActions({
   const onRejoin = (target: VoiceRoom) =>
     guarded(async () => {
       const asGuest = target.hostId !== userId;
-      await openRoomSession(target, asGuest);
-      if (!asGuest) {
-        useVoiceStatusStore.getState().setHostRoomId(target.id);
-        // Host rejoin: ensure Relay tunnel is up.
-        if (!target.relayShareCode) {
-          const ready = await voiceStartRelay(reservedLanPort());
-          await setVoiceRoomShareCode(target.id, ready.share_code);
-          room.setActive((prev) =>
-            prev
-              ? { ...prev, relayShareCode: ready.share_code }
-              : { ...target, relayShareCode: ready.share_code },
-          );
-        }
+      if (asGuest) {
+        await openRoomSession(target, true);
+        return;
       }
+      // Host rejoin (e.g. after a launcher restart): the local LiveKit and the
+      // old Relay tunnel are gone — start LiveKit (Rust reuses a live one),
+      // connect to its current URL, then re-open Relay with a fresh share code.
+      await voiceEnsureRuntime();
+      const livekit = await voiceStartLivekit();
+      const hostRoom = { ...target, wsUrl: livekit.ws_url };
+      await openRoomSession(hostRoom, false);
+      useVoiceStatusStore.getState().setHostRoomId(target.id);
+      const ready = await voiceStartRelay(reservedLanPort());
+      await setVoiceRoomShareCode(target.id, ready.share_code);
+      room.setActive((prev) => ({
+        ...(prev ?? hostRoom),
+        relayShareCode: ready.share_code,
+      }));
     });
 
   const onCloseListedRoom = (target: VoiceRoom) =>
@@ -459,11 +464,11 @@ export function useVoiceActions({
       if (target.hostId === userId) {
         await closeVoiceRoom(target.id);
         await stopHostKeepingLan();
-        onToast("Room closed", "ok");
+        onToast(t("voice.toasts.roomClosed"), "ok");
       } else {
         await leaveVoiceRoom(target.id, userId);
         await voiceGuestDisconnect().catch(() => undefined);
-        onToast("Left room", "ok");
+        onToast(t("voice.toasts.leftRoom"), "ok");
       }
       if (active?.id === target.id) {
         await live.disconnect();

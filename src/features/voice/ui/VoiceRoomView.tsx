@@ -1,15 +1,17 @@
-import { useState, type Dispatch, type FormEvent, type ReactNode, type RefObject, type SetStateAction } from "react";
+import { Fragment, useState, type Dispatch, type FormEvent, type ReactNode, type RefObject, type SetStateAction } from "react";
 import type {
   VoiceInvite,
   VoiceMember,
   VoiceMessage,
   VoiceRoom,
 } from "@/entities/voice-room";
+import type { VoiceLanJoin } from "../model/types";
 import type { VoiceSession, VoiceVideoTile } from "../lib/voiceSession";
 import { SkinHead } from "@/entities/skin";
-import type { McSelectOption } from "@/shared/ui/McSelect";
+import { useT } from "@/shared/i18n";
+import { displayRoomTitle } from "../lib/roomName";
 import { VoiceChat } from "./VoiceChat";
-import { VoiceInviteModal } from "./VoiceInviteModal";
+import { VoiceInviteModal, type InviteOption } from "./VoiceInviteModal";
 import { VoiceMembers } from "./VoiceMembers";
 import { VoiceToolbar } from "./VoiceToolbar";
 import { VoiceVideoStage } from "./VoiceVideoStage";
@@ -25,6 +27,7 @@ type Props = {
   invites: VoiceInvite[];
   members: VoiceMember[];
   messages: VoiceMessage[];
+  lanJoin?: VoiceLanJoin;
   videoTiles: VoiceVideoTile[];
   speaking: Record<string, boolean>;
   volumes: Record<string, number>;
@@ -37,7 +40,7 @@ type Props = {
   screenOn: boolean;
   needsAudioUnlock: boolean;
   unlockAudio: () => void;
-  inviteOptions: McSelectOption[];
+  inviteOptions: InviteOption[];
   invitePick: string;
   setInvitePick: (id: string) => void;
   draft: string;
@@ -55,6 +58,14 @@ type Props = {
 };
 
 /** In-room: video grid left; members + chat + controls stacked on the right. */
+/** Splits a `{name}` template and swaps each placeholder for the given node. */
+function fillTemplate(template: string, parts: Record<string, ReactNode>): ReactNode[] {
+  return template.split(/(\{\w+\})/).map((chunk, i) => {
+    const key = /^\{(\w+)\}$/.exec(chunk)?.[1];
+    return key && key in parts ? <Fragment key={i}>{parts[key]}</Fragment> : chunk;
+  });
+}
+
 export function VoiceRoomView(props: Props) {
   const {
     userId,
@@ -69,24 +80,25 @@ export function VoiceRoomView(props: Props) {
     onDeclineInvite,
     children,
   } = props;
+  const t = useT();
   const [inviteOpen, setInviteOpen] = useState(false);
   const lobbyReady = Boolean(active.relayShareCode);
 
   return (
     <section className="section voice-panel is-room">
       <div className="page-title-row voice-room-head">
-        <h2 className="page-title">{active.title}</h2>
+        <h2 className="page-title">{displayRoomTitle(active.title)}</h2>
         <div className="network-status-badges" aria-live="polite">
           <span className={`network-pill is-${tone}`}>
             <span className="network-pill-dot" aria-hidden />
-            <span className="network-pill-label">Voice</span>
-            <span className="network-pill-value">{status || "Idle"}</span>
+            <span className="network-pill-label">{t("voice.title")}</span>
+            <span className="network-pill-value">{status || t("voice.idle")}</span>
           </span>
           <span className={`network-pill is-${isHost ? "ok" : "idle"}`}>
             <span className="network-pill-dot" aria-hidden />
-            <span className="network-pill-label">Role</span>
+            <span className="network-pill-label">{t("voice.role")}</span>
             <span className="network-pill-value">
-              {isHost ? "Host" : "Guest"}
+              {isHost ? t("voice.host") : t("voice.guest")}
             </span>
           </span>
         </div>
@@ -102,8 +114,10 @@ export function VoiceRoomView(props: Props) {
                 size={28}
               />
               <div className="voice-invite-banner-copy">
-                <strong>{inv.fromName || "A friend"}</strong> invited you to{" "}
-                <strong>{inv.roomTitle || "a voice room"}</strong>
+                {fillTemplate(t("voice.invitedYou"), {
+                  name: <strong>{inv.fromName || t("voice.aFriend")}</strong>,
+                  room: <strong>{displayRoomTitle(inv.roomTitle) || t("voice.aVoiceRoom")}</strong>,
+                })}
               </div>
               <div className="voice-invite-banner-actions">
                 <button
@@ -112,7 +126,7 @@ export function VoiceRoomView(props: Props) {
                   disabled={busy}
                   onClick={() => void onAcceptInvite(inv)}
                 >
-                  Join
+                  {t("voice.join")}
                 </button>
                 <button
                   type="button"
@@ -120,7 +134,7 @@ export function VoiceRoomView(props: Props) {
                   disabled={busy}
                   onClick={() => void onDeclineInvite(inv)}
                 >
-                  Decline
+                  {t("voice.decline")}
                 </button>
               </div>
             </div>
@@ -135,7 +149,7 @@ export function VoiceRoomView(props: Props) {
 
         <aside className="voice-sidebar">
           <div className="voice-sidebar-section voice-sidebar-members">
-            <h3 className="settings-heading voice-sidebar-title">In room</h3>
+            <h3 className="settings-heading voice-sidebar-title">{t("voice.inRoom")}</h3>
             <VoiceMembers
               userId={userId}
               session={session}
@@ -143,11 +157,12 @@ export function VoiceRoomView(props: Props) {
               speaking={props.speaking}
               volumes={props.volumes}
               setVolumes={props.setVolumes}
+              lanJoin={props.lanJoin}
             />
           </div>
 
           <div className="voice-sidebar-section voice-sidebar-chat">
-            <h3 className="settings-heading voice-sidebar-title">Chat</h3>
+            <h3 className="settings-heading voice-sidebar-title">{t("voice.chat")}</h3>
             <VoiceChat
               userId={userId}
               messages={props.messages}

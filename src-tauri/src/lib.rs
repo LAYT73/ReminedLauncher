@@ -2,6 +2,7 @@ mod asset_cache;
 pub mod cli;
 mod config;
 mod diag;
+mod i18n;
 mod gamewatch;
 pub mod mod_audit;
 mod instance;
@@ -198,7 +199,14 @@ fn write_profile(root: &Path, profile: &Profile) -> Result<(), String> {
     let dir = root.join(".remined");
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let json = serde_json::to_string_pretty(profile).map_err(|e| e.to_string())?;
-    fs::write(paths::profile_path(root), json).map_err(|e| e.to_string())
+    // Commands run on the thread pool: serialize writers and swap atomically so
+    // a concurrent load_profile never sees a half-written file.
+    static WRITE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let path = paths::profile_path(root);
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, json).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, &path).map_err(|e| e.to_string())
 }
 
 fn lock_skinshuffle_ui(instance: &Path) -> Result<(), String> {
@@ -320,11 +328,11 @@ fn apply_customskinloader_config(instance: &Path) -> Result<(), String> {
 
 fn apply_skinshuffle(instance: &Path, skin_src: &Path, skin_model: &str) -> Result<(), String> {
     if !skin_src.is_file() {
-        return Err(format!("Skin file not found: {}", skin_src.display()));
+        return Err(i18n::trf("skin.not_found", &[("path", &skin_src.display().to_string())]));
     }
     let bytes = fs::read(skin_src).map_err(|e| e.to_string())?;
     if bytes.len() < 100 {
-        return Err("Invalid skin PNG".into());
+        return Err(i18n::tr("skin.invalid_png").into());
     }
 
     let stamp = SystemTime::now()
@@ -374,11 +382,11 @@ fn apply_skinshuffle(instance: &Path, skin_src: &Path, skin_model: &str) -> Resu
 /// Write skin for CustomSkinLoader LocalSkin (self-view when Remined API 404s / offline).
 fn apply_csl_local_skin(instance: &Path, username: &str, skin_src: &Path) -> Result<(), String> {
     if !skin_src.is_file() {
-        return Err(format!("Skin file not found: {}", skin_src.display()));
+        return Err(i18n::trf("skin.not_found", &[("path", &skin_src.display().to_string())]));
     }
     let bytes = fs::read(skin_src).map_err(|e| e.to_string())?;
     if bytes.len() < 100 {
-        return Err("Invalid skin PNG".into());
+        return Err(i18n::tr("skin.invalid_png").into());
     }
     let dir = instance
         .join("CustomSkinLoader")
@@ -402,11 +410,11 @@ fn clear_csl_local_skin(instance: &Path, username: &str) {
 /// Write cape for CustomSkinLoader LocalSkin fallback (self-view / offline).
 fn apply_csl_local_cape(instance: &Path, username: &str, cape_src: &Path) -> Result<(), String> {
     if !cape_src.is_file() {
-        return Err(format!("Cape file not found: {}", cape_src.display()));
+        return Err(i18n::trf("cape.not_found", &[("path", &cape_src.display().to_string())]));
     }
     let bytes = fs::read(cape_src).map_err(|e| e.to_string())?;
     if bytes.len() < 50 {
-        return Err("Invalid cape PNG".into());
+        return Err(i18n::tr("cape.invalid_png").into());
     }
     let dir = instance
         .join("CustomSkinLoader")
@@ -467,71 +475,91 @@ fn get_app_version(app: AppHandle) -> String {
 }
 
 #[tauri::command]
-fn list_packs(app: AppHandle) -> Result<Vec<Pack>, String> {
-    let root = paths::remined_root(&app)?;
-    let mut packs = Vec::new();
-    for st in pack_sync::list_installed(&root) {
-        if !st.installed {
-            continue;
+async fn list_packs(app: AppHandle) -> Result<Vec<Pack>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = paths::remined_root(&app)?;
+        let mut packs = Vec::new();
+        for st in pack_sync::list_installed(&root) {
+            if !st.installed {
+                continue;
+            }
+            let meta = instance::read_meta(Path::new(&st.path));
+            let id = meta
+                .as_ref()
+                .map(|m| m.id.clone())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| st.id.clone());
+            let name = meta
+                .as_ref()
+                .map(|m| m.name.clone())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| id.clone());
+            packs.push(Pack {
+                id,
+                name,
+                version: st.local_version.unwrap_or_else(|| "local".into()),
+                description: String::new(),
+            });
         }
-        let meta = instance::read_meta(Path::new(&st.path));
-        let id = meta
-            .as_ref()
-            .map(|m| m.id.clone())
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| st.id.clone());
-        let name = meta
-            .as_ref()
-            .map(|m| m.name.clone())
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| id.clone());
-        packs.push(Pack {
-            id,
-            name,
-            version: st.local_version.unwrap_or_else(|| "local".into()),
-            description: String::new(),
-        });
-    }
-    Ok(packs)
+        Ok(packs)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn get_profile(app: AppHandle) -> Result<Profile, String> {
-    let root = paths::remined_root(&app)?;
-    Ok(load_profile(&root))
+async fn get_profile(app: AppHandle) -> Result<Profile, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = paths::remined_root(&app)?;
+        Ok(load_profile(&root))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn save_profile(app: AppHandle, profile: Profile) -> Result<(), String> {
-    let root = paths::remined_root(&app)?;
-    let mut next = profile;
-    next.ram_mb = next.ram_mb.clamp(1024, 32768);
-    if let Some(ref path) = next.java_path {
-        let trimmed = path.trim();
-        next.java_path = if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.to_string())
-        };
-    }
-    next.jvm_args = next.jvm_args.trim().to_string();
-    write_profile(&root, &next)
+async fn save_profile(app: AppHandle, profile: Profile) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = paths::remined_root(&app)?;
+        let mut next = profile;
+        next.ram_mb = next.ram_mb.clamp(1024, 32768);
+        if let Some(ref path) = next.java_path {
+            let trimmed = path.trim();
+            next.java_path = if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            };
+        }
+        next.jvm_args = next.jvm_args.trim().to_string();
+        write_profile(&root, &next)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn probe_java(app: AppHandle, path: Option<String>) -> Result<JavaInfo, String> {
-    let root = paths::remined_root(&app)?;
-    Ok(java_runtime::find_java25(&root, path.as_deref()))
+async fn probe_java(app: AppHandle, path: Option<String>) -> Result<JavaInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = paths::remined_root(&app)?;
+        Ok(java_runtime::find_java25(&root, path.as_deref()))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn read_skin_data_url(path: String) -> Result<Option<String>, String> {
-    let p = PathBuf::from(&path);
-    if !p.is_file() {
-        return Ok(None);
-    }
-    let bytes = fs::read(p).map_err(|e| e.to_string())?;
-    Ok(Some(format!("data:image/png;base64,{}", base64_encode(&bytes))))
+async fn read_skin_data_url(path: String) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = PathBuf::from(&path);
+        if !p.is_file() {
+            return Ok(None);
+        }
+        let bytes = fs::read(p).map_err(|e| e.to_string())?;
+        Ok(Some(format!("data:image/png;base64,{}", base64_encode(&bytes))))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn is_http_url(s: &str) -> bool {
@@ -544,12 +572,12 @@ fn is_http_url(s: &str) -> bool {
 async fn materialize_skin(root: &Path, skin: &str) -> Result<PathBuf, String> {
     let skin = skin.trim();
     if skin.is_empty() {
-        return Err("Empty skin path".into());
+        return Err(i18n::tr("skin.empty_path").into());
     }
     if !is_http_url(skin) {
         let p = PathBuf::from(skin);
         if !p.is_file() {
-            return Err(format!("Skin file not found: {skin}"));
+            return Err(i18n::trf("skin.not_found", &[("path", &skin)]));
         }
         return Ok(p);
     }
@@ -571,10 +599,10 @@ async fn materialize_skin(root: &Path, skin: &str) -> Result<PathBuf, String> {
         .await
         .map_err(|e| e.to_string())?;
     if bytes.len() < 24 || &bytes[0..8] != b"\x89PNG\r\n\x1a\n" {
-        return Err("Downloaded skin is not a PNG".into());
+        return Err(i18n::tr("skin.dl_not_png").into());
     }
     if bytes.len() > 256 * 1024 {
-        return Err("Downloaded skin is too large".into());
+        return Err(i18n::tr("skin.dl_too_large").into());
     }
 
     let dir = root.join(".remined").join("skins");
@@ -619,9 +647,13 @@ fn get_game_phase(session: State<'_, Mutex<GameSession>>) -> GamePhase {
 }
 
 #[tauri::command]
-fn get_runtime_status(app: AppHandle) -> Result<RuntimeStatus, String> {
-    let root = paths::remined_root(&app)?;
-    Ok(onboarding::status(&root))
+async fn get_runtime_status(app: AppHandle) -> Result<RuntimeStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = paths::remined_root(&app)?;
+        Ok(onboarding::status(&root))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -647,9 +679,13 @@ async fn sync_selected_pack(app: AppHandle, pack_id: String) -> Result<PackStatu
 }
 
 #[tauri::command]
-fn get_pack_status(app: AppHandle, pack_id: String) -> Result<PackStatus, String> {
-    let root = paths::remined_root(&app)?;
-    Ok(pack_sync::pack_status(&root, &pack_id))
+async fn get_pack_status(app: AppHandle, pack_id: String) -> Result<PackStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = paths::remined_root(&app)?;
+        Ok(pack_sync::pack_status(&root, &pack_id))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Download/update pack zip, then ensure Fabric libraries + assets.
@@ -657,7 +693,7 @@ fn get_pack_status(app: AppHandle, pack_id: String) -> Result<PackStatus, String
 async fn ensure_pack(app: AppHandle, pack_id: String) -> Result<PackStatus, String> {
     let root = paths::remined_root(&app)?;
     if pack_id.trim().is_empty() {
-        return Err("No pack selected".into());
+        return Err(i18n::tr("launch.no_pack").into());
     }
     onboarding::ensure_pack(&app.clone().into(), &root, pack_id.trim()).await
 }
@@ -703,45 +739,57 @@ async fn install_remined_vanilla_version(
 }
 
 #[tauri::command]
-fn delete_pack(app: AppHandle, pack_id: String) -> Result<(), String> {
-    let root = paths::remined_root(&app)?;
-    pack_sync::delete_pack(&root, &pack_id)
+async fn delete_pack(app: AppHandle, pack_id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = paths::remined_root(&app)?;
+        pack_sync::delete_pack(&root, &pack_id)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn open_pack_folder(app: AppHandle, pack_id: String) -> Result<(), String> {
-    let root = paths::remined_root(&app)?;
-    let dir = paths::pack_dir(&root, pack_id.trim());
-    if !dir.is_dir() {
-        return Err("Pack folder not found".into());
-    }
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(&dir)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("explorer")
-            .arg(&dir)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(&dir)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-    Ok(())
+async fn open_pack_folder(app: AppHandle, pack_id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = paths::remined_root(&app)?;
+        let dir = paths::pack_dir(&root, pack_id.trim());
+        if !dir.is_dir() {
+            return Err(i18n::tr("pack.folder_not_found").into());
+        }
+        #[cfg(target_os = "macos")]
+        {
+            std::process::Command::new("open")
+                .arg(&dir)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        }
+        #[cfg(target_os = "windows")]
+        {
+            std::process::Command::new("explorer")
+                .arg(&dir)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        }
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            std::process::Command::new("xdg-open")
+                .arg(&dir)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn voice_log_path(app: AppHandle) -> Result<String, String> {
-    voice_log::log_path(&app).map(|p| p.display().to_string())
+async fn voice_log_path(app: AppHandle) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        voice_log::log_path(&app).map(|p| p.display().to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -750,8 +798,12 @@ fn voice_log_append(app: AppHandle, source: String, message: String) -> Result<(
 }
 
 #[tauri::command]
-fn voice_log_tail(app: AppHandle, max_bytes: Option<usize>) -> Result<String, String> {
-    voice_log::read_tail(&app, max_bytes.unwrap_or(48_000))
+async fn voice_log_tail(app: AppHandle, max_bytes: Option<usize>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        voice_log::read_tail(&app, max_bytes.unwrap_or(48_000))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -851,24 +903,52 @@ fn relay_set_creds(addr: String, port: u16, token: String) -> Result<(), String>
     relay::set_frps_creds(addr, port, token)
 }
 
+/// Frontend tells us the UI language (startup + whenever it changes).
 #[tauri::command]
-fn relay_status(app: AppHandle) -> relay::RelayStatus {
-    relay::status(&app)
+fn set_ui_locale(app: AppHandle, locale: String) {
+    i18n::set_locale(&locale);
+    tray::relocalize(&app);
 }
 
 #[tauri::command]
-fn relay_check(app: AppHandle) -> relay::RelayCheckResult {
-    relay::check(&app)
+async fn relay_status(app: AppHandle) -> relay::RelayStatus {
+    tauri::async_runtime::spawn_blocking(move || relay::status(&app))
+        .await
+        .unwrap_or_else(|e| relay::RelayStatus {
+            installed: false,
+            path: None,
+            version: None,
+            message: i18n::trf("relay.status_failed", &[("err", &e.to_string())]),
+            custom_path: false,
+        })
 }
 
 #[tauri::command]
-fn relay_get_path(app: AppHandle) -> Option<String> {
-    relay::get_custom_path(&app)
+async fn relay_check(app: AppHandle) -> relay::RelayCheckResult {
+    tauri::async_runtime::spawn_blocking(move || relay::check(&app))
+        .await
+        .unwrap_or_else(|e| relay::RelayCheckResult {
+            ok: false,
+            installed: false,
+            message: i18n::trf("relay.check_failed", &[("err", &e.to_string())]),
+            detail: String::new(),
+            path: None,
+            version: None,
+        })
 }
 
 #[tauri::command]
-fn relay_set_path(app: AppHandle, path: Option<String>) -> Result<(), String> {
-    relay::set_custom_path(&app, path)
+async fn relay_get_path(app: AppHandle) -> Option<String> {
+    tauri::async_runtime::spawn_blocking(move || relay::get_custom_path(&app))
+        .await
+        .unwrap_or(None)
+}
+
+#[tauri::command]
+async fn relay_set_path(app: AppHandle, path: Option<String>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || relay::set_custom_path(&app, path))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -921,13 +1001,17 @@ fn relay_detach_lan(relay: State<'_, relay::RelayState>) -> Option<String> {
 }
 
 #[tauri::command]
-fn relay_apply_lan_port(app: AppHandle, pack_id: String, port: u16) -> Result<(), String> {
-    let root = paths::remined_root(&app)?;
-    let instance = paths::pack_dir(&root, &pack_id);
-    if !instance.is_dir() {
-        return Ok(());
-    }
-    relay::write_mcwifipnp_lan_port(&instance, port)
+async fn relay_apply_lan_port(app: AppHandle, pack_id: String, port: u16) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = paths::remined_root(&app)?;
+        let instance = paths::pack_dir(&root, &pack_id);
+        if !instance.is_dir() {
+            return Ok(());
+        }
+        relay::write_mcwifipnp_lan_port(&instance, port)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -961,23 +1045,117 @@ fn voice_mint_token(room: String, identity: String, name: String) -> Result<Stri
 }
 
 #[tauri::command]
-fn read_lan_port(app: AppHandle, pack_id: String) -> Result<Option<u16>, String> {
-    let root = paths::remined_root(&app)?;
-    let log = paths::pack_dir(&root, &pack_id).join("logs").join("latest.log");
-    let port = gamewatch::read_lan_port(&log);
-    net_log::lan_poll(&app, &pack_id, port);
-    Ok(port)
+async fn read_lan_port(app: AppHandle, pack_id: String) -> Result<Option<u16>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = paths::remined_root(&app)?;
+        let log = paths::pack_dir(&root, &pack_id).join("logs").join("latest.log");
+        let port = gamewatch::read_lan_port(&log);
+        net_log::lan_poll(&app, &pack_id, port);
+        Ok(port)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn diag_logs_dir(app: AppHandle) -> Result<String, String> {
-    let root = paths::remined_root(&app)?;
-    diag::ensure_logs_dir(&root).map(|p| p.display().to_string())
+async fn diag_logs_dir(app: AppHandle) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = paths::remined_root(&app)?;
+        diag::ensure_logs_dir(&root).map(|p| p.display().to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn net_log_dir(app: AppHandle) -> Result<String, String> {
-    net_log::dir(&app).map(|p| p.display().to_string())
+async fn net_log_dir(app: AppHandle) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        net_log::dir(&app).map(|p| p.display().to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Must match `app.windows[0].additionalBrowserArgs` in tauri.conf.json so the
+/// toast webview shares the main window's WebView2 environment (a different
+/// arg string with the same user-data folder makes creation fail on Windows).
+#[cfg(windows)]
+const WEBVIEW2_ARGS: &str =
+    "--proxy-bypass-list=<-loopback>;localhost;127.0.0.1;::1;*.local";
+
+/// Friend "now playing" desktop toast. Async so window creation never runs on
+/// the main thread (sync commands creating windows deadlock on Windows).
+#[tauri::command]
+async fn show_friend_toast(
+    app: AppHandle,
+    query: String,
+    width: f64,
+    height: f64,
+) -> Result<(), String> {
+    use tauri::{Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
+
+    let log = |msg: &str| net_log::append_ok(&app, "friend-toast", msg);
+
+    if let Some(old) = app.get_webview_window("friend-toast") {
+        let _ = old.destroy();
+        for _ in 0..20 {
+            tauri::async_runtime::spawn_blocking(|| {
+                std::thread::sleep(std::time::Duration::from_millis(25))
+            })
+            .await
+            .ok();
+            if app.get_webview_window("friend-toast").is_none() {
+                break;
+            }
+        }
+    }
+
+    let url = format!("index.html?window=friend-toast&{query}");
+    let builder = WebviewWindowBuilder::new(&app, "friend-toast", WebviewUrl::App(url.into()))
+        .title("Remined")
+        .inner_size(width, height)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .focused(false)
+        .resizable(false)
+        .shadow(false)
+        .visible(false);
+    #[cfg(windows)]
+    let builder = builder.additional_browser_args(WEBVIEW2_ARGS);
+
+    let win = match builder.build() {
+        Ok(w) => w,
+        Err(e) => {
+            let msg = format!("build window failed: {e}");
+            log(&msg);
+            return Err(msg);
+        }
+    };
+
+    // Bottom-right of the primary monitor work area (above the taskbar).
+    match app.primary_monitor() {
+        Ok(Some(mon)) => {
+            let scale = mon.scale_factor();
+            let wa = mon.work_area();
+            let margin = 16.0 * scale;
+            let x = wa.position.x as f64 + wa.size.width as f64 - width * scale - margin;
+            let y = wa.position.y as f64 + wa.size.height as f64 - height * scale - margin;
+            if let Err(e) = win.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32)) {
+                log(&format!("set_position failed: {e}"));
+            }
+        }
+        other => log(&format!("primary monitor unavailable: {:?}", other.map(|m| m.is_some()))),
+    }
+
+    if let Err(e) = win.show() {
+        let msg = format!("show failed: {e}");
+        log(&msg);
+        return Err(msg);
+    }
+    log("shown");
+    Ok(())
 }
 
 #[tauri::command]
@@ -986,13 +1164,19 @@ fn net_log_append(app: AppHandle, source: String, message: String) -> Result<(),
 }
 
 #[tauri::command]
-fn net_log_tail(app: AppHandle, max_bytes: Option<usize>) -> Result<String, String> {
-    net_log::read_tail(&app, max_bytes.unwrap_or(64_000))
+async fn net_log_tail(app: AppHandle, max_bytes: Option<usize>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        net_log::read_tail(&app, max_bytes.unwrap_or(64_000))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn net_log_list(app: AppHandle) -> Result<Vec<String>, String> {
-    net_log::list_chunks(&app)
+async fn net_log_list(app: AppHandle) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || net_log::list_chunks(&app))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -1012,7 +1196,7 @@ async fn launch_pack(
         if session.phase != GamePhase::Idle {
             return Ok(LaunchResult {
                 ok: false,
-                message: "Already running".into(),
+                message: i18n::tr("launch.already_running").into(),
                 phase: session.phase,
             });
         }
@@ -1037,12 +1221,12 @@ async fn launch_pack(
     };
 
     if pack_id.trim().is_empty() {
-        return fail(&session, "No pack selected".into());
+        return fail(&session, i18n::tr("launch.no_pack").into());
     }
 
     let name = username.trim();
     if name.len() < 3 || name.len() > 16 {
-        return fail(&session, "3–16 characters".into());
+        return fail(&session, i18n::tr("launch.name_length").into());
     }
 
     let model = normalize_skin_model(skin_model.as_deref().unwrap_or("default")).to_string();
@@ -1065,7 +1249,7 @@ async fn launch_pack(
     if !instance::is_pack_installed(&instance) {
         return fail(
             &session,
-            format!("Pack `{pack_id}` is not installed — run setup or Update pack"),
+            i18n::trf("launch.pack_not_installed", &[("pack", &pack_id)]),
         );
     }
 
@@ -1202,7 +1386,7 @@ async fn launch_pack(
                 &app.clone().into(),
                 "java",
                 1,
-                format!("Java {java_major} required — downloading…"),
+                i18n::trf("launch.java_downloading", &[("major", &java_major.to_string())]),
             );
             match java_runtime::ensure_java(&app.clone().into(), &root, java_major).await {
                 Ok(info) => info,
@@ -1213,7 +1397,7 @@ async fn launch_pack(
     if !java_info.ok {
         return fail(
             &session,
-            format!("Java {java_major} required — could not install runtime"),
+            i18n::trf("launch.java_failed", &[("major", &java_major.to_string())]),
         );
     }
 
@@ -1247,7 +1431,7 @@ async fn launch_pack(
             Ok(LaunchResult {
                 ok: false,
                 message: if err.is_empty() {
-                    format!("Exit {status}")
+                    i18n::trf("launch.exit_status", &[("status", &status.to_string())])
                 } else {
                     err
                 },
@@ -1259,7 +1443,7 @@ async fn launch_pack(
             session.phase = GamePhase::Idle;
             Ok(LaunchResult {
                 ok: false,
-                message: "Exited immediately".into(),
+                message: i18n::tr("launch.exited_immediately").into(),
                 phase: GamePhase::Idle,
             })
         }
@@ -1317,6 +1501,7 @@ pub fn run() {
         .manage(voice_runtime::VoiceRuntimeState::default())
         .invoke_handler(tauri::generate_handler![
             list_packs,
+            set_ui_locale,
             get_profile,
             save_profile,
             probe_java,
@@ -1344,6 +1529,7 @@ pub fn run() {
             diag_logs_dir,
             net_log_dir,
             net_log_append,
+            show_friend_toast,
             net_log_tail,
             net_log_list,
             voice_log_path,

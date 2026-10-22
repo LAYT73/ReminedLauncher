@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { VoiceSession } from "../lib/voiceSession";
 import { bindPushToTalk, loadPttConfig, savePttConfig } from "../lib/pushToTalk";
-import { errorMessage, type ToastFn } from "./types";
+import { t } from "@/shared/i18n";
+import { errorMessage } from "@/shared/lib/errors";
+import type { ToastFn } from "./types";
 
 /** Push-to-talk config + held state; drives the session's effective mute. */
 export function usePushToTalkState(
@@ -36,7 +38,10 @@ export function usePushToTalkState(
       })
       .catch((err) => {
         toastRef.current(
-          `Push-to-talk key ${ptt.key} unavailable: ${errorMessage(err)}`,
+          t("voice.toasts.pttUnavailable", {
+            key: ptt.key,
+            err: errorMessage(err, ""),
+          }),
           "err",
         );
         setPtt((p) => ({ ...p, enabled: false }));

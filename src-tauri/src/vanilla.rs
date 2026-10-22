@@ -157,33 +157,31 @@ pub async fn install_version(
 ) -> Result<crate::pack_sync::PackStatus, String> {
     let version_id = version_id.trim();
     if version_id.is_empty() {
-        return Err("No version selected".into());
+        return Err(crate::i18n::tr("vanilla.no_version").into());
     }
 
     progress::reset();
-    progress::emit(app, "pack", 2, format!("Looking up {version_id}…"));
+    progress::emit(app, "pack", 2, crate::i18n::trf("progress.looking_up", &[("version", version_id)]));
 
     let manifest = fetch_manifest().await?;
     let entry = manifest
         .versions
         .iter()
         .find(|v| v.id == version_id)
-        .ok_or_else(|| format!("Unknown Minecraft version: {version_id}"))?;
+        .ok_or_else(|| crate::i18n::trf("vanilla.unknown_version", &[("version", version_id)]))?;
 
     let pack_id = pack_id_for(version_id);
     let dest = pack_dir(root, &pack_id);
     fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
 
     let client = http_client()?;
-    progress::emit(app, "pack", 10, "Downloading version metadata…");
+    progress::emit(app, "pack", 10, crate::i18n::tr("progress.dl_version_meta"));
     let version_bytes = download_bytes(&client, &entry.url).await?;
     let version: Value =
         serde_json::from_slice(&version_bytes).map_err(|e| format!("Invalid version JSON: {e}"))?;
 
     if version.pointer("/arguments/jvm").is_none() {
-        return Err(format!(
-            "{version_id} uses an older launch format Remined does not support yet. Pick 1.13+"
-        ));
+        return Err(crate::i18n::trf("vanilla.old_format", &[("version", version_id)]));
     }
 
     let version_json_name = format!("{version_id}.json");
@@ -197,10 +195,10 @@ pub async fn install_version(
         .and_then(|u| u.as_str())
         .ok_or("version JSON missing downloads.client.url")?;
 
-    progress::emit(app, "pack", 25, "Downloading client…");
+    progress::emit(app, "pack", 25, crate::i18n::tr("progress.dl_client"));
     download_to_file(&client, client_url, &client_jar_path).await?;
     progress::check_cancelled()?;
-    progress::emit(app, "pack", 55, "Client ready");
+    progress::emit(app, "pack", 55, crate::i18n::tr("progress.client_ready"));
 
     let java_major = version
         .pointer("/javaVersion/majorVersion")
@@ -218,9 +216,9 @@ pub async fn install_version(
     };
     instance::write_meta(&dest, &meta)?;
 
-    progress::emit(app, "fabric", 1, "Checking libraries…");
+    progress::emit(app, "fabric", 1, crate::i18n::tr("progress.checking_libraries"));
     runtime::prepare_runtime(app, root, &dest).await?;
-    progress::emit(app, "done", 100, "Vanilla ready");
+    progress::emit(app, "done", 100, crate::i18n::tr("progress.vanilla_ready"));
 
     Ok(crate::pack_sync::pack_status(root, &pack_id))
 }
@@ -240,8 +238,8 @@ pub async fn ensure_installed(
         return install_version(app, root, &version_id).await;
     }
     progress::reset();
-    progress::emit(app, "fabric", 1, "Checking libraries…");
+    progress::emit(app, "fabric", 1, crate::i18n::tr("progress.checking_libraries"));
     runtime::prepare_runtime(app, root, &instance).await?;
-    progress::emit(app, "done", 100, "Ready to play");
+    progress::emit(app, "done", 100, crate::i18n::tr("progress.ready_to_play"));
     Ok(crate::pack_sync::pack_status(root, pack_id))
 }

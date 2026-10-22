@@ -1,0 +1,32 @@
+plugins {
+    id 'java'
+}
+
+group = 'dev.remined'
+version = '1.0.0'
+
+repositories {
+    maven { url = 'https://maven.fabricmc.net/' }
+    mavenCentral()
+}
+
+dependencies {
+    // API only (MappingResolver, ClientModInitializer, FabricLoader). No Minecraft, no Fabric API.
+    compileOnly('net.fabricmc:fabric-loader:0.14.25') { transitive = false }
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.2'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 8
+    options.encoding = 'UTF-8'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+jar {
+    archiveBaseName = 'remined-companion'
+    from('LICENSE') { into 'META-INF' }
+}

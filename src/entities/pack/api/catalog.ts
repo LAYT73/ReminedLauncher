@@ -3,6 +3,7 @@ import { cacheCatalog, readOfflineCache } from "@/entities/session";
 import { supabase, supabaseConfigured } from "@/shared/api/supabase";
 import { CMD } from "@/shared/config/commands";
 import { TABLE } from "@/shared/config/supabase";
+import type { PackI18n } from "../model/types";
 
 export type CatalogPack = {
   id: string;
@@ -16,6 +17,8 @@ export type CatalogPack = {
   is_default: boolean;
   sort_order: number;
   java_major: number;
+  /** Raw per-locale copy overrides (packs.i18n); absent on old servers. */
+  i18n?: PackI18n;
   /** Local install fields filled by launcher */
   version?: string;
   installed?: boolean;
@@ -33,6 +36,7 @@ type DbPack = {
   is_default: boolean;
   sort_order: number;
   java_major: number;
+  i18n?: unknown;
 };
 
 type GithubPackRelease = {
@@ -47,11 +51,36 @@ type GithubPackCatalog = {
   packs: GithubPackRelease[];
 };
 
+const PACK_COLUMNS =
+  "id,name,tagline,blurb,highlights,gallery,logo_url,wallpaper_url,is_default,sort_order,java_major";
+
+/** Postgres undefined_column (42703) or a message naming i18n. */
+function isMissingI18nColumn(err: { code?: string; message?: string }): boolean {
+  return err.code === "42703" || /i18n/i.test(err.message ?? "");
+}
+
 function asStringArray(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.filter((x): x is string => typeof x === "string");
   }
   return [];
+}
+
+function parseI18n(value: unknown): PackI18n | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const out: PackI18n = {};
+  for (const [locale, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const r = raw as Record<string, unknown>;
+    const entry: PackI18n[string] = {};
+    if (typeof r.name === "string" && r.name.trim()) entry.name = r.name;
+    if (typeof r.tagline === "string" && r.tagline.trim()) entry.tagline = r.tagline;
+    if (typeof r.blurb === "string" && r.blurb.trim()) entry.blurb = r.blurb;
+    const hl = asStringArray(r.highlights);
+    if (hl.length > 0) entry.highlights = hl;
+    if (Object.keys(entry).length > 0) out[locale] = entry;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function mapDbPack(row: DbPack): CatalogPack {
@@ -67,6 +96,7 @@ function mapDbPack(row: DbPack): CatalogPack {
     is_default: row.is_default,
     sort_order: row.sort_order,
     java_major: row.java_major,
+    i18n: parseI18n(row.i18n),
   };
 }
 
@@ -104,15 +134,19 @@ async function fetchCatalogFromGithub(): Promise<CatalogPack[]> {
 export async function fetchCatalogFromSupabase(): Promise<CatalogPack[]> {
   if (supabaseConfigured) {
     try {
-      const { data, error } = await supabase
-        .from(TABLE.packs)
-        .select(
-          "id,name,tagline,blurb,highlights,gallery,logo_url,wallpaper_url,is_default,sort_order,java_major",
-        )
-        .eq("enabled", true)
-        .order("sort_order", { ascending: true });
+      const query = (cols: string) =>
+        supabase
+          .from(TABLE.packs)
+          .select(cols)
+          .eq("enabled", true)
+          .order("sort_order", { ascending: true });
+      let { data, error } = await query(`${PACK_COLUMNS},i18n`);
+      // Migration 016 may not be applied yet: retry once without the column.
+      if (error && isMissingI18nColumn(error)) {
+        ({ data, error } = await query(PACK_COLUMNS));
+      }
       if (error) throw error;
-      const packs = ((data as DbPack[]) ?? []).map(mapDbPack);
+      const packs = ((data as unknown as DbPack[]) ?? []).map(mapDbPack);
       if (packs.length > 0) {
         cacheCatalog(packs);
         return packs;

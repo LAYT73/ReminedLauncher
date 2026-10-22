@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import roomsArt from "@/shared/assets/empty/rooms.png";
 import friendsArt from "@/shared/assets/empty/friends.png";
 import installationsArt from "@/shared/assets/empty/installations.png";
@@ -6,9 +6,12 @@ import installationsArt from "@/shared/assets/empty/installations.png";
 type EmptyStateKind = "rooms" | "friends" | "installations";
 
 type Props = {
-  kind: EmptyStateKind;
+  /** Pixel art variant. Omit for the compact text-only card. */
+  kind?: EmptyStateKind;
   title: string;
   description: string;
+  /** Optional primary action (e.g. a button) rendered under the copy. */
+  action?: ReactNode;
 };
 
 const ART: Record<EmptyStateKind, string> = {
@@ -110,13 +113,17 @@ function EmptyStateArt({ kind }: { kind: EmptyStateKind }) {
   return <img className="empty-state-art" src={url} alt="" />;
 }
 
-export function EmptyState({ kind, title, description }: Props) {
+export function EmptyState({ kind, title, description, action }: Props) {
   return (
-    <div className={`empty-state is-${kind}`} role="status">
-      <EmptyStateArt kind={kind} />
+    <div
+      className={kind ? `empty-state is-${kind}` : "empty-state is-generic"}
+      role="status"
+    >
+      {kind ? <EmptyStateArt kind={kind} /> : null}
       <div className="empty-state-copy">
         <h4>{title}</h4>
         <p>{description}</p>
+        {action ? <div className="empty-state-action">{action}</div> : null}
       </div>
     </div>
   );

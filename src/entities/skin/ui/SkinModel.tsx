@@ -5,6 +5,7 @@ import { applyNameTag } from "../lib/nameTag";
 import { normalizeSkinModel, type SkinModelKind } from "../lib/skinModel";
 import { enableProfileStage } from "../lib/profileStage";
 import { enableHomeSkinShading, enableSkinAntiAlias } from "../lib/viewerEffects";
+import { createHomeIdle } from "../lib/homeIdle";
 import { createHeadIdle, createStandingIdle, frameBust, frameFull, frameFullHome } from "../lib/viewerMotion";
 import type { Preset, Variant } from "../lib/viewerTypes";
 
@@ -24,6 +25,14 @@ type Props = {
   skinModel?: SkinModelKind | null;
 };
 
+function prefersReducedMotion() {
+  try {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
+  }
+}
+
 export function SkinModel({
   skinUrl,
   capeUrl = null,
@@ -38,6 +47,8 @@ export function SkinModel({
   const viewerRef = useRef<SkinViewer | null>(null);
   const canOrbit = variant === "full" && preset === "profile";
   const model = normalizeSkinModel(skinModel);
+  const isFull = variant === "full";
+  const isHome = isFull && preset === "home";
 
   useEffect(() => {
     const host = hostRef.current;
@@ -63,8 +74,11 @@ export function SkinModel({
         ...(capeUrl ? { cape: capeUrl } : {}),
         model,
         enableControls: canOrbit,
-        animation:
-          variant === "full" ? createStandingIdle() : createHeadIdle(),
+        animation: !isFull
+          ? createHeadIdle()
+          : isHome
+            ? createHomeIdle({ reducedMotion: prefersReducedMotion() })
+            : createStandingIdle(),
       });
     } catch (err) {
       // No WebGL (headless / blocked GPU): leave the slot empty instead of crashing the app.
@@ -83,6 +97,12 @@ export function SkinModel({
     } else if (!transparent) {
       disposeProfileStage = enableProfileStage(viewer);
     }
+    // Home idle: stop rendering/animating while the page is hidden.
+    const onVisibility = () => {
+      if (viewer.disposed) return;
+      viewer.renderPaused = document.visibilityState === "hidden";
+    };
+    if (isHome) document.addEventListener("visibilitychange", onVisibility);
     const syncAntiAlias = enableSkinAntiAlias(viewer);
 
     viewer.controls.enablePan = false;
@@ -113,6 +133,7 @@ export function SkinModel({
 
     return () => {
       ro.disconnect();
+      document.removeEventListener("visibilitychange", onVisibility);
       disposeProfileStage?.();
       viewer.dispose();
       viewerRef.current = null;

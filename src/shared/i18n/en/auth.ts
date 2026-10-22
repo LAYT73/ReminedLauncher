@@ -1,0 +1,48 @@
+export const auth = {
+  usernameTaken: "Username taken — try another",
+  screen: {
+    supabaseMissing: "Supabase env missing (VITE_SUPABASE_*)",
+    createFailed: "Could not create account",
+    signIn: "Sign in",
+    createAccount: "Create account",
+    register: "Register",
+    sub: "Friends-only launcher. Email confirmation is off — sign up and play.",
+    username: "Username",
+    usernamePlaceholder: "3–16 chars",
+    email: "Email",
+    password: "Password",
+    continueOffline: "Continue offline",
+    needAccount: "Need an account? Register",
+    haveAccount: "Have an account? Sign in",
+  },
+  onboarding: {
+    checkingJava: "Checking Java…",
+    javaReady: "Java ready",
+    kicker: "First-time setup",
+    title: "Java setup",
+    sub: "Remined needs Java 25. Packs download later from the Play screen.",
+  },
+  splash: {
+    waking: "Waking the launcher",
+    checkingAccount: "Checking your account",
+    syncingPacks: "Syncing packs",
+    almostThere: "Almost there",
+  },
+  boot: {
+    usingCache: "You’re offline — using cached account",
+    cloudUnreachable: "Cloud unreachable — offline mode",
+    cloudUnreachableAfterAuth: "Couldn’t reach cloud — offline mode",
+    offlineMode: "Offline mode",
+    noCachedAccount: "No cached account for offline play",
+    hintOfflineCanContinue:
+      "No network — you can continue offline with your last account.",
+    hintOfflineNeedsSignIn:
+      "No network. Sign in once online to enable offline play.",
+    hintCloudUnreachable: "Cloud unreachable. Try again when you’re online.",
+    connectionLost: "Connection lost — offline mode",
+    backOnlineSignIn: "Back online — sign in again to sync friends & skins",
+    backOnlineSignInShort: "Back online — sign in to sync",
+    backOnline: "Back online",
+    stillOffline: "Still can’t reach the cloud — staying offline",
+  },
+};

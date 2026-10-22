@@ -76,9 +76,13 @@ function frameFullProfile(viewer: SkinViewer) {
   skin.head.visible = true;
 
   viewer.fov = 50;
-  viewer.zoom = 0.9;
+  // Pulled back so the name tag above the head stays in frame.
+  viewer.zoom = 0.78;
   viewer.resetCameraPose();
   viewer.playerWrapper.rotation.y = 0;
+  // Shift the model (and its name tag) down — same as raising the camera,
+  // without breaking the orbit target.
+  viewer.playerWrapper.position.y = -1;
   // Gentle spin so idle body motion stays readable
   viewer.autoRotate = true;
   viewer.autoRotateSpeed = 0.28;

@@ -134,7 +134,7 @@ pub async fn fetch_release(pack_id: &str) -> Result<PackRelease, String> {
         .packs
         .into_iter()
         .find(|p| p.id == pack_id)
-        .ok_or_else(|| format!("Pack `{pack_id}` not in remote catalog"))
+        .ok_or_else(|| crate::i18n::trf("pack.not_in_catalog", &[("id", &pack_id)]))
 }
 
 pub async fn default_pack_id() -> Result<String, String> {
@@ -146,7 +146,7 @@ pub async fn default_pack_id() -> Result<String, String> {
         .packs
         .first()
         .map(|p| p.id.clone())
-        .ok_or_else(|| "Remote pack catalog is empty".into())
+        .ok_or_else(|| crate::i18n::tr("pack.catalog_empty").into())
 }
 
 fn local_version_file(dir: &Path) -> PathBuf {
@@ -241,7 +241,7 @@ async fn download_file(url: &str, dest: &Path, app: &AppHandle) -> Result<(), St
         downloaded += chunk.len() as u64;
         if total > 0 {
             let pct = 10 + ((downloaded as f64 / total as f64) * 70.0) as u32;
-            progress::emit(app, "pack", pct.min(80), "Downloading pack…");
+            progress::emit(app, "pack", pct.min(80), crate::i18n::tr("progress.downloading_pack"));
         }
     }
     Ok(())
@@ -260,7 +260,7 @@ fn sha256_file(path: &Path) -> Result<String, String> {
             }
         }
     }
-    Err("sha256 verify unavailable — skipping".into())
+    Err(crate::i18n::tr("pack.sha_unavailable").into())
 }
 
 fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
@@ -309,7 +309,7 @@ fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
 
 pub async fn sync_pack(app: &AppHandle, root: &Path, pack_id: &str) -> Result<PackStatus, String> {
     progress::check_cancelled()?;
-    progress::emit(app, "pack", 2, "Fetching pack catalog…");
+    progress::emit(app, "pack", 2, crate::i18n::tr("pack.fetching_catalog"));
     let release = fetch_release(pack_id).await?;
     progress::check_cancelled()?;
     let dest = pack_dir(root, pack_id);
@@ -317,7 +317,7 @@ pub async fn sync_pack(app: &AppHandle, root: &Path, pack_id: &str) -> Result<Pa
     if instance::is_pack_installed(&dest) {
         if let Some(local) = read_local_version(&dest) {
             if local == release.version {
-                progress::emit(app, "pack", 100, format!("Pack {} already installed", local));
+                progress::emit(app, "pack", 100, crate::i18n::trf("pack.already_installed", &[("version", &local)]));
                 return Ok(PackStatus {
                     id: pack_id.to_string(),
                     installed: true,
@@ -343,7 +343,7 @@ pub async fn sync_pack(app: &AppHandle, root: &Path, pack_id: &str) -> Result<Pa
                 app,
                 "pack",
                 100,
-                format!("Using existing pack as {}", release.version),
+                crate::i18n::trf("pack.using_existing", &[("version", &release.version)]),
             );
             return Ok(PackStatus {
                 id: pack_id.to_string(),
@@ -365,22 +365,22 @@ pub async fn sync_pack(app: &AppHandle, root: &Path, pack_id: &str) -> Result<Pa
         .join(".remined")
         .join("cache")
         .join(&release.artifact);
-    progress::emit(app, "pack", 8, format!("Downloading {}…", release.artifact));
+    progress::emit(app, "pack", 8, crate::i18n::trf("pack.downloading_file", &[("name", &release.artifact)]));
     download_file(&url, &zip_path, app).await?;
     progress::check_cancelled()?;
 
     match sha256_file(&zip_path) {
         Ok(hash) if hash != release.sha256.to_lowercase() => {
-            return Err(format!(
-                "SHA256 mismatch: got {hash}, expected {}",
-                release.sha256
+            return Err(crate::i18n::trf(
+                "pack.sha_mismatch",
+                &[("got", &hash), ("expected", &release.sha256)],
             ));
         }
-        Ok(_) => progress::emit(app, "pack", 82, "Checksum OK"),
+        Ok(_) => progress::emit(app, "pack", 82, crate::i18n::tr("pack.checksum_ok")),
         Err(msg) => progress::emit(app, "pack", 82, msg),
     }
 
-    progress::emit(app, "pack", 85, "Extracting pack…");
+    progress::emit(app, "pack", 85, crate::i18n::tr("pack.extracting"));
     let staging = root
         .join(".remined")
         .join("cache")
@@ -421,7 +421,7 @@ pub async fn sync_pack(app: &AppHandle, root: &Path, pack_id: &str) -> Result<Pa
     // Validate discovery works
     let _ = instance::find_version_json(&dest, release.version_json.as_deref())?;
 
-    progress::emit(app, "pack", 100, format!("Pack {} ready", release.version));
+    progress::emit(app, "pack", 100, crate::i18n::trf("pack.ready", &[("version", &release.version)]));
     Ok(PackStatus {
         id: pack_id.to_string(),
         installed: true,
@@ -435,18 +435,18 @@ pub async fn sync_pack(app: &AppHandle, root: &Path, pack_id: &str) -> Result<Pa
 pub fn delete_pack(root: &Path, pack_id: &str) -> Result<(), String> {
     let id = pack_id.trim();
     if id.is_empty() || id.contains('/') || id.contains('\\') || id.contains("..") {
-        return Err("Invalid pack id".into());
+        return Err(crate::i18n::tr("pack.invalid_id").into());
     }
     let dest = pack_dir(root, id);
     if !dest.exists() {
-        return Err(format!("Pack `{id}` is not installed"));
+        return Err(crate::i18n::trf("pack.not_installed", &[("id", &id)]));
     }
     // Only delete under packs/ or known install roots — never wipe random paths
     let packs_root = root.join("packs");
     let under_packs = dest.starts_with(&packs_root);
     let under_root_named = dest.parent() == Some(root) && dest.file_name().and_then(|n| n.to_str()) == Some(id);
     if !under_packs && !under_root_named {
-        return Err("Refusing to delete pack outside packs folder".into());
+        return Err(crate::i18n::tr("pack.delete_outside").into());
     }
     fs::remove_dir_all(&dest).map_err(|e| e.to_string())?;
 

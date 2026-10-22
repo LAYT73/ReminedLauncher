@@ -1,17 +1,20 @@
+import { localizeServerError } from "@/shared/lib/errors";
 import { supabase } from "@/shared/api/supabase";
 import { TABLE } from "@/shared/config/supabase";
 import type { VoiceMessage } from "../model/types";
 import { FALLBACK_USERNAME } from "@/shared/config/limits";
+import { t } from "@/shared/i18n";
 
 export async function listMessages(roomId: string, limit = 80): Promise<VoiceMessage[]> {
   const { data, error } = await supabase
     .from(TABLE.voiceMessages)
     .select("id, room_id, sender_id, body, created_at")
     .eq("room_id", roomId)
-    .order("created_at", { ascending: true })
+    .order("created_at", { ascending: false })
     .limit(limit);
-  if (error) throw new Error(error.message || "Could not load messages");
-  const rows = data ?? [];
+  if (error) throw new Error(localizeServerError(error.message) || t("voice.errors.loadMessages"));
+  // Newest `limit` rows (so long chats keep the tail), shown oldest-first.
+  const rows = (data ?? []).slice().reverse();
   if (rows.length === 0) return [];
   const ids = [...new Set(rows.map((r) => r.sender_id as string))];
   const { data: profiles } = await supabase
@@ -47,7 +50,7 @@ export async function sendMessage(opts: {
   body: string;
 }): Promise<VoiceMessage> {
   const body = opts.body.trim();
-  if (!body) throw new Error("Empty message");
+  if (!body) throw new Error(t("voice.errors.emptyMessage"));
   const { data, error } = await supabase
     .from(TABLE.voiceMessages)
     .insert({
@@ -57,7 +60,7 @@ export async function sendMessage(opts: {
     })
     .select("id, room_id, sender_id, body, created_at")
     .single();
-  if (error) throw new Error(error.message || "Could not send");
+  if (error) throw new Error(localizeServerError(error.message) || t("voice.errors.sendMessage"));
   return {
     id: data.id as string,
     roomId: data.room_id as string,

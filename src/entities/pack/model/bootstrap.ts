@@ -47,6 +47,7 @@ function mergePacks(catalog: CatalogPack[], local: Pack[]): Pack[] {
       name: c.name,
       version: c.version ?? "—",
       description: c.blurb,
+      i18n: c.i18n,
     });
   }
   for (const p of local) {
@@ -55,6 +56,7 @@ function mergePacks(catalog: CatalogPack[], local: Pack[]): Pack[] {
       ...p,
       name: meta?.name || p.name,
       description: meta?.blurb || p.description,
+      i18n: meta?.i18n ?? p.i18n,
     });
   }
   return Array.from(byId.values());

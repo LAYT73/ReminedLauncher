@@ -9,3 +9,4 @@ export {
   type ThemePreset,
   type CustomTheme,
 } from "./lib/themes";
+export { parseHex } from "./lib/color";

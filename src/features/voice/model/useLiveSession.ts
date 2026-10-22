@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { t } from "@/shared/i18n";
 import {
   ensureVoiceRoomMember,
   getVoiceRoom,
@@ -17,8 +18,16 @@ import {
   voiceStartLivekit,
   voiceStartRelay,
 } from "../api/voiceNative";
+import {
+  enumerateKinds,
+  loadDevicePrefs,
+  resolveDevice,
+  saveDevicePrefs,
+  type DevicePrefs,
+} from "../lib/deviceStore";
 import { VoiceSession, type VoiceVideoTile } from "../lib/voiceSession";
-import { errorMessage, type ToastFn } from "./types";
+import { errorMessage } from "@/shared/lib/errors";
+import type { ToastFn } from "./types";
 import { MSG } from "@/shared/config/messages";
 
 /** Long enough to cover guest Relay/LiveKit reconnect after host opens LAN. */
@@ -57,8 +66,13 @@ export function useLiveSession({
   const [videoTiles, setVideoTiles] = useState<VoiceVideoTile[]>([]);
   const [camOn, setCamOn] = useState(false);
   const [screenOn, setScreenOn] = useState(false);
-  const [micId, setMicId] = useState("");
-  const [outputId, setOutputId] = useState("");
+  /** Saved preference (id + label) — survives unplugged devices. */
+  const prefsRef = useRef<DevicePrefs>(loadDevicePrefs());
+  const [micId, setMicId] = useState(prefsRef.current.mic.id);
+  const [outputId, setOutputId] = useState(prefsRef.current.out.id);
+  const [camId, setCamId] = useState(prefsRef.current.cam.id);
+  /** What is actually applied to the live session right now. */
+  const appliedRef = useRef({ mic: "", out: "", cam: "" });
   const [needsAudioUnlock, setNeedsAudioUnlock] = useState(false);
   const audioUnlockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pruneTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -189,7 +203,9 @@ export function useLiveSession({
       roomEndedRef.current = false;
       connectingRef.current = true;
       roleRef.current = asGuest ? "guest" : "host";
-      setStatus(asGuest ? "Connecting Relay…" : MSG.voice.connectingVoice);
+      setStatus(
+        asGuest ? t("voice.s.connectingRelay") : MSG.voice.connectingVoice,
+      );
       let liveRoom = room;
       try {
         if (!asGuest) hostRoomRef.current = liveRoom;
@@ -210,10 +226,10 @@ export function useLiveSession({
               pendingCode?.trim() || fresh.relayShareCode?.trim() || "";
             if (!code) {
               relayErr = new Error(
-                "Room has no share code yet — ask the host to wait for the lobby code",
+                t("voice.errors.noShareCode"),
               );
               if (i < relayAttempts - 1) {
-                setStatus("Waiting for host lobby code…");
+                setStatus(t("voice.s.waitingLobbyCode"));
                 await new Promise((r) => setTimeout(r, 800));
                 continue;
               }
@@ -224,7 +240,10 @@ export function useLiveSession({
             connectingCodeRef.current = code;
             if (i > 0) {
               setStatus(
-                `Connecting Relay… (retry ${i + 1}/${relayAttempts})`,
+                t("voice.s.connectingRelayRetry", {
+                  i: i + 1,
+                  n: relayAttempts,
+                }),
               );
               await new Promise((r) => setTimeout(r, 600 * i));
             }
@@ -239,7 +258,7 @@ export function useLiveSession({
               connectingCodeRef.current = null;
               void netLog(
                 "ui",
-                `voice guest relay try=${i + 1} FAILED: ${errorMessage(err)}`,
+                `voice guest relay try=${i + 1} FAILED: ${errorMessage(err, "")}`,
               );
             }
           }
@@ -307,7 +326,7 @@ export function useLiveSession({
                   if (!alive || roomEndedRef.current || intentionalLeaveRef.current) {
                     return;
                   }
-                  setStatus("Lobby changed — reconnecting…");
+                  setStatus(t("voice.s.lobbyChanged"));
                   void netLog(
                     "ui",
                     "voice guest disconnected — force reconnect loop",
@@ -321,7 +340,7 @@ export function useLiveSession({
                 })();
                 return;
               }
-              setStatus("Voice dropped — reconnecting…");
+              setStatus(t("voice.s.voiceDropped"));
               void netLog("ui", "voice host disconnected — auto reconnect");
               if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
               reconnectTimer.current = setTimeout(() => {
@@ -347,20 +366,25 @@ export function useLiveSession({
           "ws://localhost:",
           "ws://127.0.0.1:",
         );
+        const dev = await resolveSavedDevices();
+        appliedRef.current = { ...dev };
         const connectOpts = {
           wsUrl,
           roomId: liveRoom.id,
           identity: userId,
           name: displayName,
-          micDeviceId: micId || undefined,
-          outputDeviceId: outputId || undefined,
+          micDeviceId: dev.mic || undefined,
+          outputDeviceId: dev.out || undefined,
+          camDeviceId: dev.cam || undefined,
         };
         let lastErr: unknown;
         const attempts = asGuest ? 4 : 1;
         for (let i = 0; i < attempts; i++) {
           try {
             if (i > 0) {
-              setStatus(`Connecting voice… (retry ${i + 1}/${attempts})`);
+              setStatus(
+                t("voice.s.connectingVoiceRetry", { i: i + 1, n: attempts }),
+              );
               await new Promise((r) => setTimeout(r, 700 * i));
             }
             await session.connect(connectOpts);
@@ -395,7 +419,7 @@ export function useLiveSession({
         setMuted(false);
         setDeafened(false);
         setNeedsAudioUnlock(false);
-        setStatus("In voice");
+        setStatus(t("voice.inVoice"));
         refreshVideo();
         setStateTick((t) => t + 1);
         onAudioPlayback(session.room?.canPlaybackAudio ?? true);
@@ -444,7 +468,7 @@ export function useLiveSession({
       const alive = await checkGuestRoomAlive(base.id);
       if (!alive) return;
       reconnectingRef.current = true;
-      setStatus("Reconnecting to host lobby…");
+      setStatus(t("voice.s.reconnectingLobby"));
       // Do not treat this disconnect as Leave — membership must stay for chat.
       intentionalLeaveRef.current = false;
       if (reconnectTimer.current) {
@@ -460,7 +484,9 @@ export function useLiveSession({
         for (let i = 0; i < RECONNECT_TRIES; i++) {
           if (roomEndedRef.current || intentionalLeaveRef.current) return;
           if (i > 0) {
-            setStatus(`Reconnecting… (${i + 1}/${RECONNECT_TRIES})`);
+            setStatus(
+              t("voice.s.reconnecting", { i: i + 1, n: RECONNECT_TRIES }),
+            );
             await new Promise((r) => setTimeout(r, 1500));
           }
           if (roomEndedRef.current || intentionalLeaveRef.current) return;
@@ -488,7 +514,7 @@ export function useLiveSession({
             // connect() clears intentionalLeaveRef / roomEndedRef
             await connect(room, true);
             if (roomEndedRef.current) return;
-            onToast("Rejoined voice after lobby update", "ok");
+            onToast(t("voice.toasts.rejoinedAfterLobby"), "ok");
             return;
           } catch (err) {
             lastErr = err;
@@ -499,11 +525,14 @@ export function useLiveSession({
         // Host gone / tunnel dead — don't leave the guest stuck in-room alone.
         const still = await checkGuestRoomAlive(base.id);
         if (!still) return;
-        setStatus("Reconnect failed — Leave, then rejoin");
-        onToast(`Voice reconnect failed: ${errorMessage(lastErr)}`, "err");
+        setStatus(t("voice.s.reconnectFailed"));
+        onToast(
+          t("voice.toasts.reconnectFailed", { err: errorMessage(lastErr, "") }),
+          "err",
+        );
         void netLog(
           "ui",
-          `voice guest reconnect FAILED: ${errorMessage(lastErr)}`,
+          `voice guest reconnect FAILED: ${errorMessage(lastErr, "")}`,
         );
       } finally {
         reconnectingRef.current = false;
@@ -531,10 +560,12 @@ export function useLiveSession({
     try {
       for (let i = 0; i < RECONNECT_TRIES; i++) {
         if (i > 0) {
-          setStatus(`Reconnecting voice… (${i + 1}/${RECONNECT_TRIES})`);
+          setStatus(
+            t("voice.s.reconnectingVoice", { i: i + 1, n: RECONNECT_TRIES }),
+          );
           await new Promise((r) => setTimeout(r, 1500));
         } else {
-          setStatus("Restoring voice server…");
+          setStatus(t("voice.s.restoringServer"));
         }
         void netLog("ui", `voice host reconnect try=${i + 1}`);
         try {
@@ -550,7 +581,7 @@ export function useLiveSession({
             await setVoiceRoomShareCode(base.id, key).catch(() => undefined);
             shareRepublishRef.current?.(base.id, key);
           }
-          onToast("Voice reconnected", "ok");
+          onToast(t("voice.toasts.reconnected"), "ok");
           void netLog("ui", "voice host reconnect ok");
           return;
         } catch (err) {
@@ -558,13 +589,14 @@ export function useLiveSession({
           sessionRef.current = null;
         }
       }
-      setStatus(
-        "Voice disconnected — try Leave, then Create again if needed",
+      setStatus(t("voice.s.disconnected"));
+      onToast(
+        t("voice.toasts.reconnectFailed", { err: errorMessage(lastErr, "") }),
+        "err",
       );
-      onToast(`Voice reconnect failed: ${errorMessage(lastErr)}`, "err");
       void netLog(
         "ui",
-        `voice host reconnect FAILED: ${errorMessage(lastErr)}`,
+        `voice host reconnect FAILED: ${errorMessage(lastErr, "")}`,
       );
     } finally {
       reconnectingRef.current = false;
@@ -617,11 +649,77 @@ export function useLiveSession({
     [reconnectGuest],
   );
 
+  async function resolveSavedDevices() {
+    const list = await enumerateKinds();
+    const p = prefsRef.current;
+    return {
+      mic: resolveDevice(p.mic, list.inputs),
+      out: resolveDevice(p.out, list.outputs),
+      cam: resolveDevice(p.cam, list.cams),
+    };
+  }
+
+  /** Push resolved ids to the live session (only what changed). */
+  const syncDevices = useCallback(async () => {
+    const dev = await resolveSavedDevices();
+    const prev = appliedRef.current;
+    const sess = sessionRef.current;
+    appliedRef.current = { ...dev };
+    if (!sess?.room) return;
+    try {
+      if (dev.mic !== prev.mic) await sess.switchMic(dev.mic);
+    } catch {
+      /* keep running on the previous mic */
+    }
+    try {
+      if (dev.out !== prev.out) await sess.switchOutput(dev.out);
+    } catch {
+      /* ignore */
+    }
+    try {
+      if (dev.cam !== prev.cam) await sess.switchCamera(dev.cam);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  /** User picked devices (lobby or in-room): persist, then apply. */
+  async function saveDevices(mic: string, out: string, cam: string) {
+    const list = await enumerateKinds();
+    const pick = (id: string, devs: MediaDeviceInfo[]) => ({
+      id,
+      label: devs.find((d) => d.deviceId === id)?.label ?? "",
+    });
+    const next: DevicePrefs = {
+      mic: pick(mic, list.inputs),
+      out: pick(out, list.outputs),
+      cam: pick(cam, list.cams),
+    };
+    prefsRef.current = next;
+    saveDevicePrefs(next);
+    setMicId(mic);
+    setOutputId(out);
+    setCamId(cam);
+    await syncDevices();
+  }
+
+  // Device unplugged / plugged back in: fall back to default, restore later.
+  useEffect(() => {
+    const md = navigator.mediaDevices;
+    if (!md?.addEventListener) return;
+    const on = () => void syncDevices().catch(() => undefined);
+    md.addEventListener("devicechange", on);
+    return () => md.removeEventListener("devicechange", on);
+  }, [syncDevices]);
+
   async function toggleCamera() {
     try {
       await sessionRef.current?.setCameraEnabled(!camOn);
     } catch (err) {
-      onToast(`Camera unavailable: ${errorMessage(err)}`, "err");
+      onToast(
+        t("voice.toasts.cameraUnavailable", { err: errorMessage(err, "") }),
+        "err",
+      );
     }
   }
 
@@ -629,7 +727,10 @@ export function useLiveSession({
     try {
       await sessionRef.current?.setScreenShareEnabled(!screenOn);
     } catch (err) {
-      onToast(`Screen share unavailable: ${errorMessage(err)}`, "err");
+      onToast(
+        t("voice.toasts.screenUnavailable", { err: errorMessage(err, "") }),
+        "err",
+      );
     }
   }
 
@@ -669,6 +770,9 @@ export function useLiveSession({
     setMicId,
     outputId,
     setOutputId,
+    camId,
+    setCamId,
+    saveDevices,
     needsAudioUnlock,
     unlockAudio,
     connect,

@@ -2,6 +2,8 @@ import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { create } from "zustand";
 import { MSG } from "@/shared/config/messages";
+import { t } from "@/shared/i18n";
+import { errorMessage } from "@/shared/lib/errors";
 import { isBrowserOnline } from "@/shared/lib/network";
 import { toast } from "@/shared/lib/toast";
 import { setStatus } from "@/entities/install";
@@ -98,7 +100,7 @@ export const useLauncherUpdate = create<UpdateState>((set, get) => ({
         toast(MSG.update.available(update.version), "ok");
       }
     } catch (err) {
-      if (!silent) setStatus(String(err), "error");
+      if (!silent) setStatus(errorMessage(err), "error");
     } finally {
       set({ busy: false });
     }
@@ -108,7 +110,7 @@ export const useLauncherUpdate = create<UpdateState>((set, get) => ({
     const pending = get().pending;
     if (!pending || get().busy) return;
     if (!pending.update) {
-      toast("Preview only — no real update to install", "err");
+      toast(t("settings.update.modal.previewOnly"), "err");
       return;
     }
     if (useSessionStore.getState().offlineMode || !isBrowserOnline()) {
@@ -123,7 +125,7 @@ export const useLauncherUpdate = create<UpdateState>((set, get) => ({
       setStatus(MSG.update.restarting);
       await relaunch();
     } catch (err) {
-      setStatus(String(err), "error");
+      setStatus(errorMessage(err), "error");
     } finally {
       set({ busy: false });
     }

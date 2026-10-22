@@ -1,8 +1,10 @@
 import { useMemo } from "react";
+import { useLocale } from "@/shared/i18n";
 import { localizeCatalog } from "@/shared/lib/mediaCache";
 import { isReminePackId } from "@/shared/lib/packIds";
 import { useProfileStore } from "@/entities/profile";
 import { usePackStore } from "./store";
+import { localizePack } from "../lib/localize";
 import type { Pack } from "./types";
 
 /** Pure derivations (shared by hooks and imperative actions). */
@@ -25,24 +27,40 @@ export function pickActiveReminePack(
 export function useSelectedPack(): Pack | undefined {
   const packs = usePackStore((s) => s.packs);
   const selectedId = useProfileStore((s) => s.profile.selected_pack);
-  return useMemo(() => pickSelectedPack(packs, selectedId), [packs, selectedId]);
+  const locale = useLocale();
+  return useMemo(() => {
+    const p = pickSelectedPack(packs, selectedId);
+    return p ? localizePack(p, locale) : p;
+  }, [packs, selectedId, locale]);
 }
 
 export function useReminePacks(): Pack[] {
   const packs = usePackStore((s) => s.packs);
-  return useMemo(() => pickReminePacks(packs), [packs]);
+  const locale = useLocale();
+  return useMemo(
+    () => pickReminePacks(packs).map((p) => localizePack(p, locale)),
+    [packs, locale],
+  );
 }
 
 export function useActiveReminePack(): Pack | undefined {
   const packs = usePackStore((s) => s.packs);
   const selectedId = useProfileStore((s) => s.profile.selected_pack);
-  return useMemo(() => pickActiveReminePack(packs, selectedId), [packs, selectedId]);
+  const locale = useLocale();
+  return useMemo(() => {
+    const p = pickActiveReminePack(packs, selectedId);
+    return p ? localizePack(p, locale) : p;
+  }, [packs, selectedId, locale]);
 }
 
 export function useInstalledPacks(): Pack[] {
   const packs = usePackStore((s) => s.packs);
   const installed = usePackStore((s) => s.installedIds);
-  return useMemo(() => packs.filter((p) => installed.has(p.id)), [packs, installed]);
+  const locale = useLocale();
+  return useMemo(
+    () => packs.filter((p) => installed.has(p.id)).map((p) => localizePack(p, locale)),
+    [packs, installed, locale],
+  );
 }
 
 /** Catalog with media URLs swapped for the on-disk cache. */
@@ -50,8 +68,12 @@ export function useViewCatalog() {
   const catalog = usePackStore((s) => s.catalog);
   const mediaTick = usePackStore((s) => s.mediaTick);
   // mediaTick forces re-localize after disk/network hydrate
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  return useMemo(() => localizeCatalog(catalog), [catalog, mediaTick]);
+  const locale = useLocale();
+  return useMemo(
+    () => localizeCatalog(catalog).map((c) => localizePack(c, locale)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [catalog, mediaTick, locale],
+  );
 }
 
 export function usePackContent(packId: string | undefined) {

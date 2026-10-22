@@ -1,17 +1,15 @@
-import { useEffect, useId, useRef, useState } from "react";
-import { SkinHead } from "@/entities/skin";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { PixelCheckIcon, PixelChevronDownIcon } from "./PixelIcons";
 
 export type McSelectOption = {
   id: string;
   label: string;
   hint?: string;
-  /** Optional Minecraft face for friend pickers. */
-  skinUrl?: string | null;
 };
 
-type Props = {
+type Props<T extends McSelectOption> = {
   label: string;
-  options: McSelectOption[];
+  options: T[];
   value: string;
   onChange: (id: string) => void;
   disabled?: boolean;
@@ -19,10 +17,12 @@ type Props = {
   /** Pack playbar opens up; forms/modals usually want down. */
   menuPlacement?: "up" | "down";
   className?: string;
+  /** Optional leading icon, e.g. a Minecraft face. Size is 24 on the trigger, 28 in the menu. */
+  renderIcon?: (option: T, size: number) => ReactNode;
 };
 
 /** Pixel listbox used by PackSelect and Voice — never a native OS dropdown. */
-export function McSelect({
+export function McSelect<T extends McSelectOption>({
   label,
   options,
   value,
@@ -31,13 +31,14 @@ export function McSelect({
   placeholder = "—",
   menuPlacement = "up",
   className = "",
-}: Props) {
+  renderIcon,
+}: Props<T>) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
   const listId = useId();
   const selected = options.find((o) => o.id === value);
-  const showSkins = options.some((o) => o.skinUrl !== undefined);
+  const showIcons = Boolean(renderIcon);
 
   useEffect(() => {
     if (!open) return;
@@ -72,7 +73,7 @@ export function McSelect({
     open ? "is-open" : "",
     disabled ? "is-disabled" : "",
     menuPlacement === "down" ? "pack-select--menu-down" : "",
-    showSkins ? "pack-select--skins" : "",
+    showIcons ? "pack-select--skins" : "",
     className,
   ]
     .filter(Boolean)
@@ -93,27 +94,12 @@ export function McSelect({
         disabled={disabled || options.length === 0}
         onClick={() => setOpen((v) => !v)}
       >
-        {showSkins && selected ? (
-          <SkinHead
-            skinUrl={selected.skinUrl ?? null}
-            className="pack-select-skin"
-            size={24}
-          />
-        ) : null}
+        {renderIcon && selected ? renderIcon(selected, 24) : null}
         <span className="pack-select-value">
           <strong>{selected?.label ?? placeholder}</strong>
           {selected?.hint ? <em>{selected.hint}</em> : null}
         </span>
-        <svg className="pack-select-chevron" viewBox="0 0 12 8" aria-hidden>
-          <path
-            d="M1.1 1.2 6 6.1l4.9-4.9"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <PixelChevronDownIcon className="pack-select-chevron" />
       </button>
 
       {open ? (
@@ -138,32 +124,13 @@ export function McSelect({
                     setOpen(false);
                   }}
                 >
-                  {showSkins ? (
-                    <SkinHead
-                      skinUrl={opt.skinUrl ?? null}
-                      className="pack-select-skin"
-                      size={28}
-                    />
-                  ) : null}
+                  {renderIcon ? renderIcon(opt, 28) : null}
                   <span className="pack-select-option-copy">
                     <strong>{opt.label}</strong>
                     {opt.hint ? <em>{opt.hint}</em> : null}
                   </span>
                   {active ? (
-                    <svg
-                      className="pack-select-check"
-                      viewBox="0 0 14 14"
-                      aria-hidden
-                    >
-                      <path
-                        d="M2.2 7.2 5.4 10.4 11.8 3.6"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
+                    <PixelCheckIcon className="pack-select-check" />
                   ) : (
                     <span className="pack-select-check-slot" aria-hidden />
                   )}

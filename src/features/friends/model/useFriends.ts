@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { listFriendships, type FriendRow } from "@/entities/friend";
-import { TIMING } from "@/shared/config/timings";
+import { listFriendships, useFriendBadgeStore, type FriendRow } from "@/entities/friend";
 import { MSG } from "@/shared/config/messages";
 
 export function errText(err: unknown): string {
@@ -12,24 +11,33 @@ export function errText(err: unknown): string {
   return MSG.common.somethingWentWrong;
 }
 
-/** Friendship rows (polled quietly) plus load/error state. */
+const NO_ROWS: FriendRow[] = [];
+
+/**
+ * Friendship rows from the shared store (kept fresh by the app-wide poller)
+ * plus load/error state. Mount and action refreshes write into the same store.
+ */
 export function useFriends(userId: string) {
-  const [rows, setRows] = useState<FriendRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const sharedRows = useFriendBadgeStore((s) => s.rows);
+  const [fetching, setFetching] = useState(true);
   const [error, setError] = useState("");
+
+  const rows = sharedRows ?? NO_ROWS;
+  const loading = sharedRows === null && fetching;
 
   const refresh = useCallback(
     async (opts?: { quiet?: boolean }) => {
       if (!opts?.quiet) {
-        setLoading(true);
+        setFetching(true);
         setError("");
       }
       try {
-        setRows(await listFriendships(userId));
+        const next = await listFriendships(userId);
+        useFriendBadgeStore.getState().setFromRows(next);
       } catch (err) {
         if (!opts?.quiet) setError(errText(err));
       } finally {
-        if (!opts?.quiet) setLoading(false);
+        if (!opts?.quiet) setFetching(false);
       }
     },
     [userId],
@@ -37,11 +45,6 @@ export function useFriends(userId: string) {
 
   useEffect(() => {
     void refresh();
-    const id = window.setInterval(
-      () => void refresh({ quiet: true }),
-      TIMING.friendsPoll,
-    );
-    return () => window.clearInterval(id);
   }, [refresh]);
 
   return { rows, loading, error, setError, refresh };

@@ -1,14 +1,16 @@
+import { localizeServerError } from "@/shared/lib/errors";
 import { supabase } from "@/shared/api/supabase";
 import { TABLE } from "@/shared/config/supabase";
 import type { VoiceMember, VoiceMemberRole } from "../model/types";
 import { FALLBACK_USERNAME } from "@/shared/config/limits";
+import { t } from "@/shared/i18n";
 
 export async function listRoomMembers(roomId: string): Promise<VoiceMember[]> {
   const { data, error } = await supabase
     .from(TABLE.voiceRoomMembers)
     .select("user_id, role, joined_at")
     .eq("room_id", roomId);
-  if (error) throw new Error(error.message || "Could not load members");
+  if (error) throw new Error(localizeServerError(error.message) || t("voice.errors.loadMembers"));
   const rows = data ?? [];
   if (rows.length === 0) return [];
   const ids = rows.map((r) => r.user_id as string);

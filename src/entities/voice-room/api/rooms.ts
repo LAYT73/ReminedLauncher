@@ -1,6 +1,8 @@
+import { localizeServerError } from "@/shared/lib/errors";
 import { supabase } from "@/shared/api/supabase";
 import { TABLE } from "@/shared/config/supabase";
 import type { VoiceRoom, VoiceRoomStatus } from "../model/types";
+import { t } from "@/shared/i18n";
 
 type RoomRow = {
   id: string;
@@ -41,11 +43,11 @@ export async function createVoiceRoom(opts: {
 }): Promise<VoiceRoom> {
   const title = opts.title.trim() || "Voice room";
   const { data: authData, error: authErr } = await supabase.auth.getUser();
-  if (authErr) throw new Error(authErr.message || "Not signed in");
+  if (authErr) throw new Error(localizeServerError(authErr.message) || t("voice.errors.notSignedIn"));
   const hostId = authData.user?.id;
-  if (!hostId) throw new Error("Not signed in");
+  if (!hostId) throw new Error(t("voice.errors.notSignedIn"));
   if (opts.hostId && opts.hostId !== hostId) {
-    throw new Error("Session user does not match host id");
+    throw new Error(t("voice.errors.sessionMismatch"));
   }
 
   const { data, error } = await supabase
@@ -62,14 +64,14 @@ export async function createVoiceRoom(opts: {
     })
     .select("*")
     .single();
-  if (error) throw new Error(error.message || "Could not create room");
+  if (error) throw new Error(localizeServerError(error.message) || t("voice.errors.createRoom"));
   const room = mapRoom(data as RoomRow);
   const { error: mErr } = await supabase.from(TABLE.voiceRoomMembers).insert({
     room_id: room.id,
     user_id: hostId,
     role: "host",
   });
-  if (mErr) throw new Error(mErr.message || "Could not join as host");
+  if (mErr) throw new Error(localizeServerError(mErr.message) || t("voice.errors.joinAsHost"));
   return room;
 }
 
@@ -78,7 +80,7 @@ export async function closeVoiceRoom(roomId: string): Promise<void> {
     .from(TABLE.voiceRooms)
     .update({ status: "closed", updated_at: new Date().toISOString() })
     .eq("id", roomId);
-  if (error) throw new Error(error.message || "Could not close room");
+  if (error) throw new Error(localizeServerError(error.message) || t("voice.errors.closeRoom"));
   // Drop pending invites so they don't hang on friends' Voice tab.
   const { error: invErr } = await supabase
     .from(TABLE.voiceInvites)
@@ -92,7 +94,7 @@ export async function closeVoiceRoom(roomId: string): Promise<void> {
       .eq("room_id", roomId)
       .eq("status", "pending");
     if (markErr) {
-      throw new Error(markErr.message || "Could not clear room invites");
+      throw new Error(localizeServerError(markErr.message) || t("voice.errors.clearInvites"));
     }
   }
   // Purge membership so closed rooms never resurrect ghost members in lists.
@@ -100,7 +102,7 @@ export async function closeVoiceRoom(roomId: string): Promise<void> {
     .from(TABLE.voiceRoomMembers)
     .delete()
     .eq("room_id", roomId);
-  if (mErr) throw new Error(mErr.message || "Could not clear room members");
+  if (mErr) throw new Error(localizeServerError(mErr.message) || t("voice.errors.clearMembers"));
 }
 
 export async function setVoiceRoomShareCode(
@@ -114,7 +116,7 @@ export async function setVoiceRoomShareCode(
       updated_at: new Date().toISOString(),
     })
     .eq("id", roomId);
-  if (error) throw new Error(error.message || "Could not save share code");
+  if (error) throw new Error(localizeServerError(error.message) || t("voice.errors.saveShareCode"));
 }
 
 export async function leaveVoiceRoom(
@@ -126,7 +128,7 @@ export async function leaveVoiceRoom(
     .delete()
     .eq("room_id", roomId)
     .eq("user_id", userId);
-  if (error) throw new Error(error.message || "Could not leave room");
+  if (error) throw new Error(localizeServerError(error.message) || t("voice.errors.leaveRoom"));
 }
 
 /** Re-assert membership after LiveKit reconnect (chat + member list need the row). */
@@ -139,7 +141,7 @@ export async function ensureVoiceRoomMember(
     { room_id: roomId, user_id: userId, role },
     { onConflict: "room_id,user_id" },
   );
-  if (error) throw new Error(error.message || "Could not join room");
+  if (error) throw new Error(localizeServerError(error.message) || t("voice.errors.joinRoom"));
 }
 
 export async function listMyOpenRooms(userId: string): Promise<VoiceRoom[]> {
@@ -147,7 +149,7 @@ export async function listMyOpenRooms(userId: string): Promise<VoiceRoom[]> {
     .from(TABLE.voiceRoomMembers)
     .select("room_id")
     .eq("user_id", userId);
-  if (mErr) throw new Error(mErr.message || "Could not load memberships");
+  if (mErr) throw new Error(localizeServerError(mErr.message) || t("voice.errors.loadMemberships"));
   const ids = (memberRows ?? []).map((r) => r.room_id as string);
   if (ids.length === 0) return [];
   const { data, error } = await supabase
@@ -156,7 +158,7 @@ export async function listMyOpenRooms(userId: string): Promise<VoiceRoom[]> {
     .in("id", ids)
     .eq("status", "open")
     .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message || "Could not load rooms");
+  if (error) throw new Error(localizeServerError(error.message) || t("voice.errors.loadRooms"));
   return (data ?? []).map((r) => mapRoom(r as RoomRow));
 }
 
@@ -166,6 +168,6 @@ export async function getVoiceRoom(roomId: string): Promise<VoiceRoom | null> {
     .select("*")
     .eq("id", roomId)
     .maybeSingle();
-  if (error) throw new Error(error.message || "Could not load room");
+  if (error) throw new Error(localizeServerError(error.message) || t("voice.errors.loadRoom"));
   return data ? mapRoom(data as RoomRow) : null;
 }

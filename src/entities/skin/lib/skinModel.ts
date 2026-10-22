@@ -1,3 +1,4 @@
+import { t } from "@/shared/i18n";
 /** Minecraft player model — matches SkinShuffle / CustomSkinLoader / Mojang. */
 export type SkinModelKind = "default" | "slim";
 
@@ -8,5 +9,5 @@ export function normalizeSkinModel(
 }
 
 export function skinModelLabel(model: SkinModelKind): string {
-  return model === "slim" ? "Slim" : "Wide";
+  return model === "slim" ? t("profile.wardrobe.slim") : t("profile.wardrobe.wide");
 }

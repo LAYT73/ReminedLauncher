@@ -62,7 +62,7 @@
   border: 1px solid transparent;
   background: linear-gradient(
     135deg,
-    color-mix(in srgb, var(--accent) 30%, transparent),
+    color-mix(in srgb, var(--mc-green-hi) 30%, transparent),
     transparent 48%
   );
   opacity: 0;
@@ -72,12 +72,12 @@
 .screenshot-card:hover,
 .screenshot-card:focus-visible {
   transform: translateY(-2px);
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--bg-input) 86%, var(--accent) 14%);
+  border-color: var(--mc-green-hi);
+  background: color-mix(in srgb, var(--bg-input) 86%, var(--mc-green-hi) 14%);
   box-shadow:
     var(--bevel-panel),
-    0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent),
-    0 8px 20px color-mix(in srgb, var(--accent) 18%, transparent);
+    0 0 0 1px color-mix(in srgb, var(--mc-green-hi) 55%, transparent),
+    0 8px 20px color-mix(in srgb, var(--mc-green-hi) 18%, transparent);
 }
 
 .screenshot-card:hover::after,
@@ -86,7 +86,7 @@
 }
 
 .screenshot-card:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--mc-green-hi);
   outline-offset: 3px;
 }
 
@@ -105,7 +105,7 @@
   width: 100%;
   aspect-ratio: 16 / 9;
   object-fit: cover;
-  background: #111;
+  background: var(--bg-sidebar);
   display: block;
 }
 
@@ -135,7 +135,7 @@
   display: flex;
   flex-direction: column;
   background: rgba(0, 0, 0, 0.92);
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 .screenshot-viewer-close {
@@ -147,8 +147,8 @@
   height: 40px;
   padding: 0;
   border: 3px solid #000;
-  background: var(--mc-stone-mid, #555);
-  color: #fff;
+  background: #383838;
+  color: var(--text-on-accent);
   font-size: 28px;
   line-height: 1;
   cursor: pointer;
@@ -179,7 +179,7 @@
   object-fit: contain;
   object-position: center;
   border: 2px solid #000;
-  background: #0a0a0a;
+  background: var(--bg-input);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
 }
 
@@ -199,8 +199,8 @@
   height: 64px;
   padding: 0;
   border: 3px solid #000;
-  background: var(--mc-stone-mid, #555);
-  color: #fff;
+  background: #383838;
+  color: var(--text-on-accent);
   font-size: 36px;
   line-height: 1;
   display: grid;
@@ -211,17 +211,8 @@
 
 .screenshot-viewer-chevron {
   display: block;
-  width: 20px;
-  height: 28px;
-  overflow: visible;
-}
-
-.screenshot-viewer-chevron polyline {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 3.5;
-  stroke-linecap: square;
-  stroke-linejoin: miter;
+  width: 32px;
+  height: 32px;
 }
 
 .screenshot-viewer-nav.is-prev {

@@ -1,4 +1,5 @@
 import { MSG } from "@/shared/config/messages";
+import { errorMessage } from "@/shared/lib/errors";
 import { toast } from "@/shared/lib/toast";
 import {
   committedUsername,
@@ -51,7 +52,7 @@ export async function commitUsername(): Promise<void> {
     store.setUsernameDraft(null);
     toast(MSG.profile.usernameUpdated);
   } catch (err) {
-    toast(err instanceof Error ? err.message : String(err));
+    toast(errorMessage(err));
   } finally {
     store.setUsernameBusy(false);
   }

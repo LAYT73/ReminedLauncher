@@ -1,24 +1,366 @@
-/* Skins */
-.skin-layout {
-  display: flex;
+/* Profile page */
+.profile-grid {
+  display: grid;
+  /* Right column 40px wider than the old 45/55 split; the stage gives it up. */
+  grid-template-columns: minmax(220px, 1fr) minmax(0, calc((100% - 28px) * 0.55 + 40px));
   gap: 28px;
   align-items: stretch;
-  min-height: 360px;
 }
 
-.skin-stage {
-  width: min(320px, 42vw);
-  min-height: 360px;
-  flex-shrink: 0;
-  background: radial-gradient(
-    ellipse at 50% 72%,
-    color-mix(in srgb, var(--bg-panel) 82%, var(--accent-text) 18%) 0%,
-    var(--bg-deep) 70%
-  );
+/* Stage stretches to the bottom of the wardrobe cards. */
+.profile-stage-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-stage {
+  position: relative;
+  flex: 1;
+  min-height: 420px;
   border: 3px solid #000;
   box-shadow: var(--bevel-panel);
   overflow: hidden;
+  background:
+    radial-gradient(
+      ellipse at 50% 100%,
+      color-mix(in srgb, var(--accent-text) 16%, transparent) 0%,
+      transparent 60%
+    ),
+    linear-gradient(
+      180deg,
+      var(--bg-deep) 0%,
+      color-mix(in srgb, var(--bg-panel) 70%, var(--bg-deep)) 100%
+    );
+}
+
+.profile-stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  box-shadow: inset 0 0 70px rgba(0, 0, 0, 0.45);
+}
+
+.profile-stage-fx {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.skin-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
   image-rendering: pixelated;
+}
+
+.profile-title-row {
+  justify-content: space-between;
+}
+
+.btn-mc.btn-icon-signout {
+  width: 40px;
+  min-width: 40px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-icon-signout .pixel-glyph {
+  width: 16px;
+  height: 16px;
+}
+
+.profile-offline-note {
+  margin-top: 20px;
+}
+
+.profile-main {
+  min-width: 0;
+}
+
+.profile-head {
+  margin-bottom: 22px;
+  padding-bottom: 18px;
+  border-bottom: 3px solid #000;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+
+.profile-head-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.profile-name {
+  font-family: var(--font-display);
+  font-size: 30px;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  text-shadow: 2px 2px 0 var(--shadow-soft);
+  overflow-wrap: anywhere;
+}
+
+.profile-id {
+  display: inline-flex;
+  align-items: stretch;
+  border: 2px solid #000;
+  box-shadow: var(--bevel-panel);
+  background: var(--bg-raised);
+}
+
+.profile-id-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--accent-text);
+}
+
+.profile-id-copy {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-left: 2px solid #000;
+  background: var(--mc-stone);
+  color: var(--text-on-stone);
+  cursor: pointer;
+}
+
+.profile-id-copy:hover {
+  background: var(--mc-stone-mid);
+}
+
+.profile-id-copy:focus-visible,
+.wardrobe-cape-slot:focus-visible,
+.skin-model-btn:focus-visible {
+  outline: 2px solid var(--mc-green-hi);
+  outline-offset: 2px;
+}
+
+.profile-id-copy .pixel-glyph {
+  width: 16px;
+  height: 16px;
+}
+
+.profile-sub {
+  margin: 8px 0 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.profile-username-field {
+  margin-bottom: 0;
+}
+
+.wardrobe-title {
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+
+.wardrobe-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.wardrobe-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  background: var(--bg-panel);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel);
+}
+
+.wardrobe-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.wardrobe-card-title .pixel-glyph {
+  width: 16px;
+  height: 16px;
+  color: var(--accent-text);
+}
+
+.wardrobe-card-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.wardrobe-preview {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  background: var(--bg-input);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-inset);
+  line-height: 0;
+}
+
+.wardrobe-preview canvas {
+  image-rendering: pixelated;
+}
+
+.wardrobe-preview-cape {
+  width: 48px;
+  height: 64px;
+}
+
+.cape-crop {
+  width: 30px;
+  height: 48px;
+  background-repeat: no-repeat;
+  background-size: 192px 96px;
+  background-position: -3px -3px;
+  image-rendering: pixelated;
+}
+
+.wardrobe-cape-slot {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border: 3px dashed var(--accent-text);
+  background: var(--accent-wash);
+  color: var(--accent-text);
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    background 0.15s ease;
+}
+
+.wardrobe-cape-slot .pixel-glyph {
+  width: 32px;
+  height: 32px;
+  opacity: 0.8;
+}
+
+.cape-slot-plus {
+  position: absolute;
+  right: -8px;
+  bottom: -8px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  background: var(--mc-green);
+  color: var(--text-on-accent);
+  border: 2px solid #000;
+}
+
+.cape-slot-plus .pixel-glyph {
+  width: 16px;
+  height: 16px;
+  opacity: 1;
+}
+
+.wardrobe-cape-slot:hover {
+  transform: translateY(-2px);
+  background: color-mix(in srgb, var(--accent-text) 18%, transparent);
+}
+
+.wardrobe-info {
+  min-width: 0;
+}
+
+.wardrobe-status {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.wardrobe-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.wardrobe-arms {
+  margin-bottom: 0;
+}
+
+.wardrobe-actions {
+  flex-wrap: wrap;
+  margin-top: auto;
+}
+
+.btn-mc-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.btn-mc-icon .pixel-glyph {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.pixel-glyph {
+  display: block;
+  shape-rendering: crispEdges;
+}
+
+@media (max-width: 900px) {
+  .profile-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .profile-stage {
+    min-height: 360px;
+  }
+}
+
+@media (max-width: 720px) {
+  .wardrobe-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-stage-fx {
+    display: none;
+  }
+  .wardrobe-cape-slot {
+    transition: none;
+  }
+  .wardrobe-cape-slot:hover {
+    transform: none;
+  }
 }
 
 .skin-stage canvas,
@@ -32,7 +374,7 @@
   height: 36px;
   flex-shrink: 0;
   border-radius: 0;
-  background: #111;
+  background: var(--bg-sidebar);
   border: 2px solid #000;
   box-shadow: var(--bevel-panel);
   overflow: hidden;
@@ -47,12 +389,6 @@
   width: 100% !important;
   height: 100% !important;
   display: block !important;
-}
-
-.skin-controls {
-  flex: 1;
-  max-width: 360px;
-  padding-top: 8px;
 }
 
 .field {
@@ -75,7 +411,7 @@
   display: flex;
   gap: 0;
   border: 3px solid #000;
-  box-shadow: var(--bevel-raised);
+  box-shadow: var(--bevel-btn);
   background: var(--bg-deep);
 }
 
@@ -99,12 +435,12 @@
 
 .skin-model-btn.is-active {
   background: var(--mc-green);
-  color: #fff;
-  text-shadow: 1px 1px 0 #1a4d12;
+  color: var(--text-on-accent);
+  text-shadow: 1px 1px 0 var(--accent-shadow);
 }
 
 .skin-model-btn:hover:not(.is-active) {
-  background: var(--bg-hover, var(--bg-input));
+  background: var(--bg-input);
   color: var(--text);
 }
 
@@ -185,7 +521,6 @@
 .btn-icon-sq svg {
   display: block;
   flex-shrink: 0;
-  fill: currentColor;
 }
 
 .settings-row-actions {
@@ -383,7 +718,8 @@
 }
 
 .btn-pixel-reset {
-  background: #e6b800;
+  color: #1a1a1a;
+  background: var(--mc-gold);
   box-shadow:
     inset 0 2px 0 rgba(255, 255, 255, 0.35),
     inset 0 -3px 0 rgba(0, 0, 0, 0.25),
@@ -392,13 +728,13 @@
 }
 
 .btn-pixel-reset:hover:not(:disabled) {
-  background: #f0c820;
+  background: var(--mc-gold-mid);
   filter: brightness(1.04);
 }
 
 .btn-pixel-icon {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   display: block;
   overflow: visible;
   shape-rendering: crispEdges;
@@ -469,7 +805,7 @@
 .btn-mc.ok {
   background: var(--mc-green);
   color: var(--text-on-accent);
-  text-shadow: 1px 1px 0 #1a4d12;
+  text-shadow: 1px 1px 0 var(--accent-shadow);
 }
 
 .btn-mc.ok:hover:not(:disabled) {
@@ -479,7 +815,7 @@
 
 .btn-mc.danger {
   background: var(--mc-red);
-  color: #fff;
+  color: var(--text-on-accent);
   text-shadow: 1px 1px 0 #4a0a0a;
 }
 

@@ -7,7 +7,9 @@
   align-items: center;
   padding: 14px 0;
   gap: 10px;
-  z-index: 3;
+  /* Above the page-transition canvas (40) so enchant glyphs fly over it;
+     below modals (200+). Glyphs stay under icons inside this isolate. */
+  z-index: 50;
   overflow: visible;
   isolation: isolate;
 }
@@ -72,9 +74,9 @@
   inset: 0;
   background: linear-gradient(
     135deg,
-    color-mix(in srgb, var(--accent-text) 55%, #2a2a2a) 0 45%,
-    color-mix(in srgb, var(--accent-shadow) 70%, #1a1a1a) 45% 55%,
-    #1a1a1a 55%
+    color-mix(in srgb, var(--accent-text) 55%, var(--mc-stone)) 0 45%,
+    color-mix(in srgb, var(--accent-shadow) 70%, var(--bg-menu)) 45% 55%,
+    var(--bg-menu) 55%
   );
 }
 
@@ -228,7 +230,6 @@
 }
 
 .rail-settings svg {
-  width: 20px;
-  height: 20px;
-  fill: currentColor;
+  width: 16px;
+  height: 16px;
 }

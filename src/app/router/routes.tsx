@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Navigate, createMemoryRouter, useLocation, type RouteObject } from "react-router";
 import { RAIL, TAB, routeFor } from "@/shared/config/routes";
 import { registerNavigator } from "@/shared/lib/navigator";
+import { configurePageTransition } from "@/shared/lib/pageTransition";
 import { PageMotion } from "@/shared/ui/PageMotion";
 import { FriendsPage } from "@/pages/friends";
 import { HomePage } from "@/pages/home";
@@ -64,6 +65,11 @@ export const router = createMemoryRouter(
 
 // Let non-component code (feature actions) navigate.
 registerNavigator({
+  navigate: (to) => void router.navigate(to),
+  pathname: () => router.state.location.pathname,
+});
+// Animated navigation drives the same router (see shared/lib/pageTransition).
+configurePageTransition({
   navigate: (to) => void router.navigate(to),
   pathname: () => router.state.location.pathname,
 });

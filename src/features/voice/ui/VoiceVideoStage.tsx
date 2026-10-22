@@ -1,5 +1,6 @@
 import type { VoiceMember } from "@/entities/voice-room";
 import type { VoiceVideoTile } from "../lib/voiceSession";
+import { useT } from "@/shared/i18n";
 import { FALLBACK_USERNAME } from "@/shared/config/limits";
 import { VideoTileView } from "./VoiceBits";
 
@@ -19,8 +20,9 @@ function tileLabel(tile: VoiceVideoTile, members: VoiceMember[]): string {
  * Screen shares first so they land in the lead cells.
  */
 export function VoiceVideoStage({ tiles, members }: Props) {
-  const cams = tiles.filter((t) => t.source === "camera");
-  const screens = tiles.filter((t) => t.source === "screen");
+  const t = useT();
+  const cams = tiles.filter((x) => x.source === "camera");
+  const screens = tiles.filter((x) => x.source === "screen");
   const ordered = [...screens, ...cams];
   const count = ordered.length;
 
@@ -29,9 +31,9 @@ export function VoiceVideoStage({ tiles, members }: Props) {
       <div
         className="voice-video-stage is-empty"
         role="region"
-        aria-label="Video"
+        aria-label={t("voice.stage.video")}
       >
-        <p className="voice-video-empty">Turn on a camera or share your screen.</p>
+        <p className="voice-video-empty">{t("voice.stage.empty")}</p>
       </div>
     );
   }
@@ -41,13 +43,13 @@ export function VoiceVideoStage({ tiles, members }: Props) {
       className="voice-video-stage"
       data-count={Math.min(count, 9)}
       role="list"
-      aria-label="Video"
+      aria-label={t("voice.stage.video")}
     >
-      {ordered.map((t) => (
+      {ordered.map((tile) => (
         <VideoTileView
-          key={`${t.identity}-${t.source}`}
-          tile={t}
-          label={tileLabel(t, members)}
+          key={`${tile.identity}-${tile.source}`}
+          tile={tile}
+          label={tileLabel(tile, members)}
         />
       ))}
     </div>

@@ -1,5 +1,7 @@
+import { t } from "@/shared/i18n";
 import { open } from "@tauri-apps/plugin-dialog";
 import { MSG } from "@/shared/config/messages";
+import { errorMessage } from "@/shared/lib/errors";
 import { toast } from "@/shared/lib/toast";
 import {
   invalidateMedia,
@@ -29,26 +31,23 @@ import {
   type SkinModelKind,
 } from "@/entities/skin";
 
-const errorMessage = (err: unknown) =>
-  err instanceof Error ? err.message : String(err);
-
 /** Pick a PNG, upload it to the account and apply it as the current skin. */
-export async function pickSkin(): Promise<void> {
+export async function pickSkin(): Promise<boolean> {
   const selected = await open({
     multiple: false,
     filters: [{ name: "PNG", extensions: ["png"] }],
   });
-  if (!selected || Array.isArray(selected)) return;
+  if (!selected || Array.isArray(selected)) return false;
 
   const session = useSessionStore.getState();
   if (session.offlineMode) {
     toast(MSG.offline.skinSync);
-    return;
+    return false;
   }
   const user = session.session?.user;
   if (!user?.id) {
     toast(MSG.offline.signInForSkin);
-    return;
+    return false;
   }
 
   const skin = useSkinStore.getState();
@@ -57,8 +56,8 @@ export async function pickSkin(): Promise<void> {
   // Local bytes are authoritative — same CDN URL is reused on replace.
   const dataUrl = await skinApi.readDataUrl(selected);
   if (!dataUrl) {
-    toast("Could not read skin");
-    return;
+    toast(t("profile.errors.readSkin"));
+    return false;
   }
   skin.setPreview(dataUrl);
 
@@ -93,11 +92,13 @@ export async function pickSkin(): Promise<void> {
       skinModel: next.skin_model,
     });
     toast(MSG.profile.skinSaved);
+    return true;
   } catch (err) {
     skin.setPreview(
       profile.skin_path && isSkinUrl(profile.skin_path) ? profile.skin_path : null,
     );
-    toast(errorMessage(err));
+    toast(errorMessage(err, ""));
+    return false;
   }
 }
 
@@ -116,22 +117,22 @@ export async function clearSkin(): Promise<void> {
 }
 
 /** Pick a PNG cape, upload it, show in 3D preview. */
-export async function pickCape(): Promise<void> {
+export async function pickCape(): Promise<boolean> {
   const selected = await open({
     multiple: false,
     filters: [{ name: "PNG", extensions: ["png"] }],
   });
-  if (!selected || Array.isArray(selected)) return;
+  if (!selected || Array.isArray(selected)) return false;
 
   const session = useSessionStore.getState();
   if (session.offlineMode) {
     toast(MSG.offline.skinSync);
-    return;
+    return false;
   }
   const user = session.session?.user;
   if (!user?.id) {
     toast(MSG.offline.signInForSkin);
-    return;
+    return false;
   }
 
   const skin = useSkinStore.getState();
@@ -139,8 +140,8 @@ export async function pickCape(): Promise<void> {
 
   const dataUrl = await skinApi.readDataUrl(selected);
   if (!dataUrl) {
-    toast("Could not read cape");
-    return;
+    toast(t("profile.errors.readCape"));
+    return false;
   }
   skin.setCapePreview(dataUrl);
 
@@ -172,13 +173,15 @@ export async function pickCape(): Promise<void> {
       skinModel: next.skin_model,
     });
     toast(MSG.profile.capeSaved);
+    return true;
   } catch (err) {
     skin.setCapePreview(
       profile.cape_path && isSkinUrl(profile.cape_path)
         ? profile.cape_path
         : null,
     );
-    toast(errorMessage(err));
+    toast(errorMessage(err, ""));
+    return false;
   }
 }
 
@@ -224,6 +227,6 @@ export async function setSkinModel(model: SkinModelKind): Promise<void> {
       skinModel: saved,
     });
   } catch (err) {
-    toast(errorMessage(err));
+    toast(errorMessage(err, ""));
   }
 }

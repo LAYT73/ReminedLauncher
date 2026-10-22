@@ -1,8 +1,10 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { RAM_OPTIONS_GB, useProfileStore } from "@/entities/profile";
 import { FolderIconBtn } from "@/shared/ui/FolderIconBtn";
+import { useT } from "@/shared/i18n";
 
 export function JavaSection() {
+  const t = useT();
   const { profile, javaInfo, setProfile, persist, refreshJava } =
     useProfileStore();
 
@@ -20,10 +22,10 @@ export function JavaSection() {
 
   return (
     <div className="settings-block">
-      <h3 className="settings-heading">Java</h3>
+      <h3 className="settings-heading">{t("settings.java.title")}</h3>
 
       <div className="field">
-        <label htmlFor="ram">Memory (RAM)</label>
+        <label htmlFor="ram">{t("settings.java.memory")}</label>
         <select
           id="ram"
           value={String(profile.ram_mb)}
@@ -33,25 +35,25 @@ export function JavaSection() {
         >
           {RAM_OPTIONS_GB.map((gb) => (
             <option key={gb} value={gb * 1024}>
-              {gb} GB
+              {gb} {t("settings.java.gb")}
             </option>
           ))}
           {RAM_OPTIONS_GB.every((gb) => gb * 1024 !== profile.ram_mb) ? (
             <option value={profile.ram_mb}>
-              {Math.round(profile.ram_mb / 1024)} GB
+              {Math.round(profile.ram_mb / 1024)} {t("settings.java.gb")}
             </option>
           ) : null}
         </select>
       </div>
 
       <div className="field">
-        <label htmlFor="java-path">Java path</label>
+        <label htmlFor="java-path">{t("settings.java.path")}</label>
         <div className="field-row">
           <input
             id="java-path"
             type="text"
             spellCheck={false}
-            placeholder="Auto (OpenJDK 25)"
+            placeholder={t("settings.java.pathPlaceholder")}
             value={profile.java_path ?? ""}
             onChange={(e) =>
               setProfile({
@@ -64,14 +66,14 @@ export function JavaSection() {
               void refreshJava(profile.java_path);
             }}
           />
-          <FolderIconBtn title="Browse for Java" onClick={() => void pickJava()} />
+          <FolderIconBtn title={t("settings.java.browse")} onClick={() => void pickJava()} />
           {profile.java_path ? (
             <button
               type="button"
               className="btn-mc dim"
               onClick={() => void clearJava()}
             >
-              Auto
+              {t("settings.java.auto")}
             </button>
           ) : null}
         </div>
@@ -81,16 +83,16 @@ export function JavaSection() {
             title={javaInfo.path}
           >
             {javaInfo.version}
-            {javaInfo.major != null ? ` · major ${javaInfo.major}` : ""}
+            {javaInfo.major != null ? ` · ${t("settings.java.major", { n: javaInfo.major })}` : ""}
             {!javaInfo.ok && javaInfo.path
-              ? " — need Java 25 for Fabric 26.2"
+              ? ` — ${t("settings.java.needJava25")}`
               : ""}
           </p>
         ) : null}
       </div>
 
       <div className="field">
-        <label htmlFor="jvm-args">JVM flags</label>
+        <label htmlFor="jvm-args">{t("settings.java.jvmFlags")}</label>
         <textarea
           id="jvm-args"
           rows={3}
@@ -103,7 +105,7 @@ export function JavaSection() {
           onBlur={() => void persist(profile)}
         />
         <p className="field-hint">
-          Extra args after -Xmx. Space-separated. Leave empty for defaults.
+          {t("settings.java.jvmHint")}
         </p>
       </div>
     </div>

@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
+import { useT } from "@/shared/i18n";
 import { setCustomTheme, setTheme } from "@/features/profile-edit";
 import { useProfileStore } from "@/entities/profile";
 import {
   DEFAULT_CUSTOM_THEME,
   DEFAULT_THEME,
   THEME_PRESETS,
+  parseHex,
   type CustomTheme,
 } from "@/entities/theme";
-import { parseHex } from "@/entities/theme/lib/color";
 
 /** Default surface when flipping Light / Dark on a custom theme. */
 const MODE_SURFACE = {
@@ -26,6 +27,7 @@ function commitHex(
 }
 
 export function ThemeSection() {
+  const t = useT();
   const theme = useProfileStore((s) => s.profile.theme);
   const custom = useProfileStore((s) => s.profile.theme_custom);
   const draft: CustomTheme = custom ?? DEFAULT_CUSTOM_THEME;
@@ -69,8 +71,8 @@ export function ThemeSection() {
 
   return (
     <div className="settings-block">
-      <h3 className="settings-heading">Theme</h3>
-      <div className="theme-grid" role="listbox" aria-label="Theme presets">
+      <h3 className="settings-heading">{t("settings.theme.title")}</h3>
+      <div className="theme-grid" role="listbox" aria-label={t("settings.theme.presetsAria")}>
         {THEME_PRESETS.map((preset) => {
           const active = theme === preset.id;
           return (
@@ -79,8 +81,8 @@ export function ThemeSection() {
               type="button"
               role="option"
               aria-selected={active}
-              aria-label={preset.label}
-              title={preset.label}
+              aria-label={t(`settings.theme.presets.${preset.id}`)}
+              title={t(`settings.theme.presets.${preset.id}`)}
               className={`theme-card ${active ? "is-active" : ""}`}
               onClick={() => pickPreset(preset.id)}
             >
@@ -98,8 +100,8 @@ export function ThemeSection() {
           type="button"
           role="option"
           aria-selected={customActive && editorOpen}
-          aria-label="Custom theme"
-          title="Custom"
+          aria-label={t("settings.theme.customAria")}
+          title={t("settings.theme.custom")}
           className={`theme-card theme-card-custom ${customActive && editorOpen ? "is-active" : ""}`}
           onClick={toggleCustomEditor}
         >
@@ -118,29 +120,29 @@ export function ThemeSection() {
       </div>
 
       {customActive && editorOpen ? (
-        <div className="theme-custom-editor" aria-label="Custom theme editor">
+        <div className="theme-custom-editor" aria-label={t("settings.theme.editorAria")}>
           <div className="theme-custom-row">
-            <span className="theme-custom-label">Mode</span>
-            <div className="theme-mode-seg" role="group" aria-label="Theme mode">
+            <span className="theme-custom-label">{t("settings.theme.mode")}</span>
+            <div className="theme-mode-seg" role="group" aria-label={t("settings.theme.modeAria")}>
               <button
                 type="button"
                 className={`theme-mode-btn${draft.mode === "dark" ? " is-active" : ""}`}
                 onClick={() => setMode("dark")}
               >
-                Dark
+                {t("settings.theme.dark")}
               </button>
               <button
                 type="button"
                 className={`theme-mode-btn${draft.mode === "light" ? " is-active" : ""}`}
                 onClick={() => setMode("light")}
               >
-                Light
+                {t("settings.theme.light")}
               </button>
             </div>
           </div>
           <div className="theme-custom-row">
             <label className="theme-custom-label" htmlFor="theme-accent">
-              Accent
+              {t("settings.theme.accent")}
             </label>
             <div className="theme-color-field">
               <input
@@ -151,7 +153,7 @@ export function ThemeSection() {
                   setAccentHex(e.target.value);
                   void setCustomTheme({ accent: e.target.value });
                 }}
-                aria-label="Accent color"
+                aria-label={t("settings.theme.accentColor")}
               />
               <input
                 type="text"
@@ -161,13 +163,13 @@ export function ThemeSection() {
                 maxLength={7}
                 onChange={(e) => commitHex("accent", e.target.value, setAccentHex)}
                 onBlur={() => setAccentHex(draft.accent)}
-                aria-label="Accent hex"
+                aria-label={t("settings.theme.accentHex")}
               />
             </div>
           </div>
           <div className="theme-custom-row">
             <label className="theme-custom-label" htmlFor="theme-surface">
-              Surface
+              {t("settings.theme.surface")}
             </label>
             <div className="theme-color-field">
               <input
@@ -178,7 +180,7 @@ export function ThemeSection() {
                   setSurfaceHex(e.target.value);
                   void setCustomTheme({ surface: e.target.value });
                 }}
-                aria-label="Surface color"
+                aria-label={t("settings.theme.surfaceColor")}
               />
               <input
                 type="text"
@@ -190,7 +192,7 @@ export function ThemeSection() {
                   commitHex("surface", e.target.value, setSurfaceHex)
                 }
                 onBlur={() => setSurfaceHex(draft.surface)}
-                aria-label="Surface hex"
+                aria-label={t("settings.theme.surfaceHex")}
               />
             </div>
           </div>

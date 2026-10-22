@@ -1,4 +1,5 @@
-import { useNavigate } from "react-router";
+import { useT } from "@/shared/i18n";
+import { transitionTo } from "@/shared/lib/pageTransition";
 import homeMcLogo from "@/shared/assets/home-mc-logo.png";
 import { RAIL, routeFor } from "@/shared/config/routes";
 import { isReminePackId } from "@/shared/lib/packIds";
@@ -14,7 +15,7 @@ import { SkinModel, useSkinStore } from "@/entities/skin";
 import { useHomeVideoReady } from "@/widgets/home-video";
 
 export function HomePage() {
-  const navigate = useNavigate();
+  const t = useT();
   const videoReady = useHomeVideoReady((s) => s.ready);
   const profile = useProfileStore((s) => s.profile);
   const appVersion = useProfileStore((s) => s.appVersion);
@@ -34,7 +35,7 @@ export function HomePage() {
   function openFeature(packId: string) {
     const { profile: current, persist } = useProfileStore.getState();
     void persist({ ...current, selected_pack: packId });
-    navigate(routeFor(RAIL.java));
+    transitionTo(routeFor(RAIL.java));
   }
 
   return (
@@ -47,7 +48,7 @@ export function HomePage() {
         <img
           className="home-mc-logo"
           src={homeMcLogo}
-          alt="Remined Launcher — Java Edition"
+          alt={t("pack.home.logoAlt")}
           draggable={false}
         />
       </div>
@@ -76,11 +77,13 @@ export function HomePage() {
                   <span>
                     {featureContent?.tagline?.trim() ||
                       featurePack.version ||
-                      (packReady ? "Installed" : "Not installed")}
+                      (packReady
+                        ? t("pack.home.installed")
+                        : t("pack.home.notInstalled"))}
                   </span>
                 </span>
                 <span className="home-feature-cta">
-                  {packReady ? "Open" : "View"}
+                  {packReady ? t("pack.home.open") : t("pack.home.view")}
                 </span>
               </button>
             ) : null}

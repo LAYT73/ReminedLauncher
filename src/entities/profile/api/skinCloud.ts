@@ -1,3 +1,4 @@
+import { t } from "@/shared/i18n";
 import { call } from "@/shared/api/invoke";
 import {
   capePublicUrl,
@@ -25,7 +26,7 @@ const ALLOWED_CAPE_SIZES: Array<[number, number]> = [
 
 function dataUrlToBytes(dataUrl: string): Uint8Array {
   const b64 = dataUrl.split(",")[1];
-  if (!b64) throw new Error("Invalid skin data");
+  if (!b64) throw new Error(t("profile.errors.invalidSkinData"));
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -34,9 +35,9 @@ function dataUrlToBytes(dataUrl: string): Uint8Array {
 
 function assertPngMagic(bytes: Uint8Array) {
   const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-  if (bytes.length < 24) throw new Error("File too small to be a skin");
+  if (bytes.length < 24) throw new Error(t("profile.errors.fileTooSmall"));
   for (let i = 0; i < sig.length; i++) {
-    if (bytes[i] !== sig[i]) throw new Error("Skin must be a PNG file");
+    if (bytes[i] !== sig[i]) throw new Error(t("profile.errors.skinMustBePng"));
   }
 }
 
@@ -54,17 +55,17 @@ function readPngSize(bytes: Uint8Array): { w: number; h: number } {
 /** Reject anything that isn’t a normal Minecraft skin PNG. */
 export function validateSkinPng(dataUrl: string): Uint8Array {
   if (!dataUrl.startsWith("data:image/png")) {
-    throw new Error("Only PNG skins are allowed");
+    throw new Error(t("profile.errors.onlyPngSkins"));
   }
   const bytes = dataUrlToBytes(dataUrl);
   if (bytes.byteLength > MAX_BYTES) {
-    throw new Error(`Skin is too large (max ${MAX_BYTES / 1024} KB)`);
+    throw new Error(t("profile.errors.skinTooLarge", { max: MAX_BYTES / 1024 }));
   }
   assertPngMagic(bytes);
   const { w, h } = readPngSize(bytes);
   const ok = ALLOWED_SKIN_SIZES.some(([aw, ah]) => aw === w && ah === h);
   if (!ok) {
-    throw new Error("Skin must be 64×64, 64×32, or 128×128 PNG");
+    throw new Error(t("profile.errors.skinSize"));
   }
   return bytes;
 }
@@ -72,17 +73,17 @@ export function validateSkinPng(dataUrl: string): Uint8Array {
 /** Reject anything that isn’t a normal Minecraft cape PNG. */
 export function validateCapePng(dataUrl: string): Uint8Array {
   if (!dataUrl.startsWith("data:image/png")) {
-    throw new Error("Only PNG capes are allowed");
+    throw new Error(t("profile.errors.onlyPngCapes"));
   }
   const bytes = dataUrlToBytes(dataUrl);
   if (bytes.byteLength > MAX_BYTES) {
-    throw new Error(`Cape is too large (max ${MAX_BYTES / 1024} KB)`);
+    throw new Error(t("profile.errors.capeTooLarge", { max: MAX_BYTES / 1024 }));
   }
   assertPngMagic(bytes);
   const { w, h } = readPngSize(bytes);
   const ok = ALLOWED_CAPE_SIZES.some(([aw, ah]) => aw === w && ah === h);
   if (!ok) {
-    throw new Error("Cape must be 64×32 PNG (64×64 / 22×17 also ok)");
+    throw new Error(t("profile.errors.capeSize"));
   }
   return bytes;
 }
@@ -94,13 +95,13 @@ export async function publishAccountSkin(
   userId: string,
 ): Promise<string> {
   if (!/^[a-z0-9]{7}$/i.test(reminedId)) {
-    throw new Error("Invalid Remined id");
+    throw new Error(t("profile.errors.invalidId"));
   }
 
   const dataUrl = await call<string | null>(CMD.readSkinDataUrl, {
     path: localPath,
   });
-  if (!dataUrl) throw new Error("Could not read skin");
+  if (!dataUrl) throw new Error(t("profile.errors.readSkin"));
 
   const bytes = validateSkinPng(dataUrl);
   const blob = new Blob([new Uint8Array(bytes)], { type: "image/png" });
@@ -132,13 +133,13 @@ export async function publishAccountCape(
   userId: string,
 ): Promise<string> {
   if (!/^[a-z0-9]{7}$/i.test(reminedId)) {
-    throw new Error("Invalid Remined id");
+    throw new Error(t("profile.errors.invalidId"));
   }
 
   const dataUrl = await call<string | null>(CMD.readSkinDataUrl, {
     path: localPath,
   });
-  if (!dataUrl) throw new Error("Could not read cape");
+  if (!dataUrl) throw new Error(t("profile.errors.readCape"));
 
   const bytes = validateCapePng(dataUrl);
   const blob = new Blob([new Uint8Array(bytes)], { type: "image/png" });

@@ -39,7 +39,7 @@ role keys, relay credentials and updater signing keys outside the repository.
 ## Supabase
 
 Apply every file in `supabase/migrations/` in lexical order. The current
-sequence ends at `015_voice_relay_share_code.sql`.
+sequence ends at `017_sessions_activity.sql`.
 
 Required product configuration:
 
@@ -58,6 +58,8 @@ Feature dependencies:
 | Playtime | `011`, `012`, `013` |
 | Cape upload | `014` |
 | Voice Relay share code | `015` |
+| Pack catalog locale overrides | `016` |
+| Friend activity codes | `017` |
 
 ## Pack repository hygiene
 

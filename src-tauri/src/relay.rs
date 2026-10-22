@@ -40,7 +40,7 @@ pub fn set_frps_creds(addr: String, port: u16, token: String) -> Result<(), Stri
     let addr = addr.trim().to_string();
     let token = token.trim().to_string();
     if addr.is_empty() || token.is_empty() || port == 0 {
-        return Err("Invalid Remined Relay credentials".into());
+        return Err(crate::i18n::tr("relay.invalid_creds").into());
     }
     let mut g = creds_slot()
         .lock()
@@ -55,8 +55,7 @@ fn frps_creds() -> Result<FrpsCreds, String> {
         .map_err(|_| "Relay credentials lock poisoned".to_string())?
         .clone()
         .ok_or_else(|| {
-            "Remined Relay credentials missing — sign in and retry (fetched from Supabase)"
-                .into()
+            crate::i18n::tr("relay.creds_missing").into()
         })
 }
 
@@ -124,21 +123,21 @@ impl SessionSpec {
         let t = t.strip_prefix("rmd:").unwrap_or(t);
         let t = t.strip_prefix("relay:").unwrap_or(t);
         let body = t.strip_prefix(SHARE_PREFIX).ok_or_else(|| {
-            "Invalid Remined relay share code (expected rmd1_…)".to_string()
+            crate::i18n::tr("relay.bad_share_code_prefix").to_string()
         })?;
         // id and sk are hex without underscores; lan is trailing number.
         let (id_sk, lan_s) = body.rsplit_once('_').ok_or_else(|| {
-            "Invalid Remined relay share code".to_string()
+            crate::i18n::tr("relay.bad_share_code").to_string()
         })?;
         let (id, sk) = id_sk.split_once('_').ok_or_else(|| {
-            "Invalid Remined relay share code".to_string()
+            crate::i18n::tr("relay.bad_share_code").to_string()
         })?;
         let lan_n: u16 = lan_s
             .trim()
             .parse()
-            .map_err(|_| "Invalid LAN port in share code".to_string())?;
+            .map_err(|_| crate::i18n::tr("relay.bad_lan_port").to_string())?;
         if id.len() < 6 || sk.len() < 12 {
-            return Err("Invalid Remined relay share code".into());
+            return Err(crate::i18n::tr("relay.bad_share_code").into());
         }
         Ok(Self {
             id: id.to_string(),
@@ -313,7 +312,7 @@ fn extract_frpc(bytes: &[u8], dest: &Path) -> Result<(), String> {
             set_executable(dest)?;
             return Ok(());
         }
-        return Err("frpc not found in zip".into());
+        return Err(crate::i18n::tr("relay.frpc_missing_zip").into());
     }
     let dec = flate2::read::GzDecoder::new(bytes);
     let mut archive = tar::Archive::new(dec);
@@ -333,7 +332,7 @@ fn extract_frpc(bytes: &[u8], dest: &Path) -> Result<(), String> {
         set_executable(dest)?;
         return Ok(());
     }
-    Err("frpc not found in archive".into())
+    Err(crate::i18n::tr("relay.frpc_missing_archive").into())
 }
 
 /// Download frpc into `.remined/frp/` if missing.
@@ -353,14 +352,14 @@ pub fn ensure_binary(app: &AppHandle) -> Result<PathBuf, String> {
     let resp = client
         .get(url)
         .send()
-        .map_err(|e| format!("frpc download failed: {e}"))?;
+        .map_err(|e| crate::i18n::trf("relay.frpc_download_failed", &[("err", &e.to_string())]))?;
     if !resp.status().is_success() {
-        return Err(format!("frpc download HTTP {}", resp.status()));
+        return Err(crate::i18n::trf("relay.frpc_download_http", &[("status", &resp.status().to_string())]));
     }
     let bytes = resp.bytes().map_err(|e| e.to_string())?;
     extract_frpc(&bytes, &dest)?;
     if !dest.is_file() {
-        return Err("frpc missing after extract".into());
+        return Err(crate::i18n::tr("relay.frpc_missing_after").into());
     }
     Ok(dest)
 }
@@ -372,7 +371,7 @@ fn run_capture(bin: &Path, args: &[&str]) -> Result<(i32, String, String), Strin
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .stdin(Stdio::null());
-    let output = cmd.output().map_err(|e| format!("Failed to run frpc: {e}"))?;
+    let output = cmd.output().map_err(|e| crate::i18n::trf("relay.frpc_run_failed", &[("err", &e.to_string())]))?;
     let code = output.status.code().unwrap_or(-1);
     let out = String::from_utf8_lossy(&output.stdout).into_owned();
     let err = String::from_utf8_lossy(&output.stderr).into_owned();
@@ -398,8 +397,8 @@ pub fn status(app: &AppHandle) -> RelayStatus {
                 path: Some(bin.display().to_string()),
                 version: ver.clone(),
                 message: match &ver {
-                    Some(v) => format!("Remined Relay (frpc {v})"),
-                    None => "Remined Relay ready".into(),
+                    Some(v) => crate::i18n::trf("relay.status_ok_ver", &[("ver", v)]),
+                    None => crate::i18n::tr("relay.status_ok").into(),
                 },
                 custom_path: custom,
             }
@@ -408,7 +407,7 @@ pub fn status(app: &AppHandle) -> RelayStatus {
             installed: false,
             path: None,
             version: None,
-            message: "Relay client not installed — tap Check to download frpc".into(),
+            message: crate::i18n::tr("relay.not_installed").into(),
             custom_path: custom,
         },
     }
@@ -423,13 +422,13 @@ pub fn check(app: &AppHandle) -> RelayCheckResult {
                 ok,
                 installed: true,
                 message: if ok {
-                    format!("Relay ready (frpc {})", ver.as_deref().unwrap_or("?"))
+                    crate::i18n::trf("relay.ready_ver", &[("ver", ver.as_deref().unwrap_or("?"))])
                 } else {
-                    "frpc found but --version failed".into()
+                    crate::i18n::tr("relay.version_failed").into()
                 },
                 detail: frps_creds()
                     .map(|c| format!("{}:{}", c.addr, c.port))
-                    .unwrap_or_else(|_| "credentials pending (Supabase)".into()),
+                    .unwrap_or_else(|_| crate::i18n::tr("relay.creds_pending").into()),
                 path: Some(bin.display().to_string()),
                 version: ver,
             }
@@ -639,7 +638,7 @@ fn spawn_frpc(bin: &Path, config: &Path) -> Result<Child, String> {
         cmd.current_dir(dir);
     }
     cmd.spawn()
-        .map_err(|e| format!("Failed to start frpc: {e}"))
+        .map_err(|e| crate::i18n::trf("relay.frpc_start_failed", &[("err", &e.to_string())]))
 }
 
 fn new_session(lan_port: Option<u16>) -> SessionSpec {
@@ -743,9 +742,9 @@ pub fn attach_lan_port(
     reap_host_child(state);
     let st = host_state(app, state);
     if !st.alive {
-        return Err("Relay host is not running — start voice or ensure host first".into());
+        return Err(crate::i18n::tr("relay.host_not_running").into());
     }
-    let key = st.key.ok_or_else(|| "Relay host key missing".to_string())?;
+    let key = st.key.ok_or_else(|| crate::i18n::tr("relay.host_key_missing").to_string())?;
     if st.lan_port == Some(lan_port) {
         return Ok(key);
     }
@@ -770,13 +769,12 @@ pub fn attach_lan_port(
     if let Ok(Some(status)) = child.try_wait() {
         let err = read_child_stderr(&mut child);
         let _ = fs::remove_dir_all(&work);
-        return Err(format!(
-            "frpc LAN host exited ({status}){}",
-            if err.is_empty() {
-                String::new()
-            } else {
-                format!(": {err}")
-            }
+        return Err(crate::i18n::trf(
+            "relay.lan_host_exited",
+            &[
+                ("status", &status.to_string()),
+                ("detail", &if err.is_empty() { String::new() } else { format!(": {err}") }),
+            ],
         ));
     }
 
@@ -844,13 +842,12 @@ fn start_shared_host(
     if let Ok(Some(status)) = child.try_wait() {
         let err = read_child_stderr(&mut child);
         let _ = fs::remove_dir_all(&work);
-        return Err(format!(
-            "frpc host exited immediately ({status}){}",
-            if err.is_empty() {
-                String::new()
-            } else {
-                format!(": {err}")
-            }
+        return Err(crate::i18n::trf(
+            "relay.host_exited",
+            &[
+                ("status", &status.to_string()),
+                ("detail", &if err.is_empty() { String::new() } else { format!(": {err}") }),
+            ],
         ));
     }
 
@@ -914,7 +911,7 @@ pub fn start_join_wait_port(
     state: &RelayState,
     key: &str,
     wait_port: u16,
-    purpose: &str,
+    purpose: &'static str,
 ) -> Result<(), String> {
     let mut spec = SessionSpec::parse(key)?;
     if port_open(wait_port) {
@@ -964,8 +961,9 @@ pub fn start_join_wait_port(
         thread::sleep(Duration::from_millis(400));
     }
     stop_join(app, state);
-    Err(format!(
-        "Relay connected but localhost:{wait_port} is not open yet — is the host still {purpose}?"
+    Err(crate::i18n::trf(
+        "relay.port_closed",
+        &[("port", &wait_port.to_string()), ("purpose", crate::i18n::tr(purpose))],
     ))
 }
 
@@ -974,7 +972,7 @@ fn attach_lan_visitor(
     state: &RelayState,
     spec: &SessionSpec,
     lan_port: u16,
-    purpose: &str,
+    purpose: &'static str,
 ) -> Result<(), String> {
     if port_open(lan_port) {
         return Ok(());
@@ -998,13 +996,12 @@ fn attach_lan_visitor(
     if let Ok(Some(status)) = child.try_wait() {
         let err = read_child_stderr(&mut child);
         let _ = fs::remove_dir_all(&work);
-        return Err(format!(
-            "frpc LAN visitor exited ({status}){}",
-            if err.is_empty() {
-                String::new()
-            } else {
-                format!(": {err}")
-            }
+        return Err(crate::i18n::trf(
+            "relay.visitor_exited",
+            &[
+                ("status", &status.to_string()),
+                ("detail", &if err.is_empty() { String::new() } else { format!(": {err}") }),
+            ],
         ));
     }
     if let Ok(mut g) = state.lock() {
@@ -1018,13 +1015,14 @@ fn attach_lan_visitor(
         }
         thread::sleep(Duration::from_millis(400));
     }
-    Err(format!(
-        "Relay LAN visitor up but localhost:{lan_port} not open — is the host still {purpose}?"
+    Err(crate::i18n::trf(
+        "relay.visitor_port_closed",
+        &[("port", &lan_port.to_string()), ("purpose", crate::i18n::tr(purpose))],
     ))
 }
 
 pub fn start_voice_join(app: &AppHandle, state: &RelayState, key: &str) -> Result<(), String> {
-    start_join_wait_port(app, state, key, LK_TCP_PORT, "in voice")
+    start_join_wait_port(app, state, key, LK_TCP_PORT, "relay.purpose_voice")
 }
 
 pub fn start_game_join(
@@ -1040,7 +1038,7 @@ pub fn start_game_join(
         spec.lan = Some(port);
     }
     let wait = spec.lan.unwrap_or(port);
-    start_join_wait_port(app, state, &spec.encode(), wait, "hosting LAN")
+    start_join_wait_port(app, state, &spec.encode(), wait, "relay.purpose_lan")
 }
 
 pub fn write_mcwifipnp_lan_port(instance: &Path, port: u16) -> Result<(), String> {

@@ -1,3 +1,5 @@
+import { transitionTo } from "./pageTransition";
+
 /**
  * Bridge that lets non-component code (feature actions) navigate without
  * importing the router. `app/router` registers the real implementation.
@@ -14,7 +16,7 @@ export function registerNavigator(nav: Navigator): void {
 }
 
 export function navigateTo(to: string): void {
-  current?.navigate(to);
+  if (current) transitionTo(to);
 }
 
 export function currentPathname(): string {

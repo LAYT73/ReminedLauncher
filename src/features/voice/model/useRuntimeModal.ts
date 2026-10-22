@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { t } from "@/shared/i18n";
 import {
   idleVoiceRuntimeModal,
   type VoiceRuntimeModalState,
@@ -12,8 +13,8 @@ export function useRuntimeModal() {
     () =>
       setState({
         open: true,
-        phase: "Voice",
-        message: "Preparing…",
+        phase: t("voice.runtime.phase"),
+        message: t("voice.runtime.preparing"),
         percent: 4,
         error: null,
       }),

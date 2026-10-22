@@ -23,7 +23,8 @@ export {
   pickDefaultPack,
   type CatalogPack,
 } from "./api/catalog";
-export type { Pack, PackRelease, PackStatus } from "./model/types";
+export { localizePack } from "./lib/localize";
+export type { Pack, PackI18n, PackRelease, PackStatus } from "./model/types";
 export { PackGallery } from "./ui/PackGallery";
 export { PackSelect, type PackOption } from "./ui/PackSelect";
-export { PROGRESS_PHASE } from "./config/progress";
+export { progressPhaseLabel } from "./config/progress";

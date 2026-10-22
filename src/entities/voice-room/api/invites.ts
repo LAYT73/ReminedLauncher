@@ -1,8 +1,10 @@
+import { localizeServerError } from "@/shared/lib/errors";
 import { supabase } from "@/shared/api/supabase";
 import { TABLE } from "@/shared/config/supabase";
 import type { VoiceInvite, VoiceInviteStatus, VoiceRoom } from "../model/types";
 import { getVoiceRoom } from "./rooms";
 import { FALLBACK_USERNAME } from "@/shared/config/limits";
+import { t } from "@/shared/i18n";
 
 export async function inviteFriendToRoom(opts: {
   roomId: string;
@@ -18,7 +20,7 @@ export async function inviteFriendToRoom(opts: {
     },
     { onConflict: "room_id,to_id" },
   );
-  if (error) throw new Error(error.message || "Could not send invite");
+  if (error) throw new Error(localizeServerError(error.message) || t("voice.errors.sendInvite"));
 }
 
 export async function listPendingInvites(userId: string): Promise<VoiceInvite[]> {
@@ -28,7 +30,7 @@ export async function listPendingInvites(userId: string): Promise<VoiceInvite[]>
     .eq("to_id", userId)
     .eq("status", "pending")
     .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message || "Could not load invites");
+  if (error) throw new Error(localizeServerError(error.message) || t("voice.errors.loadInvites"));
   const rows = data ?? [];
   if (rows.length === 0) return [];
 
@@ -47,7 +49,7 @@ export async function listPendingInvites(userId: string): Promise<VoiceInvite[]>
   const openRooms = new Map(
     (rooms ?? [])
       .filter((r) => (r.status as string) === "open")
-      .map((r) => [r.id as string, (r.title as string) || "Voice room"]),
+      .map((r) => [r.id as string, (r.title as string) || t("voice.voiceRoom")]),
   );
   const profileBy = new Map(
     (profiles ?? []).map((p) => [
@@ -90,13 +92,13 @@ export async function respondVoiceInvite(
     .eq("to_id", userId)
     .select("room_id")
     .maybeSingle();
-  if (error) throw new Error(error.message || "Could not update invite");
+  if (error) throw new Error(localizeServerError(error.message) || t("voice.errors.updateInvite"));
   if (!accept || !inv) return null;
   const roomId = inv.room_id as string;
   const { error: mErr } = await supabase.from(TABLE.voiceRoomMembers).upsert(
     { room_id: roomId, user_id: userId, role: "member" },
     { onConflict: "room_id,user_id" },
   );
-  if (mErr) throw new Error(mErr.message || "Could not join room");
+  if (mErr) throw new Error(localizeServerError(mErr.message) || t("voice.errors.joinRoom"));
   return getVoiceRoom(roomId);
 }

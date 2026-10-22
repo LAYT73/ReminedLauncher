@@ -1,3 +1,5 @@
+import { PixelFolderIcon } from "./PixelIcons";
+
 type Props = {
   title: string;
   disabled?: boolean;
@@ -16,9 +18,7 @@ export function FolderIconBtn({ title, disabled, className, onClick }: Props) {
       disabled={disabled}
       onClick={onClick}
     >
-      <svg viewBox="0 0 20 16" width="16" height="13" aria-hidden>
-        <path fill="currentColor" d="M0 2h7l2 2h11v12H0V2z" />
-      </svg>
+      <PixelFolderIcon />
     </button>
   );
 }

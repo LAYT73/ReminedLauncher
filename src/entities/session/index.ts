@@ -14,6 +14,8 @@ export {
   PRESENCE_STALE_MS,
   sessionsHaveVoiceColumn,
   markVoiceColumnMissing,
+  sessionsHaveActivityColumn,
+  markActivityColumnMissing,
   type PresenceStatus,
 } from "./api/presence";
 export { isPresenceFresh } from "./api/presence";

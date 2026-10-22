@@ -1,8 +1,11 @@
+import { burstEnchantFrom } from "./enchantBurst";
 import { useEffect, useRef } from "react";
 
 type Props = {
   className?: string;
   count?: number;
+  /** Glyphs pop into a mini burst on click (pack pages only). */
+  interactive?: boolean;
 };
 
 /** Latin A–Z → Standard Galactic glyphs via "Minecraft Enchanting" @font-face. */
@@ -41,7 +44,11 @@ function smoothstep(a: number, b: number, x: number): number {
  * DOM particles — WKWebView/Safari safe.
  * Opacity is driven every frame (smooth fade). Glow is a separate low-alpha layer.
  */
-export function EnchantParticles({ className, count = 16 }: Props) {
+export function EnchantParticles({
+  className,
+  count = 16,
+  interactive = false,
+}: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -50,6 +57,8 @@ export function EnchantParticles({ className, count = 16 }: Props) {
 
     const layer = document.createElement("div");
     layer.className = "enchant-particles-layer";
+    if (interactive)
+      layer.classList.add("enchant-particles-layer--interactive");
     host.replaceChildren(layer);
 
     let accent = readAccent(host);
@@ -143,6 +152,30 @@ export function EnchantParticles({ className, count = 16 }: Props) {
       attributeFilter: ["data-theme", "class", "style"],
     });
 
+    function onPointerDown(e: PointerEvent) {
+      const root = (e.target as Element | null)?.closest<HTMLElement>(
+        ".enchant-glyph",
+      );
+      if (!root) return;
+      const p = particles.find((q) => q.root === root);
+      if (!p) return;
+      e.preventDefault();
+      e.stopPropagation();
+      burstEnchantFrom(root, {
+        count: 4 + ((Math.random() * 2) | 0),
+        distance: [24, 48],
+        sizeScale: 0.7,
+        duration: [500, 700],
+        host: document.body,
+      });
+      resetParticle(p, false);
+      // Short pause before it drifts back in.
+      p.life = -(0.8 + Math.random() * 1.6);
+      p.root.style.pointerEvents = "none";
+      p.root.style.transform = "translate3d(-9999px, -9999px, 0)";
+    }
+    if (interactive) layer.addEventListener("pointerdown", onPointerDown);
+
     let last = performance.now();
     function tick(now: number) {
       if (!running) return;
@@ -151,6 +184,7 @@ export function EnchantParticles({ className, count = 16 }: Props) {
 
       for (const p of particles) {
         p.life += dt;
+        if (p.life < 0) continue;
         p.x += p.vx + Math.sin(p.life * 0.85 + p.size) * 0.08;
         p.y += p.vy;
         p.rot += p.spin;
@@ -168,6 +202,8 @@ export function EnchantParticles({ className, count = 16 }: Props) {
         const alpha = fadeIn * fadeOut * topFade * 0.72;
 
         p.root.style.opacity = String(Math.max(0, Math.min(1, alpha)));
+        if (interactive)
+          p.root.style.pointerEvents = alpha > 0.12 ? "auto" : "none";
         p.root.style.transform = `translate3d(${p.x}px, ${p.y}px, 0) rotate(${p.rot}rad)`;
       }
 
@@ -180,10 +216,11 @@ export function EnchantParticles({ className, count = 16 }: Props) {
       cancelAnimationFrame(raf);
       ro.disconnect();
       themeWatch.disconnect();
+      layer.removeEventListener("pointerdown", onPointerDown);
       host.replaceChildren();
       particles = [];
     };
-  }, [count]);
+  }, [count, interactive]);
 
   return <div ref={hostRef} className={className} aria-hidden />;
 }

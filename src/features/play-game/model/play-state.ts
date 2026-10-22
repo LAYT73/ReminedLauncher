@@ -1,3 +1,4 @@
+import { t, useLocale } from "@/shared/i18n";
 import { RAIL, type Rail } from "@/shared/config/routes";
 import { parseRoute } from "@/shared/config/routes";
 import { currentPathname } from "@/shared/lib/navigator";
@@ -13,13 +14,10 @@ import {
 
 export type PlayKind = "installing" | "launching" | "running" | "play" | "download";
 
-export const PLAY_LABEL: Record<PlayKind, string> = {
-  installing: "Installing",
-  launching: "Launching",
-  running: "Running",
-  download: "Download",
-  play: "Play",
-};
+/** Resolved at call time so the label follows the current locale. */
+export function playLabel(kind: PlayKind): string {
+  return t(`pack.play.${kind}`);
+}
 
 type Snapshot = {
   rail: Rail;
@@ -79,7 +77,7 @@ export function computePlayState(s: Snapshot): PlayState {
 
   return {
     kind,
-    label: PLAY_LABEL[kind],
+    label: playLabel(kind),
     busy,
     disabled,
     ready,
@@ -91,6 +89,7 @@ export function computePlayState(s: Snapshot): PlayState {
 
 /** Reactive play state for the playbar and pack pages. */
 export function usePlayState(rail: Rail): PlayState {
+  useLocale(); // re-render (and recompute label) on locale change
   const phase = useGameStore((s) => s.phase);
   const installing = useInstallStore((s) => s.installing);
   const vanilla = useEditionState("vanilla");

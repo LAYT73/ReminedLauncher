@@ -1,3 +1,4 @@
+import { useT } from "@/shared/i18n";
 import { useId, useState, type ReactNode } from "react";
 
 type Props = {
@@ -22,6 +23,7 @@ export function TitleHint({
   end,
   className = "page-title-row",
 }: Props) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const panelId = useId();
 
@@ -35,8 +37,8 @@ export function TitleHint({
             className={`title-hint-btn${open ? " is-open" : ""}`}
             aria-expanded={open}
             aria-controls={panelId}
-            title={open ? "Hide help" : "Show help"}
-            aria-label={open ? "Hide help" : "Show help"}
+            title={open ? t("shell.ui.hideHelp") : t("shell.ui.showHelp")}
+            aria-label={open ? t("shell.ui.hideHelp") : t("shell.ui.showHelp")}
             onClick={() => setOpen((v) => !v)}
           >
             ?

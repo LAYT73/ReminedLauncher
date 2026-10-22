@@ -1,11 +1,18 @@
-import { LogicalPosition, LogicalSize, primaryMonitor } from "@tauri-apps/api/window";
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import type { CustomTheme } from "@/entities/theme";
+import { call } from "@/shared/api/invoke";
+import { CMD } from "@/shared/config/commands";
+import type { Locale } from "@/shared/i18n";
 
 export const FRIEND_TOAST_LABEL = "friend-toast";
 export const FRIEND_TOAST_STORAGE_KEY = "remined.friend-toast";
 /** Query param carrying the toast payload (WebView2 may not share localStorage). */
 export const FRIEND_TOAST_QUERY = "toast";
+
+/** Fields the overlay applies; structurally matches the launcher custom theme. */
+export type FriendToastCustomTheme = {
+  mode: "dark" | "light";
+  accent: string;
+  surface: string;
+};
 
 export type FriendToastPayload = {
   title: string;
@@ -16,12 +23,13 @@ export type FriendToastPayload = {
   skinUrl?: string | null;
   /** Active launcher theme so the overlay matches the main UI */
   themeId?: string | null;
-  themeCustom?: CustomTheme | null;
+  themeCustom?: FriendToastCustomTheme | null;
+  /** Launcher UI language (the overlay is a separate webview with its own storage) */
+  locale?: Locale | null;
 };
 
 const TOAST_W = 336;
 const TOAST_H = 88;
-const MARGIN = 18;
 
 /** Survives React StrictMode double-mount in the toast webview. */
 let memoryPayload: FriendToastPayload | null = null;
@@ -47,6 +55,7 @@ export function decodeToastPayload(encoded: string): FriendToastPayload | null {
       skinUrl: parsed.skinUrl ?? null,
       themeId: parsed.themeId ?? null,
       themeCustom: parsed.themeCustom ?? null,
+      locale: parsed.locale ?? null,
     };
   } catch {
     return null;
@@ -93,6 +102,7 @@ export function takeFriendToast(): FriendToastPayload | null {
       skinUrl: parsed.skinUrl ?? null,
       themeId: parsed.themeId ?? null,
       themeCustom: parsed.themeCustom ?? null,
+      locale: parsed.locale ?? null,
     };
     return memoryPayload;
   } catch {
@@ -104,78 +114,12 @@ export function takeFriendToast(): FriendToastPayload | null {
  * Desktop friend toast: always-on-top undecorated window, bottom-right of the
  * primary monitor (outside the launcher chrome), themed like Remined panels.
  *
- * Windows: main window sets `additionalBrowserArgs` (proxy bypass). WebView2
- * refuses a second webview with different args on the same data folder — toast
- * creation used to fail silently. Use a dedicated `dataDirectory` and pass the
- * payload in the URL (localStorage is not shared across data dirs).
+ * The window is created in Rust (`show_friend_toast`) with the same WebView2
+ * browser args as the main window; the payload travels in the URL query.
  */
 export async function showFriendDesktopToast(
   payload: FriendToastPayload,
 ): Promise<void> {
-  stashFriendToast(payload);
-
-  const mon = await primaryMonitor().catch(() => null);
-  let x = 40;
-  let y = 40;
-  if (mon) {
-    const scale = mon.scaleFactor || 1;
-    const workX = mon.workArea.position.x / scale;
-    const workY = mon.workArea.position.y / scale;
-    const workW = mon.workArea.size.width / scale;
-    const workH = mon.workArea.size.height / scale;
-    x = Math.round(workX + workW - TOAST_W - MARGIN);
-    y = Math.round(workY + workH - TOAST_H - MARGIN);
-  }
-
-  const existing = await WebviewWindow.getByLabel(FRIEND_TOAST_LABEL);
-  if (existing) {
-    try {
-      await existing.close();
-    } catch {
-      /* may already be closing */
-    }
-    await new Promise((r) => window.setTimeout(r, 80));
-  }
-
-  const encoded = encodeToastPayload(payload);
-  const win = new WebviewWindow(FRIEND_TOAST_LABEL, {
-    url: `index.html?window=friend-toast&${FRIEND_TOAST_QUERY}=${encoded}`,
-    title: "Remined",
-    width: TOAST_W,
-    height: TOAST_H,
-    x,
-    y,
-    resizable: false,
-    decorations: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    focus: false,
-    visible: true,
-    shadow: false,
-    // Windows: avoid white flash + match WebView2 env rules (see module doc).
-    noRedirectionBitmap: true,
-    dataDirectory: "friend-toast",
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    const t = window.setTimeout(() => resolve(), 2500);
-    win.once("tauri://created", () => {
-      window.clearTimeout(t);
-      resolve();
-    });
-    win.once("tauri://error", (e) => {
-      window.clearTimeout(t);
-      reject(e);
-    });
-  });
-
-  try {
-    await win.setPosition(new LogicalPosition(x, y));
-    await win.setSize(new LogicalSize(TOAST_W, TOAST_H));
-    await win.setAlwaysOnTop(true);
-    await win.show();
-  } catch {
-    /* window may still be usable */
-  }
+  const query = `${FRIEND_TOAST_QUERY}=${encodeToastPayload(payload)}`;
+  await call(CMD.showFriendToast, { query, width: TOAST_W, height: TOAST_H });
 }

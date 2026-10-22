@@ -3,9 +3,10 @@ import type { VoiceInvite, VoiceRoom } from "@/entities/voice-room";
 import { InfoNote } from "@/shared/ui/InfoNote";
 import { TitleHint } from "@/shared/ui/TitleHint";
 import { SkinHead } from "@/entities/skin";
-import { MSG } from "@/shared/config/messages";
+import { useT } from "@/shared/i18n";
 import { EmptyState } from "@/shared/ui/EmptyState";
-import { randomVoiceRoomTitle } from "../lib/roomName";
+import { PixelDiceIcon, PixelGearIcon } from "@/shared/ui/PixelIcons";
+import { displayRoomTitle, randomVoiceRoomTitle } from "../lib/roomName";
 
 type Props = {
     userId: string;
@@ -43,7 +44,6 @@ export function VoiceLobby({
     listsLoading,
     invites,
     rooms,
-    onToast,
     onOpenNetworkPlay,
     setDevicesOpen,
     onCreate,
@@ -53,11 +53,12 @@ export function VoiceLobby({
     onCloseListedRoom,
     children,
 }: Props) {
+    const t = useT();
     return (
         <section className="section voice-panel is-lobby">
             <TitleHint
-                title="Voice"
-                hint="Host a room on your PC, invite friends over Remined Relay, keep chat in Remined."
+                title={t("voice.title")}
+                hint={t("voice.lobbyHint")}
                 end={
                     status ? (
                         <div
@@ -70,7 +71,7 @@ export function VoiceLobby({
                                     aria-hidden
                                 />
                                 <span className="network-pill-label">
-                                    Status
+                                    {t("voice.status")}
                                 </span>
                                 <span className="network-pill-value">
                                     {status}
@@ -82,8 +83,7 @@ export function VoiceLobby({
             />
 
             <InfoNote id="voice.relay-setup">
-                Needs Remined Relay (Settings → Network → Check). Friends join
-                via invite — they do not need your public IP.
+                {t("voice.lobby.relayNote")}
                 {onOpenNetworkPlay ? (
                     <>
                         {" "}
@@ -92,16 +92,15 @@ export function VoiceLobby({
                             className="friends-inline-link"
                             onClick={onOpenNetworkPlay}
                         >
-                            Open Network
+                            {t("voice.lobby.openNetwork")}
                         </button>
                     </>
                 ) : null}
             </InfoNote>
 
             <InfoNote id="voice.vpn-note" style={{ marginTop: "8px" }}>
-                <strong>Note:</strong> If using a VPN or proxy, voice may not
-                work. Try disabling VPN or adding 127.0.0.1, localhost to the
-                VPN bypass list.
+                <strong>{t("voice.lobby.vpnNoteLabel")}</strong>{" "}
+                {t("voice.lobby.vpnNote")}
             </InfoNote>
 
             <form
@@ -114,72 +113,45 @@ export function VoiceLobby({
                 <input
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Room name"
+                    placeholder={t("voice.lobby.roomName")}
                     maxLength={48}
-                    aria-label="Room name"
+                    aria-label={t("voice.lobby.roomName")}
                     disabled={busy}
                 />
                 <button
                     type="button"
                     className="btn-mc dim voice-reroll-name"
                     disabled={busy}
-                    title="New random name"
-                    aria-label="Generate new room name"
+                    title={t("voice.lobby.newRandomName")}
+                    aria-label={t("voice.lobby.generateName")}
                     onClick={() => setTitle(randomVoiceRoomTitle())}
                 >
-                    <svg viewBox="0 0 24 24" aria-hidden>
-                        <rect
-                            x="3.5"
-                            y="3.5"
-                            width="17"
-                            height="17"
-                            rx="2.5"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                        />
-                        <circle cx="8.5" cy="8.5" r="1.6" fill="currentColor" />
-                        <circle
-                            cx="15.5"
-                            cy="8.5"
-                            r="1.6"
-                            fill="currentColor"
-                        />
-                        <circle cx="12" cy="12" r="1.6" fill="currentColor" />
-                        <circle
-                            cx="8.5"
-                            cy="15.5"
-                            r="1.6"
-                            fill="currentColor"
-                        />
-                        <circle
-                            cx="15.5"
-                            cy="15.5"
-                            r="1.6"
-                            fill="currentColor"
-                        />
-                    </svg>
+                    <PixelDiceIcon />
                 </button>
                 <button
                     type="submit"
                     className="btn-mc ok"
                     disabled={busy || !title.trim()}
                 >
-                    {creating ? "Starting…" : "Create room"}
+                    {creating
+                        ? t("voice.lobby.starting")
+                        : t("voice.lobby.createRoom")}
                 </button>
                 <button
                     type="button"
-                    className="btn-mc dim"
+                    className="btn-mc dim btn-icon-sq"
                     disabled={busy}
+                    title={t("voice.devices")}
+                    aria-label={t("voice.devices")}
                     onClick={() => setDevicesOpen(true)}
                 >
-                    Devices
+                    <PixelGearIcon />
                 </button>
             </form>
 
             {listsLoading ? (
                 <div className="friends-block">
-                    <h3 className="settings-heading">Loading…</h3>
+                    <h3 className="settings-heading">{t("voice.lobby.loading")}</h3>
                     <ul className="friends-list" aria-busy="true">
                         {[0, 1].map((i) => (
                             <li key={i} className="friend-row is-skeleton">
@@ -197,7 +169,7 @@ export function VoiceLobby({
                 <>
                     {invites.length > 0 ? (
                         <div className="friends-block">
-                            <h3 className="settings-heading">Invites</h3>
+                            <h3 className="settings-heading">{t("voice.lobby.invites")}</h3>
                             <ul className="friends-list">
                                 {invites.map((inv) => (
                                     <li key={inv.id} className="friend-row">
@@ -208,10 +180,14 @@ export function VoiceLobby({
                                         />
                                         <div className="friend-copy">
                                             <strong>
-                                                {inv.roomTitle || "Voice room"}
+                                                {displayRoomTitle(inv.roomTitle) || t("voice.voiceRoom")}
                                             </strong>
                                             <span className="friend-id-static">
-                                                from {inv.fromName || "friend"}
+                                                {t("voice.lobby.fromName", {
+                                                    name:
+                                                        inv.fromName ||
+                                                        t("voice.friendLower"),
+                                                })}
                                             </span>
                                         </div>
                                         <div className="friend-actions">
@@ -223,7 +199,7 @@ export function VoiceLobby({
                                                     void onAcceptInvite(inv)
                                                 }
                                             >
-                                                Join
+                                                {t("voice.join")}
                                             </button>
                                             <button
                                                 type="button"
@@ -233,7 +209,7 @@ export function VoiceLobby({
                                                     void onDeclineInvite(inv)
                                                 }
                                             >
-                                                Decline
+                                                {t("voice.decline")}
                                             </button>
                                         </div>
                                     </li>
@@ -243,12 +219,12 @@ export function VoiceLobby({
                     ) : null}
 
                     <div className="friends-block">
-                        <h3 className="settings-heading">Your open rooms</h3>
+                        <h3 className="settings-heading">{t("voice.lobby.yourOpenRooms")}</h3>
                         {rooms.length === 0 ? (
                             <EmptyState
                                 kind="rooms"
-                                title="No open rooms"
-                                description="Create a room above and invite friends into your world."
+                                title={t("voice.lobby.noRoomsTitle")}
+                                description={t("voice.lobby.noRoomsHint")}
                             />
                         ) : (
                             <ul className="friends-list">
@@ -264,31 +240,11 @@ export function VoiceLobby({
                                             {r.hostId === userId ? "H" : "G"}
                                         </span>
                                         <div className="friend-copy">
-                                            <strong>{r.title}</strong>
+                                            <strong>{displayRoomTitle(r.title)}</strong>
                                             <span className="friend-id-static">
                                                 {r.hostId === userId
-                                                    ? "You host"
-                                                    : "Member"}
-                                                {r.relayShareCode ? (
-                                                    <>
-                                                        {" · "}
-                                                        <button
-                                                            type="button"
-                                                            className="friend-id"
-                                                            onClick={() => {
-                                                                void navigator.clipboard.writeText(
-                                                                    r.relayShareCode!,
-                                                                );
-                                                                onToast(
-                                                                    MSG.voice
-                                                                        .copiedShareCode,
-                                                                );
-                                                            }}
-                                                        >
-                                                            {r.relayShareCode}
-                                                        </button>
-                                                    </>
-                                                ) : null}
+                                                    ? t("voice.lobby.youHost")
+                                                    : t("voice.lobby.member")}
                                             </span>
                                         </div>
                                         <div className="friend-actions">
@@ -298,7 +254,7 @@ export function VoiceLobby({
                                                 disabled={busy}
                                                 onClick={() => void onRejoin(r)}
                                             >
-                                                Rejoin
+                                                {t("voice.lobby.rejoin")}
                                             </button>
                                             <button
                                                 type="button"
@@ -309,8 +265,8 @@ export function VoiceLobby({
                                                 }
                                             >
                                                 {r.hostId === userId
-                                                    ? "Close"
-                                                    : "Leave"}
+                                                    ? t("voice.close")
+                                                    : t("voice.leave")}
                                             </button>
                                         </div>
                                     </li>

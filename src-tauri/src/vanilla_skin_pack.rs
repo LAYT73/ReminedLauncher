@@ -18,11 +18,11 @@ pub fn apply(
     username: &str,
 ) -> Result<(), String> {
     if !skin_png.is_file() {
-        return Err(format!("Skin file not found: {}", skin_png.display()));
+        return Err(crate::i18n::trf("skin.not_found", &[("path", &skin_png.display().to_string())]));
     }
     let bytes = fs::read(skin_png).map_err(|e| e.to_string())?;
     if bytes.len() < 100 {
-        return Err("Invalid skin PNG".into());
+        return Err(crate::i18n::tr("skin.invalid_png").into());
     }
 
     let pack_root = instance.join("resourcepacks").join(PACK_DIR_NAME);

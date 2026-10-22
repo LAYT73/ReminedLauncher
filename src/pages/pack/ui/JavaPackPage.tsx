@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { useT } from "@/shared/i18n";
 import { RAIL, routeFor } from "@/shared/config/routes";
 import { EnchantParticles } from "@/shared/ui/EnchantParticles";
 import { PageMotion } from "@/shared/ui/PageMotion";
@@ -7,12 +8,13 @@ import { PackPlaytime } from "@/widgets/pack-playtime";
 
 /** Remined (modpack) play page, driven by the catalog content. */
 export function JavaPackPage() {
+  const t = useT();
   const pack = useActiveReminePack() ?? null;
   const content = usePackContent(pack?.id);
   const viewKey = routeFor(RAIL.java);
   return (
     <div className="pack-stage">
-      <EnchantParticles className="pack-enchant" count={22} />
+      <EnchantParticles className="pack-enchant" count={22} interactive />
       <header
         className={`hero${content?.wallpaper_url ? " has-art" : ""}`}
         style={
@@ -23,7 +25,7 @@ export function JavaPackPage() {
             : undefined
         }
       >
-        <p className="hero-kicker">Java Edition</p>
+        <p className="hero-kicker">{t("pack.page.javaEdition")}</p>
         <h1 className="hero-title">Remined</h1>
       </header>
 
@@ -85,7 +87,7 @@ export function JavaPackPage() {
             {content?.gallery?.length ? (
               <>
                 <h3 className="pack-gallery-heading">
-                  Screenshots
+                  {t("pack.page.screenshots")}
                 </h3>
                 <PackGallery
                   images={content.gallery}

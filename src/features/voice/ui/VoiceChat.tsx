@@ -1,6 +1,7 @@
 import type { FormEvent, RefObject } from "react";
 import type { VoiceMessage } from "@/entities/voice-room";
 import { SkinHead } from "@/entities/skin";
+import { useT } from "@/shared/i18n";
 import { FALLBACK_USERNAME } from "@/shared/config/limits";
 
 type Props = {
@@ -20,11 +21,12 @@ export function VoiceChat({
   setDraft,
   onSend,
 }: Props) {
+  const t = useT();
   return (
     <div className="voice-col voice-chat">
       <div className="voice-chat-log">
         {messages.length === 0 ? (
-          <p className="friends-muted">No messages yet.</p>
+          <p className="friends-muted">{t("voice.chatUi.empty")}</p>
         ) : (
           messages.map((m) => (
             <div
@@ -54,16 +56,16 @@ export function VoiceChat({
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Message the room…"
+          placeholder={t("voice.chatUi.placeholder")}
           maxLength={2000}
-          aria-label="Chat message"
+          aria-label={t("voice.chatUi.aria")}
         />
         <button
           type="submit"
           className="btn-mc ok"
           disabled={!draft.trim()}
         >
-          Send
+          {t("voice.chatUi.send")}
         </button>
       </form>
     </div>

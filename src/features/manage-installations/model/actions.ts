@@ -2,6 +2,7 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { MSG } from "@/shared/config/messages";
 import { RAIL, routeFor } from "@/shared/config/routes";
+import { errorMessage } from "@/shared/lib/errors";
 import { writeLastPlayed } from "@/shared/lib/lastPlayed";
 import { navigateTo } from "@/shared/lib/navigator";
 import {
@@ -76,7 +77,7 @@ export async function deleteInstalledPack(packId: string): Promise<void> {
     setStatus(MSG.install.packDeleted, "ok");
     toast(MSG.install.installationRemoved);
   } catch (err) {
-    setStatus(String(err), "error");
+    setStatus(errorMessage(err), "error");
   }
 }
 
@@ -98,7 +99,7 @@ export async function revealPackFolder(packId: string): Promise<void> {
   try {
     await packApi.openFolder(packId);
   } catch (err) {
-    toast(err instanceof Error ? err.message : String(err));
+    toast(errorMessage(err));
   }
 }
 

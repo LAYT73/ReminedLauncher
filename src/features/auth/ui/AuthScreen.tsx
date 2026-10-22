@@ -10,8 +10,10 @@ import { supabase, supabaseConfigured } from "@/shared/api/supabase";
 import { canEnterOffline, useSessionStore } from "@/entities/session";
 import { continueOffline, onAuthed } from "../model/session-actions";
 import { MSG } from "@/shared/config/messages";
+import { useT } from "@/shared/i18n";
 
 export function AuthScreen() {
+  const t = useT();
   const offlineHint = useSessionStore((s) => s.authOfflineHint);
   const canOffline = canEnterOffline();
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -24,7 +26,7 @@ export function AuthScreen() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!supabaseConfigured) {
-      setError("Supabase env missing (VITE_SUPABASE_*)");
+      setError(t("auth.screen.supabaseMissing"));
       return;
     }
     setBusy(true);
@@ -49,7 +51,7 @@ export function AuthScreen() {
         });
         if (err) throw err;
         const userId = data.user?.id;
-        if (!userId) throw new Error("Could not create account");
+        if (!userId) throw new Error(t("auth.screen.createFailed"));
 
         await ensureCloudProfile(userId, username.trim());
         await updateCloudUsername(userId, username.trim());
@@ -74,10 +76,10 @@ export function AuthScreen() {
         <img className="gate-brand-logo" src={brandLogo} alt="Remined" />
         <p className="gate-kicker">Remined</p>
         <h1 className="gate-title">
-          {mode === "login" ? "Sign in" : "Create account"}
+          {mode === "login" ? t("auth.screen.signIn") : t("auth.screen.createAccount")}
         </h1>
         <p className="gate-sub">
-          Friends-only launcher. Email confirmation is off — sign up and play.
+          {t("auth.screen.sub")}
         </p>
 
         {offlineHint ? (
@@ -89,7 +91,7 @@ export function AuthScreen() {
         <form className="gate-form" onSubmit={(e) => void submit(e)}>
           {mode === "register" ? (
             <div className="field">
-              <label htmlFor="auth-user">Username</label>
+              <label htmlFor="auth-user">{t("auth.screen.username")}</label>
               <input
                 id="auth-user"
                 type="text"
@@ -98,7 +100,7 @@ export function AuthScreen() {
                 minLength={3}
                 maxLength={16}
                 spellCheck={false}
-                placeholder="3–16 chars"
+                placeholder={t("auth.screen.usernamePlaceholder")}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
               />
@@ -106,7 +108,7 @@ export function AuthScreen() {
           ) : null}
 
           <div className="field">
-            <label htmlFor="auth-email">Email</label>
+            <label htmlFor="auth-email">{t("auth.screen.email")}</label>
             <input
               id="auth-email"
               type="email"
@@ -117,7 +119,7 @@ export function AuthScreen() {
             />
           </div>
           <div className="field">
-            <label htmlFor="auth-pass">Password</label>
+            <label htmlFor="auth-pass">{t("auth.screen.password")}</label>
             <input
               id="auth-pass"
               type="password"
@@ -138,7 +140,11 @@ export function AuthScreen() {
             className="btn-mc ok gate-submit"
             disabled={busy}
           >
-            {busy ? "…" : mode === "login" ? "Sign in" : "Register"}
+            {busy
+              ? "…"
+              : mode === "login"
+                ? t("auth.screen.signIn")
+                : t("auth.screen.register")}
           </button>
         </form>
 
@@ -149,7 +155,7 @@ export function AuthScreen() {
             disabled={busy}
             onClick={() => void continueOffline()}
           >
-            Continue offline
+            {t("auth.screen.continueOffline")}
           </button>
         ) : null}
 
@@ -162,8 +168,8 @@ export function AuthScreen() {
           }}
         >
           {mode === "login"
-            ? "Need an account? Register"
-            : "Have an account? Sign in"}
+            ? t("auth.screen.needAccount")
+            : t("auth.screen.haveAccount")}
         </button>
       </div>
     </div>

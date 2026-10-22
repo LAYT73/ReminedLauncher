@@ -1,11 +1,12 @@
 import { supabase, supabaseConfigured } from "@/shared/api/supabase";
+import { localizeServerError } from "@/shared/lib/errors";
 import { TABLE } from "@/shared/config/supabase";
 import type { PlayStats } from "@/shared/lib/playtime";
 
 let lastRpcError: string | null = null;
 
 export function lastPlaytimeError(): string | null {
-  return lastRpcError;
+  return lastRpcError ? localizeServerError(lastRpcError) : null;
 }
 
 function rowToStats(row: {

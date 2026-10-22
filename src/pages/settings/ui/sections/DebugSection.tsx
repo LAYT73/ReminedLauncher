@@ -1,16 +1,19 @@
 import { useState } from "react";
 import { revealDiagLogs } from "@/shared/api/diag";
 import { netRevealLogDir } from "@/shared/api/netLog";
-import { voiceRevealLog } from "@/features/voice/api/voiceNative";
+import { voiceRevealLog } from "@/features/voice";
 import { FolderIconBtn } from "@/shared/ui/FolderIconBtn";
 import { toast } from "@/shared/lib/toast";
+import { errorMessage } from "@/shared/lib/errors";
 import { useProfileStore } from "@/entities/profile";
+import { useT } from "@/shared/i18n";
 
 /**
  * Safe diagnostics for anyone — only opens local log folders / copies version.
  * No secrets, tokens, or remote actions.
  */
 export function DebugSection() {
+  const t = useT();
   const appVersion = useProfileStore((s) => s.appVersion);
   const [busy, setBusy] = useState(false);
 
@@ -19,9 +22,9 @@ export function DebugSection() {
     setBusy(true);
     try {
       await revealDiagLogs();
-      toast("Opened launcher logs folder", "ok");
+      toast(t("settings.debug.openedLogs"), "ok");
     } catch (err) {
-      toast(err instanceof Error ? err.message : String(err), "err");
+      toast(errorMessage(err), "err");
     } finally {
       setBusy(false);
     }
@@ -32,9 +35,9 @@ export function DebugSection() {
     setBusy(true);
     try {
       await voiceRevealLog();
-      toast("Opened voice.log", "ok");
+      toast(t("settings.debug.openedVoiceLog"), "ok");
     } catch (err) {
-      toast(err instanceof Error ? err.message : String(err), "err");
+      toast(errorMessage(err), "err");
     } finally {
       setBusy(false);
     }
@@ -45,9 +48,9 @@ export function DebugSection() {
     setBusy(true);
     try {
       await netRevealLogDir();
-      toast("Opened network logs folder", "ok");
+      toast(t("settings.debug.openedNetworkLogs"), "ok");
     } catch (err) {
-      toast(err instanceof Error ? err.message : String(err), "err");
+      toast(errorMessage(err), "err");
     } finally {
       setBusy(false);
     }
@@ -56,21 +59,21 @@ export function DebugSection() {
   async function copyVersion() {
     try {
       await navigator.clipboard.writeText(`Remined ${appVersion}`);
-      toast("Copied version", "ok");
+      toast(t("settings.debug.copiedVersion"), "ok");
     } catch {
-      toast("Could not copy", "err");
+      toast(t("settings.debug.couldNotCopy"), "err");
     }
   }
 
   return (
     <div className="settings-block" id="settings-debug">
-      <h3 className="settings-heading">Debug</h3>
+      <h3 className="settings-heading">{t("settings.debug.title")}</h3>
 
       <div className="settings-row">
-        <span>Launcher logs</span>
+        <span>{t("settings.debug.launcherLogs")}</span>
         <div className="settings-row-actions">
           <FolderIconBtn
-            title="Open logs folder"
+            title={t("settings.debug.openLogs")}
             disabled={busy}
             onClick={() => void openLogs()}
           />
@@ -78,10 +81,10 @@ export function DebugSection() {
       </div>
 
       <div className="settings-row">
-        <span>Voice log</span>
+        <span>{t("settings.debug.voiceLog")}</span>
         <div className="settings-row-actions">
           <FolderIconBtn
-            title="Show voice.log"
+            title={t("settings.debug.showVoiceLog")}
             disabled={busy}
             onClick={() => void openVoiceLog()}
           />
@@ -89,10 +92,10 @@ export function DebugSection() {
       </div>
 
       <div className="settings-row">
-        <span>Network logs</span>
+        <span>{t("settings.debug.networkLogs")}</span>
         <div className="settings-row-actions">
           <FolderIconBtn
-            title="Open network logs"
+            title={t("settings.debug.openNetworkLogs")}
             disabled={busy}
             onClick={() => void openNetworkLogs()}
           />
@@ -100,7 +103,7 @@ export function DebugSection() {
       </div>
 
       <div className="settings-row">
-        <span>Version</span>
+        <span>{t("settings.debug.version")}</span>
         <div className="settings-row-actions">
           <span className="settings-value">{appVersion}</span>
           <button
@@ -108,7 +111,7 @@ export function DebugSection() {
             className="btn-mc dim"
             onClick={() => void copyVersion()}
           >
-            Copy
+            {t("settings.debug.copyVersion")}
           </button>
         </div>
       </div>

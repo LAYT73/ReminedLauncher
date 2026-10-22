@@ -19,6 +19,9 @@ export type GameLiveStatus = {
   world: string | null;
   server: string | null;
   lan_port: number | null;
+  /** Friend-safe code: "" | loading | menu | sp | lan | mp | death | advancement,
+   * optionally `base|dim[|paused]` (e.g. "sp|nether|paused") when the companion mod runs. */
+  activity: string;
 };
 
 export type CrashInfo = {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { displayRoomTitle } from "../lib/roomName";
 import {
   listFriendships,
   type FriendRow,
@@ -10,7 +11,9 @@ import {
   type VoiceInvite,
   type VoiceRoom,
 } from "@/entities/voice-room";
-import { errorMessage, type ToastFn } from "./types";
+import { t } from "@/shared/i18n";
+import { errorMessage } from "@/shared/lib/errors";
+import type { ToastFn } from "./types";
 
 /** Friends, my open rooms and pending invites (live-updated), plus the invite toast. */
 export function useVoiceLists(
@@ -38,7 +41,7 @@ export function useVoiceLists(
       setInvites(i);
       setFriends(f);
     } catch (err) {
-      toastRef.current(errorMessage(err), "err");
+      toastRef.current(errorMessage(err, ""), "err");
     } finally {
       setListsLoading(false);
     }
@@ -63,7 +66,10 @@ export function useVoiceLists(
     const first = invites.find((i) => !seen.has(i.id));
     if (!first) return;
     toastRef.current(
-      `${first.fromName || "A friend"} invited you to ${first.roomTitle || "a voice room"}`,
+      t("voice.invitedToast", {
+        name: first.fromName || t("voice.aFriend"),
+        room: displayRoomTitle(first.roomTitle) || t("voice.aVoiceRoom"),
+      }),
       "ok",
     );
   }, [invites]);

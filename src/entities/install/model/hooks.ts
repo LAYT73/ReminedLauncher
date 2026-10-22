@@ -18,13 +18,18 @@ export function useProgressListener(): void {
   const show = useShowProgress();
   useEffect(() => {
     if (!show) return;
+    let disposed = false;
     let unlisten: (() => void) | undefined;
     void listen<ProgressEvent>(EVENT.progress, (ev) =>
       useInstallStore.getState().applyProgress(ev.payload),
     ).then((fn) => {
-      unlisten = fn;
+      if (disposed) fn();
+      else unlisten = fn;
     });
-    return () => unlisten?.();
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   }, [show]);
 }
 

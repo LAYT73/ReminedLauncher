@@ -12,9 +12,13 @@ profiles, skins, friends, LAN sessions and voice rooms.
   and local instance folders.
 - **Identity:** Supabase authentication, cached offline profile, Remined ID,
   username, skin and cape.
-- **Social:** friends, presence, invitations and per-pack playtime.
+- **Social:** friends, presence, Discord-style friend activity, invitations and
+  per-pack playtime.
 - **Network play:** Open-to-LAN sessions shared through the Remined Relay.
 - **Voice:** a local LiveKit server exposed through the Remined Relay.
+- **Localization:** English and Russian UI; pack catalog strings can override
+  per locale.
+- **Companion:** a tiny Fabric mod writes richer in-game activity for friends.
 - **Operations:** diagnostics, crash detection, updater, tray integration and
   an offline mode after the first successful online setup.
 
@@ -85,6 +89,8 @@ Remined Vanilla installation and launch path for selected versions.
 ```text
 src/                 React application
 src-tauri/src/       Tauri commands and Rust runtime
+src-tauri/resources/ Bundled Remined Companion jar
+companion-mod/       Companion Fabric mod source
 supabase/migrations/ Database schema and RLS changes
 docs/                Operational and technical documentation
 assets/              Launcher-owned static assets
@@ -118,8 +124,9 @@ Important logs:
 - [Pack assets](./docs/PACK_ASSETS.md) — catalog media contract
 - [Voice](./docs/VOICE.md) — LiveKit and Remined Relay operations
 - [Remined Vanilla](./docs/REMINED_VANILLA.md) — mod policy and smoke testing
+- [Companion](./companion-mod/README.md) — friend activity mod (`state.json`)
 
 ## Release
 
-The current release is **0.9.5**. Release procedure and the complete version
+The current release is **1.0.1**. Release procedure and the complete version
 surface are maintained in [docs/RELEASE.md](./docs/RELEASE.md).

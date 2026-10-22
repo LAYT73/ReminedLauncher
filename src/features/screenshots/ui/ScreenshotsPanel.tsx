@@ -1,23 +1,22 @@
+import { useLocale, useT } from "@/shared/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { call } from "@/shared/api/invoke";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { CMD } from "@/shared/config/commands";
+import { errorMessage } from "@/shared/lib/errors";
 import { FolderIconBtn } from "@/shared/ui/FolderIconBtn";
 import { TitleHint } from "@/shared/ui/TitleHint";
+import { EmptyState } from "@/shared/ui/EmptyState";
+import { PixelChevronLeftIcon, PixelChevronRightIcon } from "@/shared/ui/PixelIcons";
 
 type Row = { name: string; path: string; modified_ms: number; size: number };
 
 function ViewerChevron({ direction }: { direction: "prev" | "next" }) {
-  const points = direction === "prev" ? "13 3 5 14 13 25" : "7 3 15 14 7 25";
-  return (
-    <svg
-      className="screenshot-viewer-chevron"
-      viewBox="0 0 20 28"
-      aria-hidden
-    >
-      <polyline points={points} />
-    </svg>
+  return direction === "prev" ? (
+    <PixelChevronLeftIcon className="screenshot-viewer-chevron" />
+  ) : (
+    <PixelChevronRightIcon className="screenshot-viewer-chevron" />
   );
 }
 
@@ -34,6 +33,8 @@ export function ScreenshotsPanel({
   installed = false,
   onToast,
 }: Props) {
+  const t = useT();
+  const locale = useLocale();
   const [rows, setRows] = useState<Row[] | null>(null);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [index, setIndex] = useState<number | null>(null);
@@ -48,7 +49,7 @@ export function ScreenshotsPanel({
       setRows(await call<Row[]>(CMD.listScreenshots, { packId }));
     } catch (err) {
       setRows([]);
-      onToast(String(err), "err");
+      onToast(errorMessage(err), "err");
     }
   }, [packId, installed, onToast]);
 
@@ -65,7 +66,7 @@ export function ScreenshotsPanel({
       loading.current.add(name);
       try {
         const url = await call<string>(CMD.readScreenshot, { packId, name });
-        setThumbs((t) => ({ ...t, [name]: url }));
+        setThumbs((prev) => ({ ...prev, [name]: url }));
       } catch {
         /* skip unreadable file */
       }
@@ -126,14 +127,14 @@ export function ScreenshotsPanel({
 
   async function openFolder() {
     if (!packId || !installed) {
-      onToast("Install this pack before opening screenshots", "err");
+      onToast(t("screenshots.installBeforeOpen"), "err");
       return;
     }
     try {
       const dir = await call<string>(CMD.screenshotsDir, { packId });
       await revealItemInDir(dir);
     } catch (err) {
-      onToast(`Can't open folder: ${String(err)}`, "err");
+      onToast(t("screenshots.cantOpenFolder", { error: errorMessage(err) }), "err");
     }
   }
 
@@ -144,8 +145,8 @@ export function ScreenshotsPanel({
       <TitleHint
         as="h3"
         className="screenshot-page-head"
-        title="Screenshots"
-        hint="Press F2 in game. Shown from this installation's screenshots folder — stays on your computer, never uploaded."
+        title={t("screenshots.title")}
+        hint={t("screenshots.hint")}
         end={
           <div className="screenshot-actions">
             <button
@@ -154,13 +155,13 @@ export function ScreenshotsPanel({
               disabled={!installed}
               onClick={() => void refresh()}
             >
-              Refresh
+              {t("screenshots.refresh")}
             </button>
             <FolderIconBtn
               title={
                 installed
-                  ? "Open screenshots folder"
-                  : "Install this pack first"
+                  ? t("screenshots.openFolder")
+                  : t("screenshots.installFirst")
               }
               disabled={!installed}
               onClick={() => void openFolder()}
@@ -170,13 +171,15 @@ export function ScreenshotsPanel({
       />
       {!installed ? (
         <p className="friends-lead">
-          Install this pack first — screenshots appear here after you take them
-          in game.
+          {t("screenshots.installFirstBody")}
         </p>
       ) : rows === null ? (
-        <p className="friends-lead">Loading…</p>
+        <p className="friends-lead">{t("screenshots.loading")}</p>
       ) : rows.length === 0 ? (
-        <p className="friends-lead">No screenshots yet.</p>
+        <EmptyState
+          title={t("screenshots.emptyTitle")}
+          description={t("screenshots.emptyBody")}
+        />
       ) : (
         <div className="screenshot-grid">
           {rows.map((r, i) => (
@@ -196,7 +199,7 @@ export function ScreenshotsPanel({
                 <div className="screenshot-placeholder" />
               )}
               <span className="screenshot-card-meta">
-                <span>{new Date(r.modified_ms).toLocaleString()}</span>
+                <span>{new Date(r.modified_ms).toLocaleString(locale)}</span>
               </span>
             </button>
           ))}
@@ -209,12 +212,12 @@ export function ScreenshotsPanel({
               className="screenshot-viewer"
               role="dialog"
               aria-modal="true"
-              aria-label="Screenshot preview"
+              aria-label={t("screenshots.previewLabel")}
             >
               <button
                 type="button"
                 className="screenshot-viewer-close"
-                aria-label="Close preview"
+                aria-label={t("screenshots.closePreview")}
                 onClick={() => setIndex(null)}
               >
                 ×
@@ -230,7 +233,7 @@ export function ScreenshotsPanel({
                   <button
                     type="button"
                     className="screenshot-viewer-nav is-prev"
-                    aria-label="Previous screenshot"
+                    aria-label={t("screenshots.previous")}
                     onClick={() =>
                       setIndex((i) =>
                         i == null || !rows
@@ -251,14 +254,14 @@ export function ScreenshotsPanel({
                     onClick={(e) => e.stopPropagation()}
                   />
                 ) : (
-                  <p className="screenshot-viewer-loading">Loading…</p>
+                  <p className="screenshot-viewer-loading">{t("screenshots.loading")}</p>
                 )}
 
                 {multi ? (
                   <button
                     type="button"
                     className="screenshot-viewer-nav is-next"
-                    aria-label="Next screenshot"
+                    aria-label={t("screenshots.next")}
                     onClick={() =>
                       setIndex((i) =>
                         i == null || !rows ? i : (i + 1) % rows.length,
@@ -278,11 +281,11 @@ export function ScreenshotsPanel({
                       : ""}
                   </strong>
                   <span>{openRow.name}</span>
-                  <span>{new Date(openRow.modified_ms).toLocaleString()}</span>
+                  <span>{new Date(openRow.modified_ms).toLocaleString(locale)}</span>
                 </div>
                 <div className="screenshot-actions">
                   <FolderIconBtn
-                    title="Show file"
+                    title={t("screenshots.showFile")}
                     onClick={() => {
                       void revealItemInDir(openRow.path).catch(() => undefined);
                     }}

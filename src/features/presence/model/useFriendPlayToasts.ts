@@ -1,9 +1,12 @@
 import { useEffect, useRef } from "react";
-import { listFriendships } from "@/entities/friend";
+import { listFriendships, useFriendBadgeStore } from "@/entities/friend";
 import { useProfileStore } from "@/entities/profile";
 import { selectUserId, useSessionStore } from "@/entities/session";
+import { getLocale, t } from "@/shared/i18n";
 import { TIMING } from "@/shared/config/timings";
+import { netLog } from "@/shared/api/netLog";
 import { showFriendDesktopToast } from "@/shared/lib/friendToast";
+import { toast } from "@/shared/lib/toast";
 
 function isPlayingStatus(status: string | null | undefined): boolean {
   return status === "in_game" || status === "hosting";
@@ -17,14 +20,14 @@ export function useFriendPlayToasts(): void {
   const userId = useSessionStore(selectUserId);
   const enabled = useSessionStore((s) => s.gate === "app" && !s.offlineMode);
   const themeId = useProfileStore((s) => s.profile.theme);
-  const friendToasts = useProfileStore((s) => s.profile.friend_toasts);
   const prev = useRef(new Map<string, string>());
   const primed = useRef(false);
 
   useEffect(() => {
-    if (!userId || !enabled || !friendToasts) {
+    if (!userId || !enabled) {
       prev.current.clear();
       primed.current = false;
+      useFriendBadgeStore.getState().reset();
       return;
     }
 
@@ -34,7 +37,12 @@ export function useFriendPlayToasts(): void {
       try {
         const rows = await listFriendships(userId);
         if (cancelled) return;
-        if (!useProfileStore.getState().profile.friend_toasts) return;
+        useFriendBadgeStore.getState().setFromRows(rows);
+        if (!useProfileStore.getState().profile.friend_toasts) {
+          prev.current.clear();
+          primed.current = false;
+          return;
+        }
         const profile = useProfileStore.getState().profile;
         for (const row of rows) {
           if (row.direction !== "friend") continue;
@@ -46,14 +54,25 @@ export function useFriendPlayToasts(): void {
             isPlayingStatus(st) &&
             !isPlayingStatus(was)
           ) {
+            const title =
+              row.profile.username || t("social.presence.friendFallback");
+            const kind =
+              st === "hosting"
+                ? t("social.presence.hosting")
+                : t("social.presence.playing");
+            const detail = row.sessionPackName?.trim() || "Minecraft";
             void showFriendDesktopToast({
-              title: row.profile.username || "Friend",
-              kind: st === "hosting" ? "Hosting" : "Playing",
-              detail: row.sessionPackName?.trim() || "Minecraft",
+              title,
+              kind,
+              detail,
               skinUrl: row.profile.skin_path,
               themeId: profile.theme,
               themeCustom: profile.theme_custom,
-            }).catch(() => undefined);
+              locale: getLocale(),
+            }).catch((e) => {
+              void netLog("friend-toast", `desktop toast failed: ${String(e)}`);
+              toast(`${title} — ${kind} ${detail}`);
+            });
           }
           prev.current.set(id, st);
         }
@@ -69,5 +88,5 @@ export function useFriendPlayToasts(): void {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [userId, enabled, themeId, friendToasts]);
+  }, [userId, enabled, themeId]);
 }

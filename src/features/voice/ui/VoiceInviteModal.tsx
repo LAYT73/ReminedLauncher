@@ -1,13 +1,18 @@
 import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useT } from "@/shared/i18n";
+import { SkinHead } from "@/entities/skin";
 import { McSelect, type McSelectOption } from "@/shared/ui/McSelect";
 import { PixelCrossIcon } from "@/shared/ui/PixelIcons";
+
+/** Friend option; skinUrl drives the face icon in the picker. */
+export type InviteOption = McSelectOption & { skinUrl: string | null };
 
 type Props = {
   open: boolean;
   busy: boolean;
   lobbyReady: boolean;
-  inviteOptions: McSelectOption[];
+  inviteOptions: InviteOption[];
   invitePick: string;
   setInvitePick: (id: string) => void;
   onInvite: () => Promise<void>;
@@ -24,6 +29,7 @@ export function VoiceInviteModal({
   onInvite,
   onClose,
 }: Props) {
+  const t = useT();
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement | null>(null);
 
@@ -59,13 +65,13 @@ export function VoiceInviteModal({
       >
         <header className="voice-modal-head">
           <h3 id={titleId} className="settings-heading">
-            Invite friend
+            {t("voice.inviteFriend")}
           </h3>
           <button
             type="button"
             className="btn-mc dim btn-icon-sq voice-modal-close"
-            title="Close"
-            aria-label="Close"
+            title={t("voice.close")}
+            aria-label={t("voice.close")}
             onClick={onClose}
           >
             <PixelCrossIcon />
@@ -74,24 +80,27 @@ export function VoiceInviteModal({
 
         <McSelect
           className="pack-select--full"
-          label="Friend"
+          label={t("voice.inviteModal.friend")}
           menuPlacement="down"
           disabled={inviteOptions.length === 0 || !lobbyReady || busy}
           placeholder={
             !lobbyReady
-              ? "Lobby still opening…"
+              ? t("voice.lobbyOpening")
               : inviteOptions.length === 0
-                ? "No friends yet"
-                : "Choose a friend…"
+                ? t("voice.inviteModal.none")
+                : t("voice.inviteModal.choose")
           }
           options={inviteOptions}
+          renderIcon={(opt, size) => (
+            <SkinHead skinUrl={opt.skinUrl} className="pack-select-skin" size={size} />
+          )}
           value={invitePick}
           onChange={setInvitePick}
         />
 
         <div className="voice-modal-actions btn-row">
           <button type="button" className="btn-mc dim" onClick={onClose}>
-            Cancel
+            {t("voice.cancel")}
           </button>
           <button
             type="button"
@@ -103,7 +112,7 @@ export function VoiceInviteModal({
                 .catch(() => undefined);
             }}
           >
-            Send invite
+            {t("voice.inviteModal.send")}
           </button>
         </div>
       </div>

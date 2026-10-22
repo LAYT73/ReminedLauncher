@@ -1,3 +1,4 @@
+import { t } from "@/shared/i18n";
 import { useCallback, useEffect, useState } from "react";
 import {
   ensureRelayCreds,
@@ -9,6 +10,7 @@ import {
   type RelayCheckResult,
   type RelayStatus,
 } from "@/shared/api/relay";
+import { errorMessage } from "@/shared/lib/errors";
 
 /** Remined Relay (frpc) status for Network settings. */
 export function useRelayStatus(onToast: (message: string) => void) {
@@ -27,7 +29,7 @@ export function useRelayStatus(onToast: (message: string) => void) {
       // Only put a custom override in the input — auto path stays in the status line.
       setPathDraft(custom ?? "");
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     }
   }, []);
 
@@ -44,10 +46,10 @@ export function useRelayStatus(onToast: (message: string) => void) {
       const result = await relayCheck();
       setCheck(result);
       await refresh();
-      onToast(result.ok ? "Relay check passed" : "Relay check failed");
+      onToast(result.ok ? t("network.toast.checkPassed") : t("network.toast.checkFailed"));
     } catch (err) {
       setCheck(null);
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setChecking(false);
     }
@@ -58,9 +60,9 @@ export function useRelayStatus(onToast: (message: string) => void) {
     setBusy(true);
     try {
       await openRelayDownload();
-      onToast("Opening frp releases (Check auto-downloads frpc)");
+      onToast(t("network.toast.openingReleases"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -74,9 +76,9 @@ export function useRelayStatus(onToast: (message: string) => void) {
       await relaySetPath(path);
       setCheck(null);
       await refresh();
-      onToast(path ? "frpc path saved" : "Using auto-detect");
+      onToast(path ? t("network.toast.pathSaved") : t("network.toast.autoDetect"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }

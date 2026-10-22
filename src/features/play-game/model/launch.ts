@@ -4,6 +4,7 @@ import { MSG } from "@/shared/config/messages";
 import { FALLBACK_USERNAME, USERNAME } from "@/shared/config/limits";
 import { RAIL, routeFor, parseRoute, type Rail } from "@/shared/config/routes";
 import { unlockAchievement } from "@/shared/lib/achievements";
+import { errorMessage } from "@/shared/lib/errors";
 import { writeLastPlayed } from "@/shared/lib/lastPlayed";
 import { currentPathname, navigateTo } from "@/shared/lib/navigator";
 import {
@@ -100,11 +101,15 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
   try {
     if (!(await prepareInstall(packId, quick))) {
       game.setPhase("idle");
+      // Keep a cancel/error message from the install; otherwise say why.
+      if (!useInstallStore.getState().status) {
+        setStatus(MSG.launch.prepareFailed, "error");
+      }
       return;
     }
   } catch (err) {
     game.setPhase("idle");
-    setStatus(String(err), "error");
+    setStatus(errorMessage(err), "error");
     return;
   }
 
@@ -171,7 +176,7 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
       void relayStopGameJoin().catch(() => undefined);
     }
     game.setPhase("idle");
-    setStatus(String(err), "error");
+    setStatus(errorMessage(err), "error");
   }
 }
 

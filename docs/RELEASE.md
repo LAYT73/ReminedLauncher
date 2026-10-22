@@ -1,6 +1,6 @@
 # Release procedure
 
-The current release is `0.9.5`.
+The current release is `1.0.1`.
 
 ## Version surface
 
@@ -14,6 +14,7 @@ Update all of the following to the same value:
 - `.github/workflows/release.yml`
 - `src/shared/config/limits.ts` (`FALLBACK_APP_VERSION`)
 - user-facing release notes in the workflow
+- `README.md` and `docs/RELEASE.md` / `docs/ARCHITECTURE.md` current-release lines
 
 The fallback version is shown until the native `get_app_version` command
 responds.
@@ -70,11 +71,11 @@ function after changing its configuration.
 
 ## Publish
 
-Create and push an annotated release tag after the checks pass:
+Create and push a release tag after the checks pass:
 
 ```bash
-git tag -a vX.Y.Z -m "Remined vX.Y.Z"
-git push origin vX.Y.Z
+git tag vX.Y.Z
+git push origin main vX.Y.Z
 ```
 
 The workflow is responsible for packaging and updater metadata. Verify the

@@ -1,4 +1,5 @@
-import { useNavigate } from "react-router";
+import { transitionTo } from "@/shared/lib/pageTransition";
+import { useT } from "@/shared/i18n";
 import { MSG } from "@/shared/config/messages";
 import { RAIL } from "@/shared/config/routes";
 import { toast } from "@/shared/lib/toast";
@@ -9,7 +10,7 @@ import { useGameStore } from "@/entities/game";
 import { selectUserId, useSessionStore } from "@/entities/session";
 
 export function FriendsPage() {
-  const navigate = useNavigate();
+  const t = useT();
   const userId = useSessionStore(selectUserId);
   const offlineMode = useSessionStore((s) => s.offlineMode);
   const reminedId = useSessionStore((s) => s.reminedId);
@@ -19,7 +20,7 @@ export function FriendsPage() {
   if (offlineMode || !userId) {
     return (
       <NoticePage
-        title="Friends"
+        title={t("social.friends.title")}
         text={offlineMode ? MSG.offline.friends : MSG.offline.friendsSignedOut}
       />
     );
@@ -31,7 +32,7 @@ export function FriendsPage() {
       onToast={toast}
       joiningFriendId={joiningFriendId}
       hostingSelf={hostingSelf}
-      onOpenNetworkPlay={() => navigate(`/${RAIL.settings}#network`)}
+      onOpenNetworkPlay={() => transitionTo(`/${RAIL.settings}#network`)}
       onJoinFriend={(row) => void joinFriendSession(row)}
     />
   );

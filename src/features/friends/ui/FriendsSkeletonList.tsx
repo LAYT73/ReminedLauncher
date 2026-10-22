@@ -1,9 +1,12 @@
+import { useT } from "@/shared/i18n";
+
 export function FriendsSkeletonList() {
+  const t = useT();
   return (
     <ul
       className="friends-list"
       aria-busy="true"
-      aria-label="Loading friends"
+      aria-label={t("social.friends.loading")}
     >
       {[0, 1, 2].map((i) => (
         <li key={i} className="friend-row has-join is-skeleton">

@@ -1,5 +1,5 @@
 import { MSG } from "@/shared/config/messages";
-import { isCancelledError } from "@/shared/lib/errors";
+import { errorMessage, isCancelledError } from "@/shared/lib/errors";
 import { isBrowserOnline } from "@/shared/lib/network";
 import { toast } from "@/shared/lib/toast";
 import { setStatus, useInstallStore } from "@/entities/install";
@@ -28,17 +28,17 @@ export async function syncPack(): Promise<void> {
     await bootstrapLauncher();
     setStatus(MSG.install.packReady, "ok");
   } catch (err) {
-    setStatus(String(err), "error");
+    setStatus(errorMessage(err), "error");
   } finally {
     install.setPackSyncing(false);
     install.end();
   }
 }
 
-/** Download / update the active Remined pack. */
-export async function downloadPack(): Promise<void> {
+/** Ensure, mark and bootstrap the active pack. No busy guard: callers decide. True on success. */
+async function installActivePack(): Promise<boolean> {
   const pack = getActiveReminePack();
-  if (!pack || getPlayState().busy) return;
+  if (!pack) return false;
   const install = useInstallStore.getState();
   install.begin(MSG.install.preparing);
   try {
@@ -46,12 +46,20 @@ export async function downloadPack(): Promise<void> {
     usePackStore.getState().markInstalled(pack.id);
     await bootstrapLauncher();
     setStatus(MSG.install.readyToPlay, "ok");
+    return true;
   } catch (err) {
     if (isCancelledError(err)) setStatus(MSG.install.cancelled);
-    else setStatus(String(err), "error");
+    else setStatus(errorMessage(err), "error");
+    return false;
   } finally {
     install.end();
   }
+}
+
+/** Download / update the active Remined pack. */
+export async function downloadPack(): Promise<void> {
+  if (!getActiveReminePack() || getPlayState().busy) return;
+  await installActivePack();
 }
 
 /** Make sure the active Remined pack matches the latest release. */
@@ -70,10 +78,10 @@ export async function ensurePackUpToDate(): Promise<boolean> {
         ? MSG.install.updatingTo(remote.version)
         : MSG.install.downloading(remote.version),
     );
-    await downloadPack();
-    return (await packApi.status(pack.id)).installed;
+    // A cancelled/failed update must not launch the stale pack.
+    return await installActivePack();
   } catch (err) {
-    setStatus(String(err), "error");
+    setStatus(errorMessage(err), "error");
     return false;
   }
 }

@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { listAudioDevices, type VoiceDeviceLists } from "../lib/audioDevices";
 import type { VoiceSession } from "../lib/voiceSession";
+import { useT } from "@/shared/i18n";
 import { McSelect } from "@/shared/ui/McSelect";
 import { PixelCrossIcon } from "@/shared/ui/PixelIcons";
 import { PixelProgress } from "@/shared/ui/PixelProgress";
@@ -11,8 +12,9 @@ type Props = {
   session: VoiceSession | null;
   micId: string;
   outputId: string;
+  camId: string;
   onClose: () => void;
-  onApply: (micId: string, outputId: string) => void;
+  onApply: (micId: string, outputId: string, camId: string) => void;
 };
 
 const METER_CELLS = 20;
@@ -96,16 +98,20 @@ export function VoiceDevicesModal({
   session: _session,
   micId,
   outputId,
+  camId,
   onClose,
   onApply,
 }: Props) {
+  const t = useT();
   const titleId = useId();
   const [devices, setDevices] = useState<VoiceDeviceLists>({
     inputs: [],
     outputs: [],
+    cams: [],
   });
   const [mic, setMic] = useState(micId);
   const [out, setOut] = useState(outputId);
+  const [cam, setCam] = useState(camId);
   const [loading, setLoading] = useState(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const levelPct = useMicPreview(open, mic);
@@ -114,11 +120,12 @@ export function VoiceDevicesModal({
     if (!open) return;
     setMic(micId);
     setOut(outputId);
+    setCam(camId);
     setLoading(true);
     void listAudioDevices()
       .then(setDevices)
       .finally(() => setLoading(false));
-  }, [open, micId, outputId]);
+  }, [open, micId, outputId, camId]);
 
   useEffect(() => {
     if (!open) return;
@@ -142,26 +149,46 @@ export function VoiceDevicesModal({
 
   const micOptions = useMemo(
     () => [
-      { id: "", label: "System default", hint: "OS microphone" },
+      {
+        id: "",
+        label: t("voice.devicesModal.systemDefault"),
+        hint: t("voice.devicesModal.osMic"),
+      },
       ...devices.inputs.map((d, i) => ({
         id: d.deviceId,
-        label: d.label || `Microphone ${i + 1}`,
+        label: d.label || t("voice.devicesModal.microphoneN", { n: i + 1 }),
         hint: d.deviceId.slice(0, 10),
       })),
     ],
-    [devices.inputs],
+    [devices.inputs, t],
   );
 
   const outOptions = useMemo(
     () => [
-      { id: "", label: "System default", hint: "OS speakers" },
+      {
+        id: "",
+        label: t("voice.devicesModal.systemDefault"),
+        hint: t("voice.devicesModal.osSpeakers"),
+      },
       ...devices.outputs.map((d, i) => ({
         id: d.deviceId,
-        label: d.label || `Output ${i + 1}`,
+        label: d.label || t("voice.devicesModal.outputN", { n: i + 1 }),
         hint: d.deviceId.slice(0, 10),
       })),
     ],
-    [devices.outputs],
+    [devices.outputs, t],
+  );
+
+  const camOptions = useMemo(
+    () => [
+      { id: "", label: t("voice.devicesModal.systemDefault"), hint: "" },
+      ...devices.cams.map((d, i) => ({
+        id: d.deviceId,
+        label: d.label || t("voice.devicesModal.cameraN", { n: i + 1 }),
+        hint: d.deviceId.slice(0, 10),
+      })),
+    ],
+    [devices.cams, t],
   );
 
   if (!open) return null;
@@ -182,13 +209,13 @@ export function VoiceDevicesModal({
       >
         <header className="voice-modal-head">
           <h3 id={titleId} className="settings-heading">
-            Voice devices
+            {t("voice.devicesModal.title")}
           </h3>
           <button
             type="button"
             className="btn-mc dim btn-icon-sq voice-modal-close"
-            title="Close"
-            aria-label="Close"
+            title={t("voice.close")}
+            aria-label={t("voice.close")}
             onClick={onClose}
           >
             <PixelCrossIcon />
@@ -197,50 +224,61 @@ export function VoiceDevicesModal({
 
         <McSelect
           className="pack-select--full"
-          label="Microphone"
+          label={t("voice.devicesModal.microphone")}
           menuPlacement="down"
           disabled={loading}
           options={micOptions}
           value={mic}
           onChange={setMic}
-          placeholder="System default"
+          placeholder={t("voice.devicesModal.systemDefault")}
         />
 
         <McSelect
           className="pack-select--full"
-          label="Output"
+          label={t("voice.devicesModal.output")}
           menuPlacement="down"
           disabled={loading}
           options={outOptions}
           value={out}
           onChange={setOut}
-          placeholder="System default"
+          placeholder={t("voice.devicesModal.systemDefault")}
+        />
+
+        <McSelect
+          className="pack-select--full"
+          label={t("voice.devicesModal.camera")}
+          menuPlacement="down"
+          disabled={loading}
+          options={camOptions}
+          value={cam}
+          onChange={setCam}
+          placeholder={t("voice.devicesModal.systemDefault")}
         />
 
         <div className="voice-meter-block">
           <PixelProgress
             value={levelPct}
-            phase="Input level"
+            phase={t("voice.devicesModal.inputLevel")}
             cells={METER_CELLS}
           />
           <p className="field-hint">
-            Speak to test — uses a live mic preview (not the room session).
+            {t("voice.devicesModal.speakTest")}
           </p>
         </div>
 
         <div className="voice-modal-actions btn-row">
           <button type="button" className="btn-mc dim" onClick={onClose}>
-            Cancel
+            {t("voice.cancel")}
           </button>
           <button
             type="button"
             className="btn-mc ok"
             onClick={() => {
-              onApply(mic, out);
+              onApply(mic, out, cam);
               onClose();
             }}
           >
-            Apply
+            {t("voice.devicesModal.apply")}
           </button>
         </div>
       </div>

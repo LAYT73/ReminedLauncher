@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { useT } from "@/shared/i18n";
 import { isReminedVanillaPackId, isVanillaPackId, reminedVanillaPackId, vanillaPackId } from "@/shared/lib/packIds";
 import { useEditionState } from "@/entities/game-version";
 import { useActiveReminePack, useInstalledPacks, useViewCatalog } from "@/entities/pack";
@@ -6,6 +7,7 @@ import { InstallRow } from "./InstallRow";
 import { EmptyState } from "@/shared/ui/EmptyState";
 
 export function InstallationsPage() {
+  const t = useT();
   const installedPacks = useInstalledPacks();
   const catalog = useViewCatalog();
   const vanillaPick = useEditionState("vanilla").pick;
@@ -36,12 +38,12 @@ export function InstallationsPage() {
 
   return (
     <section className="section">
-      <h2 className="page-title">Installations</h2>
+      <h2 className="page-title">{t("pack.installations.title")}</h2>
       {groups.length === 0 ? (
         <EmptyState
           kind="installations"
-          title="Nothing installed yet"
-          description="Choose a pack from the launcher to build your first installation."
+          title={t("pack.installations.emptyTitle")}
+          description={t("pack.installations.emptyDescription")}
         />
       ) : (
         <div className="install-groups">

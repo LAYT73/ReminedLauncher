@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { t, useT } from "@/shared/i18n";
 import { useLiveSession } from "../model/useLiveSession";
 import { useRoomData } from "../model/useRoomData";
 import { useRuntimeModal } from "../model/useRuntimeModal";
@@ -18,7 +19,9 @@ export function VoicePanel({
   onOpenNetworkPlay,
   onRoomStatusChange,
   onInvitesChange,
+  lanJoin,
 }: VoicePanelProps) {
+  useT(); // re-render on locale change (status tone, labels)
   const [devicesOpen, setDevicesOpen] = useState(false);
   const lists = useVoiceLists(userId, onToast, onInvitesChange);
   const room = useRoomData(userId, displayName);
@@ -68,7 +71,7 @@ export function VoicePanel({
         .filter((f) => f.direction === "friend")
         .map((f) => ({
           id: f.profile.id,
-          label: f.profile.username || "Friend",
+          label: f.profile.username || t("social.presence.friendFallback"),
           hint: f.profile.remined_id ? `#${f.profile.remined_id}` : undefined,
           skinUrl: f.profile.skin_path ?? null,
         })),
@@ -82,13 +85,11 @@ export function VoicePanel({
       session={sessionRef.current}
       micId={micId}
       outputId={outputId}
+      camId={live.camId}
       onClose={() => setDevicesOpen(false)}
-      onApply={(mic, out) => {
-        live.setMicId(mic);
-        live.setOutputId(out);
-        if (mic) void sessionRef.current?.switchMic(mic);
-        if (out) void sessionRef.current?.switchOutput(out);
-        onToast("Devices updated", "ok");
+      onApply={(mic, out, cam) => {
+        void live.saveDevices(mic, out, cam);
+        onToast(t("voice.devicesModal.updated"), "ok");
       }}
     />
   );
@@ -128,6 +129,7 @@ export function VoicePanel({
         invites={invites}
         members={members}
         messages={messages}
+        lanJoin={lanJoin}
         videoTiles={live.videoTiles}
         speaking={live.speaking}
         volumes={live.volumes}

@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { t as tr, useT } from "@/shared/i18n";
 import { voiceLogPath, voiceRevealLog } from "../api/voiceNative";
 import { PixelCrossIcon } from "@/shared/ui/PixelIcons";
 import { PixelProgress } from "@/shared/ui/PixelProgress";
@@ -19,6 +20,7 @@ type Props = {
 };
 
 export function VoiceRuntimeModal({ state, onClose, onRetry }: Props) {
+  const t = useT();
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const [logPath, setLogPath] = useState("");
@@ -56,14 +58,14 @@ export function VoiceRuntimeModal({ state, onClose, onRetry }: Props) {
       >
         <header className="voice-modal-head">
           <h3 id={titleId} className="settings-heading">
-            Setting up voice
+            {t("voice.runtime.title")}
           </h3>
           {state.error ? (
             <button
               type="button"
               className="btn-mc dim btn-icon-sq voice-modal-close"
-              title="Close"
-              aria-label="Close"
+              title={t("voice.close")}
+              aria-label={t("voice.close")}
               onClick={onClose}
             >
               <PixelCrossIcon />
@@ -72,8 +74,7 @@ export function VoiceRuntimeModal({ state, onClose, onRetry }: Props) {
         </header>
 
         <p className="friends-lead voice-runtime-copy">
-          Remined downloads a small local voice server once, then hosts rooms on
-          your PC. No Terminal or Homebrew needed.
+          {t("voice.runtime.copy")}
         </p>
 
         {state.error ? (
@@ -83,15 +84,15 @@ export function VoiceRuntimeModal({ state, onClose, onRetry }: Props) {
             </p>
             {logPath ? (
               <p className="field-hint voice-runtime-logpath" title={logPath}>
-                Debug log: {logPath}
+                {t("voice.runtime.debugLog", { path: logPath })}
               </p>
             ) : null}
           </div>
         ) : (
           <PixelProgress
             value={state.percent}
-            phase={state.phase || "Voice"}
-            label={state.message || "Working…"}
+            phase={state.phase || t("voice.runtime.phase")}
+            label={state.message || t("voice.runtime.working")}
           />
         )}
 
@@ -104,14 +105,14 @@ export function VoiceRuntimeModal({ state, onClose, onRetry }: Props) {
                 void voiceRevealLog().catch(() => undefined);
               }}
             >
-              Open log
+              {t("voice.runtime.openLog")}
             </button>
             <button type="button" className="btn-mc dim" onClick={onClose}>
-              Cancel
+              {t("voice.cancel")}
             </button>
             {onRetry ? (
               <button type="button" className="btn-mc ok" onClick={onRetry}>
-                Retry
+                {t("voice.runtime.retry")}
               </button>
             ) : null}
           </div>
@@ -124,7 +125,7 @@ export function VoiceRuntimeModal({ state, onClose, onRetry }: Props) {
 
 export const idleVoiceRuntimeModal = (): VoiceRuntimeModalState => ({
   open: false,
-  phase: "Voice",
+  phase: tr("voice.runtime.phase"),
   message: "",
   percent: 0,
   error: null,

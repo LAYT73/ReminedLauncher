@@ -20,9 +20,77 @@
   grid-row: 2;
 }
 
-.stage > .playbar {
+.stage > .page-transition {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.stage > .playbar-slot {
   grid-column: 1;
   grid-row: 3;
+}
+
+/*
+ * Playbar slide: the slot collapses/expands its row (0fr <-> 1fr) so the page
+ * above resizes smoothly, while the bar itself slides from below the edge.
+ * Clipped only while animating — the PackSelect menu opens upward past it.
+ */
+.playbar-slot {
+  display: grid;
+  grid-template-rows: 1fr;
+}
+
+.playbar-slot-inner {
+  min-height: 0;
+}
+
+.playbar-slot.is-enter,
+.playbar-slot.is-leave {
+  overflow: hidden;
+}
+
+.playbar-slot.is-enter {
+  animation: playbar-slot-open 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.playbar-slot.is-enter .playbar {
+  animation: playbar-slide-in 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.playbar-slot.is-leave {
+  animation: playbar-slot-open 360ms cubic-bezier(0.55, 0, 0.75, 0.2) reverse both;
+  pointer-events: none;
+}
+
+.playbar-slot.is-leave .playbar {
+  animation: playbar-slide-in 360ms cubic-bezier(0.55, 0, 0.75, 0.2) reverse both;
+}
+
+@keyframes playbar-slot-open {
+  from {
+    grid-template-rows: 0fr;
+  }
+  to {
+    grid-template-rows: 1fr;
+  }
+}
+
+@keyframes playbar-slide-in {
+  from {
+    transform: translate3d(0, 100%, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .playbar-slot.is-enter,
+  .playbar-slot.is-leave,
+  .playbar-slot.is-enter .playbar,
+  .playbar-slot.is-leave .playbar {
+    animation: none;
+  }
 }
 
 .topnav {
@@ -36,10 +104,43 @@
 }
 
 .topnav-tabs {
+  position: relative;
   display: flex;
   align-items: stretch;
   gap: 2px;
   min-width: 0;
+}
+
+/* One underline that glides to the active tab (set from TopNav). */
+.topnav-ink {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 0;
+  height: 3px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.topnav-ink::before {
+  content: "";
+  position: absolute;
+  inset: 0 10px;
+  background: var(--mc-green-hi);
+}
+
+.topnav-ink:not(.is-snap) {
+  transition:
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 160ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topnav-ink {
+    transition: none !important;
+  }
 }
 
 .topnav-profile {
@@ -85,21 +186,9 @@
 
 .topnav-offline-icon {
   display: block;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
-}
-
-.topnav-offline-slash-outline {
-  stroke: var(--mc-stone);
-}
-
-.topnav-offline-btn:hover .topnav-offline-slash-outline {
-  stroke: var(--mc-stone-mid);
-}
-
-.topnav-offline-btn:active .topnav-offline-slash-outline {
-  stroke: var(--mc-stone-mid);
 }
 
 .topnav-avatar-btn {
@@ -127,7 +216,7 @@
   flex-shrink: 0;
   border: 2px solid #000;
   image-rendering: pixelated;
-  background: #2a2a2a;
+  background: var(--mc-stone);
   box-shadow: var(--bevel-panel);
   pointer-events: none;
 }
@@ -167,13 +256,6 @@
   color: var(--text-secondary);
 }
 
-.profile-account {
-  margin-top: 28px;
-  padding-top: 20px;
-  border-top: 1px solid color-mix(in srgb, var(--text-muted) 28%, transparent);
-  max-width: 320px;
-}
-
 .topnav-tab {
   position: relative;
   display: inline-flex;
@@ -186,12 +268,13 @@
   background: transparent;
   border: 0;
   box-shadow: none;
+  transition: color 200ms ease;
 }
 
 .topnav-tab-icon {
   display: block;
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
   opacity: 0.82;
 }
@@ -213,6 +296,7 @@
 }
 
 .topnav-tab.active::after {
+  display: none;
   content: "";
   position: absolute;
   left: 10px;
@@ -261,7 +345,7 @@
   place-items: center;
   border-radius: 0;
   background: var(--mc-gold);
-  color: #1a1a1a;
+  color: var(--text-on-stone);
   border: 2px solid #000;
   box-shadow: var(--bevel-btn);
   font-family: var(--font-display);
@@ -272,6 +356,13 @@
   text-shadow: none;
   image-rendering: pixelated;
   animation: topnav-badge-blink 1.6s steps(2, end) infinite;
+}
+
+/* Friends tab: green variant when only online friends (no incoming requests). */
+.topnav-tab-count.is-online {
+  background: var(--mc-green);
+  color: var(--text-on-accent);
+  animation: none;
 }
 
 .content {
@@ -304,7 +395,7 @@
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  animation: page-enter-mc 0.62s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: page-enter-mc 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes page-enter-mc {
@@ -329,4 +420,50 @@
 [data-theme^="dark"],
 :root {
   color-scheme: dark;
+}
+
+/* Page transition: canvas wipe over .content only. */
+.page-transition {
+  position: relative;
+  z-index: 40;
+  display: none;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.page-transition.is-active {
+  display: block;
+  pointer-events: auto;
+}
+
+.page-transition-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* First paint after the boot splash: ease the shell (video, home) in once. */
+.shell {
+  animation: shell-enter 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes shell-enter {
+  from {
+    opacity: 0;
+    filter: brightness(0.6);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell {
+    animation: none;
+  }
 }

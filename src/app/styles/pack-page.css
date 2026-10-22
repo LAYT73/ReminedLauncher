@@ -38,6 +38,22 @@
   user-select: none;
 }
 
+.enchant-particles-layer--interactive .enchant-glyph {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.enchant-particles-layer--interactive .enchant-glyph-core {
+  transition:
+    transform 0.14s ease,
+    opacity 0.14s ease;
+}
+
+.enchant-particles-layer--interactive .enchant-glyph:hover .enchant-glyph-core {
+  transform: scale(1.18);
+  opacity: 1;
+}
+
 .enchant-glyph-glow,
 .enchant-glyph-core {
   grid-area: 1 / 1;
@@ -86,8 +102,8 @@
   border-radius: 0;
   overflow: hidden;
   border: 2px solid #000;
-  box-shadow: inset 0 0 0 1px #3a3a3a;
-  background: #1c1c1c;
+  box-shadow: inset 0 0 0 1px var(--mc-stone-mid);
+  background: var(--bg-menu);
   position: relative;
   display: block;
 }
@@ -148,7 +164,11 @@
 
 .pack-logo.is-placeholder {
   background:
-    linear-gradient(145deg, rgba(108, 195, 73, 0.35), rgba(30, 60, 20, 0.9)),
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--mc-green-hi) 35%, transparent),
+      color-mix(in srgb, var(--accent-deep) 90%, transparent)
+    ),
     #24301c;
 }
 
@@ -218,12 +238,12 @@
 }
 
 .vanilla-skin-badge.is-ok {
-  background: #3c8527;
-  color: #fff;
-  text-shadow: 1px 1px 0 #1a4a12;
+  background: var(--mc-green);
+  color: var(--text-on-accent);
+  text-shadow: 1px 1px 0 var(--accent-shadow);
   box-shadow:
-    inset 1px 1px 0 #6cc349,
-    inset -1px -1px 0 #2a5c1a;
+    inset 1px 1px 0 var(--mc-green-hi),
+    inset -1px -1px 0 var(--accent-shadow);
 }
 
 .pack-about-blurb {
@@ -273,7 +293,7 @@
   aspect-ratio: 16 / 10;
   border-radius: 0;
   overflow: hidden;
-  background: #0d0d0d;
+  background: var(--bg-input);
   border: 3px solid #000;
   box-shadow:
     var(--bevel-panel),
@@ -349,8 +369,8 @@
 }
 
 .pack-gallery-nav svg {
-  width: 10px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .pack-gallery-dots {
@@ -370,7 +390,10 @@
     inset 1px 1px 0 var(--mc-green-mid),
     inset -1px -1px 0 var(--accent-shadow);
   opacity: 0.55;
-  transition: background 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    opacity 0.12s ease;
 }
 
 .pack-gallery-dot.is-active {
@@ -400,4 +423,11 @@
   .pack-gallery-nav {
     opacity: 1;
   }
+}
+
+/* Let the about panel fill down to the playbar: PageMotion's shell is
+   content-sized by default, which left a gap above the footer. */
+.pack-stage > .page-motion-shell,
+.pack-stage > .page-motion-shell > .page-motion {
+  flex: 1 0 auto;
 }

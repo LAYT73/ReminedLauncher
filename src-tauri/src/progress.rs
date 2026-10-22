@@ -64,7 +64,7 @@ pub fn is_cancelled() -> bool {
 
 pub fn check_cancelled() -> Result<(), String> {
     if is_cancelled() {
-        Err("Cancelled".into())
+        Err(crate::i18n::tr("progress.cancelled").into())
     } else {
         Ok(())
     }

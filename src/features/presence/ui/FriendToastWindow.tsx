@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { setLocale } from "@/shared/i18n";
 import { SkinHead } from "@/entities/skin";
 import { applyTheme, DEFAULT_THEME, normalizeThemeId } from "@/entities/theme";
 import {
@@ -30,6 +31,7 @@ export function FriendToastWindow() {
       void getCurrentWindow().close().catch(() => undefined);
       return;
     }
+    if (next.locale === "en" || next.locale === "ru") setLocale(next.locale);
     applyTheme(
       normalizeThemeId(next.themeId ?? DEFAULT_THEME),
       next.themeCustom ?? null,

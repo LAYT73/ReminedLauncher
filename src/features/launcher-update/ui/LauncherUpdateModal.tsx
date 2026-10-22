@@ -1,11 +1,15 @@
 import { useEffect, useId } from "react";
 import { createPortal } from "react-dom";
 import { PixelCrossIcon } from "@/shared/ui/PixelIcons";
+import { useT } from "@/shared/i18n";
 import { useProfileStore } from "@/entities/profile";
 import { useLauncherUpdate } from "../model/store";
 
+const SPLIT = "\u0000";
+
 /** Startup modal: update available — install now or later. */
 export function LauncherUpdateModal() {
+  const t = useT();
   const titleId = useId();
   const appVersion = useProfileStore((s) => s.appVersion);
   const pending = useLauncherUpdate((s) => s.pending);
@@ -32,6 +36,9 @@ export function LauncherUpdateModal() {
 
   if (!open || !pending) return null;
 
+  const [readyPre, readyPost] = t("settings.update.modal.ready", { v: SPLIT }).split(SPLIT);
+  const [havePre, havePost] = t("settings.update.modal.youHave", { v: SPLIT }).split(SPLIT);
+
   return createPortal(
     <div
       className="voice-modal-backdrop"
@@ -49,13 +56,13 @@ export function LauncherUpdateModal() {
       >
         <header className="voice-modal-head">
           <h3 id={titleId} className="settings-heading">
-            Update available
+            {t("settings.update.modal.title")}
           </h3>
           <button
             type="button"
             className="btn-mc dim btn-icon-sq voice-modal-close"
-            title="Close"
-            aria-label="Close"
+            title={t("common.close")}
+            aria-label={t("common.close")}
             disabled={busy}
             onClick={() => closePrompt()}
           >
@@ -64,15 +71,18 @@ export function LauncherUpdateModal() {
         </header>
 
         <p className="friends-lead launcher-update-modal-copy">
-          Remined <strong>{pending.version}</strong> is ready
+          {readyPre}
+          <strong>{pending.version}</strong>
+          {readyPost}
           {appVersion ? (
             <>
               {" "}
-              (you have <span className="settings-value">{appVersion}</span>)
+              {havePre}
+              <span className="settings-value">{appVersion}</span>
+              {havePost}
             </>
           ) : null}
-          . Download and restart to update — or do it later from Settings →
-          Updates.
+          . {t("settings.update.modal.hint")}
         </p>
 
         {pending.notes ? (
@@ -86,7 +96,7 @@ export function LauncherUpdateModal() {
             disabled={busy}
             onClick={() => closePrompt()}
           >
-            Later
+            {t("settings.update.modal.later")}
           </button>
           <button
             type="button"
@@ -94,7 +104,9 @@ export function LauncherUpdateModal() {
             disabled={busy}
             onClick={() => void installPending()}
           >
-            {busy ? "Downloading…" : "Update now"}
+            {busy
+              ? t("settings.update.modal.downloading")
+              : t("settings.update.modal.updateNow")}
           </button>
         </div>
       </div>

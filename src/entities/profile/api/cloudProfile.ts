@@ -1,3 +1,4 @@
+import { t } from "@/shared/i18n";
 import { supabase } from "@/shared/api/supabase";
 import {
   normalizeSkinModel,
@@ -135,7 +136,7 @@ async function allocateReminedId(
       }
     }
   }
-  throw new Error("Could not allocate Remined id");
+  throw new Error(t("profile.errors.allocateId"));
 }
 
 /**

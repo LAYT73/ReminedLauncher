@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { canJoinFriend, type FriendRow } from "@/entities/friend";
-import { SkinHead } from "@/entities/skin";
+import { canJoinFriend, PresenceBadge, type FriendRow } from "@/entities/friend";
 import { MSG } from "@/shared/config/messages";
-import { presenceBadge } from "../lib/presenceLabel";
+import { useT } from "@/shared/i18n";
+import { StatusBadge as SharedBadge } from "@/shared/ui/StatusBadge";
+import { FriendSkinPeek } from "./FriendSkinPeek";
 
 type ToastFn = (message: string) => void;
 
@@ -16,26 +17,12 @@ function StatusBadge({
 }) {
   if (fallback) {
     return (
-      <span className="friend-status-badge is-pending" title={fallback}>
+      <SharedBadge tone="pending" title={fallback}>
         <span className="friend-status-kind">{fallback}</span>
-      </span>
+      </SharedBadge>
     );
   }
-  if (!row) return null;
-  const p = presenceBadge(row);
-  return (
-    <span
-      className={`friend-status-badge is-${p.status}`}
-      title={p.title}
-      aria-label={p.title}
-    >
-      <span className="friend-status-kind">{p.kind}</span>
-      {p.detail ? (
-        <span className="friend-status-detail">{p.detail}</span>
-      ) : null}
-      {p.voice ? <span className="friend-status-voice">voice</span> : null}
-    </span>
-  );
+  return row ? <PresenceBadge row={row} /> : null;
 }
 
 /** Avatar + name (+ status badge) + (copyable or static) Remined id. */
@@ -51,11 +38,7 @@ function Identity({
 }) {
   return (
     <>
-      <SkinHead
-        skinUrl={row.profile.skin_path}
-        className="friend-avatar"
-        size={40}
-      />
+      <FriendSkinPeek profile={row.profile} />
       <div className="friend-copy">
         <div className="friend-name-row">
           <strong className="friend-nick">{row.profile.username}</strong>
@@ -89,15 +72,16 @@ export function RequestRow({
   onToast: ToastFn;
   onRespond: (accept: boolean) => void;
 }) {
+  const t = useT();
   return (
     <li className="friend-row">
       <Identity row={row} onToast={onToast} />
       <div className="friend-actions">
         <button type="button" className="btn-mc ok" onClick={() => onRespond(true)}>
-          Accept
+          {t("social.friends.accept")}
         </button>
         <button type="button" className="btn-mc dim" onClick={() => onRespond(false)}>
-          Decline
+          {t("social.friends.decline")}
         </button>
       </div>
     </li>
@@ -117,6 +101,7 @@ export function FriendItem({
   onJoin: (row: FriendRow) => void;
   onRemove: () => void;
 }) {
+  const t = useT();
   const joining = joiningFriendId === row.friendshipId;
   return (
     <li className="friend-row has-join">
@@ -132,24 +117,25 @@ export function FriendItem({
           disabled={Boolean(joiningFriendId)}
           onClick={() => onJoin(row)}
         >
-          {joining ? "Joining…" : "Join"}
+          {joining ? t("social.friends.joining") : t("social.friends.join")}
         </button>
       ) : (
         <span className="friend-join-slot" aria-hidden />
       )}
       <button type="button" className="btn-mc danger friend-remove" onClick={onRemove}>
-        Remove
+        {t("social.friends.remove")}
       </button>
     </li>
   );
 }
 
 export function OutgoingRow({ row, onCancel }: { row: FriendRow; onCancel: () => void }) {
+  const t = useT();
   return (
     <li className="friend-row">
-      <Identity row={row} status={<StatusBadge fallback="Pending" />} />
+      <Identity row={row} status={<StatusBadge fallback={t("social.friends.pending")} />} />
       <button type="button" className="btn-mc danger" onClick={onCancel}>
-        Cancel
+        {t("social.friends.cancel")}
       </button>
     </li>
   );

@@ -1,13 +1,17 @@
+import { localizeServerError } from "@/shared/lib/errors";
 import { supabase } from "@/shared/api/supabase";
 import type { CloudProfile } from "@/entities/profile";
 import { findProfileByReminedId, normalizeReminedId } from "@/entities/profile";
 import {
   isPresenceFresh,
+  markActivityColumnMissing,
   markVoiceColumnMissing,
+  sessionsHaveActivityColumn,
   sessionsHaveVoiceColumn,
 } from "@/entities/session";
 import { normalizeSkinModel } from "@/entities/skin";
 import { TABLE } from "@/shared/config/supabase";
+import { t } from "@/shared/i18n";
 
 export type FriendshipStatus = "pending" | "accepted" | "blocked";
 
@@ -22,6 +26,8 @@ export type FriendRow = {
   sessionShareCode?: string | null;
   sessionGamePort?: number | null;
   sessionInVoice?: boolean;
+  /** Friend-safe activity code from `sessions.activity` (null on old servers/clients). */
+  sessionActivity?: string | null;
   /** ISO timestamp from `sessions.updated_at` (last presence heartbeat). */
   sessionUpdatedAt?: string | null;
 };
@@ -77,7 +83,7 @@ export async function listFriendships(userId: string): Promise<FriendRow[]> {
     .select("id, requester_id, addressee_id, status")
     .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`)
     .neq("status", "blocked");
-  if (error) throw new Error(error.message || "Could not load friends");
+  if (error) throw new Error(localizeServerError(error.message) || t("social.errors.loadFriends"));
   const list = (rows ?? []) as FriendshipRecord[];
   if (list.length === 0) return [];
 
@@ -86,26 +92,38 @@ export async function listFriendships(userId: string): Promise<FriendRow[]> {
   );
   const { data: profiles, error: pErr } = await supabase
     .from(TABLE.profiles)
-    .select("id, nick, username, skin_path, skin_model")
+    .select("id, nick, username, skin_path, cape_path, skin_model")
     .in("id", otherIds);
-  if (pErr) throw new Error(pErr.message || "Could not load profiles");
+  if (pErr) throw new Error(localizeServerError(pErr.message) || t("social.errors.loadProfiles"));
 
   const baseCols = "user_id, status, pack_id, share_code, game_port, updated_at";
   let sessions: Record<string, unknown>[] | null = null;
-  if (sessionsHaveVoiceColumn()) {
+  // Optional columns (migrations 010 / 017) may be missing: drop and retry.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const cols = [
+      baseCols,
+      sessionsHaveVoiceColumn() ? "in_voice" : "",
+      sessionsHaveActivityColumn() ? "activity" : "",
+    ]
+      .filter(Boolean)
+      .join(", ");
     const r = await supabase
       .from(TABLE.sessions)
-      .select(`${baseCols}, in_voice`)
+      .select(cols)
       .in("user_id", otherIds);
-    if (r.error && /in_voice/i.test(r.error.message)) markVoiceColumnMissing();
-    else sessions = r.data as Record<string, unknown>[] | null;
-  }
-  if (!sessions && !sessionsHaveVoiceColumn()) {
-    const r = await supabase
-      .from(TABLE.sessions)
-      .select(baseCols)
-      .in("user_id", otherIds);
-    sessions = r.data as Record<string, unknown>[] | null;
+    if (r.error) {
+      if (sessionsHaveVoiceColumn() && /in_voice/i.test(r.error.message)) {
+        markVoiceColumnMissing();
+        continue;
+      }
+      if (sessionsHaveActivityColumn() && /activity/i.test(r.error.message)) {
+        markActivityColumnMissing();
+        continue;
+      }
+      break;
+    }
+    sessions = r.data as unknown as Record<string, unknown>[] | null;
+    break;
   }
 
   type SessionRow = {
@@ -115,6 +133,7 @@ export async function listFriendships(userId: string): Promise<FriendRow[]> {
     gamePort: number | null;
     updatedAt: string | null;
     inVoice: boolean;
+    activity: string | null;
   };
   const sessionBy = new Map<string, SessionRow>();
   const packIds = new Set<string>();
@@ -138,6 +157,10 @@ export async function listFriendships(userId: string): Promise<FriendRow[]> {
       gamePort: status === "hosting" ? gamePort : null,
       updatedAt,
       inVoice: status !== "offline" && Boolean(s.in_voice),
+      activity:
+        status === "in_game" || status === "hosting"
+          ? ((s.activity as string | null) ?? "").trim() || null
+          : null,
     });
     if (status !== "offline" && packId) packIds.add(packId);
   }
@@ -162,7 +185,7 @@ export async function listFriendships(userId: string): Promise<FriendRow[]> {
         remined_id,
         username: rawUser || `user${remined_id || String(p.id).slice(0, 7)}`,
         skin_path: (p.skin_path as string | null) ?? null,
-        cape_path: null,
+        cape_path: (p.cape_path as string | null) ?? null,
         skin_model: normalizeSkinModel(p.skin_model as string | null),
       };
       return [profile.id, profile] as const;
@@ -194,6 +217,7 @@ export async function listFriendships(userId: string): Promise<FriendRow[]> {
       sessionShareCode: sess?.shareCode ?? null,
       sessionGamePort: sess?.gamePort ?? null,
       sessionInVoice: sess?.inVoice ?? false,
+      sessionActivity: sess?.activity ?? null,
       sessionUpdatedAt: sess?.updatedAt ?? null,
     });
   }
@@ -211,8 +235,8 @@ export async function sendFriendRequest(
   rawReminedId: string,
 ): Promise<void> {
   const target = await findProfileByReminedId(rawReminedId);
-  if (!target) throw new Error("Nobody with that Remined id");
-  if (target.id === myUserId) throw new Error("That’s you");
+  if (!target) throw new Error(t("social.errors.nobodyWithId"));
+  if (target.id === myUserId) throw new Error(t("social.errors.thatsYou"));
 
   const { error } = await supabase.from(TABLE.friendships).insert({
     requester_id: myUserId,
@@ -221,9 +245,9 @@ export async function sendFriendRequest(
   });
   if (error) {
     if (error.code === "23505") {
-      throw new Error("Already sent or already friends");
+      throw new Error(t("social.errors.alreadySent"));
     }
-    throw new Error(error.message || "Could not send request");
+    throw new Error(localizeServerError(error.message) || t("social.errors.sendRequest"));
   }
 }
 
@@ -238,7 +262,7 @@ export async function respondFriendRequest(
       updated_at: new Date().toISOString(),
     })
     .eq("id", friendshipId);
-  if (error) throw new Error(error.message || "Could not update request");
+  if (error) throw new Error(localizeServerError(error.message) || t("social.errors.updateRequest"));
 }
 
 export async function removeFriendship(friendshipId: string): Promise<void> {
@@ -246,7 +270,7 @@ export async function removeFriendship(friendshipId: string): Promise<void> {
     .from(TABLE.friendships)
     .delete()
     .eq("id", friendshipId);
-  if (error) throw new Error(error.message || "Could not remove friend");
+  if (error) throw new Error(localizeServerError(error.message) || t("social.errors.removeFriend"));
 }
 
 export { normalizeReminedId };

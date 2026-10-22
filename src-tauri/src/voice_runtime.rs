@@ -128,7 +128,7 @@ fn github_download_url() -> Result<&'static str, String> {
             "_linux_amd64.tar.gz"
         ))
     } else {
-        Err("No GitHub LiveKit build for this platform".into())
+        Err(crate::i18n::tr("voice.no_github_build").into())
     }
 }
 
@@ -199,7 +199,7 @@ fn extract_livekit_binary(bytes: &[u8], dest_dir: &Path) -> Result<PathBuf, Stri
             set_executable(&out)?;
             return Ok(out);
         }
-        return Err("livekit-server not found in zip".into());
+        return Err(crate::i18n::tr("voice.livekit_missing_zip").into());
     }
 
     let dec = flate2::read::GzDecoder::new(bytes);
@@ -220,7 +220,7 @@ fn extract_livekit_binary(bytes: &[u8], dest_dir: &Path) -> Result<PathBuf, Stri
         set_executable(&out)?;
         return Ok(out);
     }
-    Err("livekit-server not found in archive".into())
+    Err(crate::i18n::tr("voice.livekit_missing_archive").into())
 }
 
 fn http_client() -> Result<reqwest::blocking::Client, String> {
@@ -249,21 +249,21 @@ pub fn apply_loopback_no_proxy() {
 /// directly from ghcr.io (no `brew` CLI / Terminal required).
 #[cfg(target_os = "macos")]
 fn download_macos_bottle(app: &AppHandle, dest_dir: &Path) -> Result<PathBuf, String> {
-    emit_progress(app, "Voice", "Finding voice runtime…", 12);
+    emit_progress(app, "Voice", crate::i18n::tr("voice.finding_runtime"), 12);
     let client = http_client()?;
     let formula: serde_json::Value = client
         .get("https://formulae.brew.sh/api/formula/livekit.json")
         .send()
-        .map_err(|e| format!("Could not reach Homebrew API: {e}"))?
+        .map_err(|e| crate::i18n::trf("voice.homebrew_unreachable", &[("err", &e.to_string())]))?
         .error_for_status()
-        .map_err(|e| format!("Homebrew API error: {e}"))?
+        .map_err(|e| crate::i18n::trf("voice.homebrew_error", &[("err", &e.to_string())]))?
         .json()
         .map_err(|e| e.to_string())?;
 
     let files = formula
         .pointer("/bottle/stable/files")
         .and_then(|v| v.as_object())
-        .ok_or_else(|| "Homebrew bottle list missing for livekit".to_string())?;
+        .ok_or_else(|| crate::i18n::tr("voice.bottle_list_missing").to_string())?;
 
     let prefer: &[&str] = if cfg!(target_arch = "aarch64") {
         &[
@@ -312,23 +312,21 @@ fn download_macos_bottle(app: &AppHandle, dest_dir: &Path) -> Result<PathBuf, St
         }
     }
     let bottle_url = bottle_url.ok_or_else(|| {
-        String::from(
-            "No macOS LiveKit bottle for this CPU — voice host needs Apple Silicon or a preinstalled livekit-server",
-        )
+        String::from(crate::i18n::tr("voice.no_macos_bottle"))
     })?;
 
-    emit_progress(app, "Voice", "Downloading voice runtime…", 35);
+    emit_progress(app, "Voice", crate::i18n::tr("voice.downloading_runtime"), 35);
     let resp = client
         .get(&bottle_url)
         .header("Authorization", "Bearer QQ==")
         .header("Accept", "application/vnd.oci.image.layer.v1.tar+gzip")
         .send()
-        .map_err(|e| format!("Download failed: {e}"))?;
+        .map_err(|e| crate::i18n::trf("voice.download_failed", &[("err", &e.to_string())]))?;
     if !resp.status().is_success() {
-        return Err(format!("Download failed: HTTP {}", resp.status()));
+        return Err(crate::i18n::trf("voice.download_http", &[("status", &resp.status().to_string())]));
     }
     let bytes = resp.bytes().map_err(|e| e.to_string())?;
-    emit_progress(app, "Voice", "Unpacking…", 75);
+    emit_progress(app, "Voice", crate::i18n::tr("voice.unpacking"), 75);
     extract_livekit_binary(&bytes, dest_dir)
 }
 
@@ -338,29 +336,29 @@ fn download_github_release(app: &AppHandle, dest_dir: &Path) -> Result<PathBuf, 
     emit_progress(
         app,
         "Voice",
-        &format!("Downloading voice runtime {LK_VERSION}…"),
+        &crate::i18n::trf("voice.downloading_runtime_ver", &[("ver", LK_VERSION)]),
         35,
     );
     let client = http_client()?;
     let resp = client
         .get(url)
         .send()
-        .map_err(|e| format!("Download failed: {e}"))?;
+        .map_err(|e| crate::i18n::trf("voice.download_failed", &[("err", &e.to_string())]))?;
     if !resp.status().is_success() {
-        return Err(format!("Download failed: HTTP {}", resp.status()));
+        return Err(crate::i18n::trf("voice.download_http", &[("status", &resp.status().to_string())]));
     }
     let bytes = resp.bytes().map_err(|e| e.to_string())?;
-    emit_progress(app, "Voice", "Unpacking…", 75);
+    emit_progress(app, "Voice", crate::i18n::tr("voice.unpacking"), 75);
     extract_livekit_binary(&bytes, dest_dir)
 }
 
 pub fn ensure_runtime(app: &AppHandle) -> Result<PathBuf, String> {
-    emit_progress(app, "Voice", "Checking voice runtime…", 5);
+    emit_progress(app, "Voice", crate::i18n::tr("voice.checking_runtime"), 5);
 
     let dir = voice_cache_dir(app)?;
     let cached = dir.join(binary_name());
     if cached.is_file() {
-        emit_progress(app, "Voice", "Voice runtime ready", 100);
+        emit_progress(app, "Voice", crate::i18n::tr("voice.runtime_ready"), 100);
         return Ok(cached);
     }
 
@@ -369,11 +367,11 @@ pub fn ensure_runtime(app: &AppHandle) -> Result<PathBuf, String> {
         if fs::copy(&p, &cached).is_ok() {
             let _ = set_executable(&cached);
             if cached.is_file() {
-                emit_progress(app, "Voice", "Voice runtime ready", 100);
+                emit_progress(app, "Voice", crate::i18n::tr("voice.runtime_ready"), 100);
                 return Ok(cached);
             }
         }
-        emit_progress(app, "Voice", "Voice runtime ready", 100);
+        emit_progress(app, "Voice", crate::i18n::tr("voice.runtime_ready"), 100);
         return Ok(p);
     }
 
@@ -383,9 +381,9 @@ pub fn ensure_runtime(app: &AppHandle) -> Result<PathBuf, String> {
     let bin = download_github_release(app, &dir)?;
 
     if !bin.is_file() {
-        return Err("LiveKit binary missing after download".into());
+        return Err(crate::i18n::tr("voice.binary_missing").into());
     }
-    emit_progress(app, "Voice", "Voice runtime ready", 100);
+    emit_progress(app, "Voice", crate::i18n::tr("voice.runtime_ready"), 100);
     Ok(bin)
 }
 
@@ -453,7 +451,7 @@ fn wait_healthy(timeout: StdDuration) -> Result<(), String> {
         }
         thread::sleep(StdDuration::from_millis(250));
     }
-    Err("LiveKit did not become ready in time (HTTP/RTC)".into())
+    Err(crate::i18n::tr("voice.not_ready").into())
 }
 
 pub fn stop_host(state: &VoiceRuntimeState) {
@@ -485,7 +483,7 @@ pub fn start_host_server(app: &AppHandle, state: &VoiceRuntimeState) -> Result<(
     // mid-session (signalReconnecting → could not restart participant).
     if livekit_healthy() {
         let tracked = read_child_alive(state);
-        emit_progress(app, "Voice", "Voice server ready", 100);
+        emit_progress(app, "Voice", crate::i18n::tr("voice.server_ready"), 100);
         voice_log::append_ok(
             app,
             "host",
@@ -504,7 +502,7 @@ pub fn start_host_server(app: &AppHandle, state: &VoiceRuntimeState) -> Result<(
     let dir = voice_cache_dir(app)?;
     let config = write_config(&dir)?;
 
-    emit_progress(app, "Voice", "Starting voice server…", 88);
+    emit_progress(app, "Voice", crate::i18n::tr("voice.starting_server"), 88);
     apply_loopback_no_proxy();
     let mut cmd = Command::new(&bin);
     crate::process_ext::hide_console(&mut cmd);
@@ -527,7 +525,7 @@ pub fn start_host_server(app: &AppHandle, state: &VoiceRuntimeState) -> Result<(
     ] {
         cmd.env_remove(key);
     }
-    let mut child = cmd.spawn().map_err(|e| format!("Failed to start LiveKit: {e}"))?;
+    let mut child = cmd.spawn().map_err(|e| crate::i18n::trf("voice.start_failed", &[("err", &e.to_string())]))?;
 
     // Drain LiveKit logs into voice.log + UI events
     if let Some(stdout) = child.stdout.take() {
@@ -578,7 +576,7 @@ pub fn start_host_server(app: &AppHandle, state: &VoiceRuntimeState) -> Result<(
     }
 
     wait_healthy(StdDuration::from_secs(20))?;
-    emit_progress(app, "Voice", "Voice server ready", 100);
+    emit_progress(app, "Voice", crate::i18n::tr("voice.server_ready"), 100);
     Ok(())
 }
 
@@ -617,7 +615,7 @@ pub fn start_voice_relay(
     lan_port: Option<u16>,
 ) -> Result<VoiceHostReady, String> {
     let lan = lan_port.filter(|p| *p > 0);
-    emit_progress(&app, "Voice", "Opening Relay tunnel…", 92);
+    emit_progress(&app, "Voice", crate::i18n::tr("voice.opening_tunnel"), 92);
     voice_log::append_ok(
         &app,
         "relay",
@@ -704,7 +702,7 @@ pub fn mint_token(room: &str, identity: &str, name: &str) -> Result<String, Stri
     let room = room.trim();
     let identity = identity.trim();
     if room.is_empty() || identity.is_empty() {
-        return Err("room and identity required".into());
+        return Err(crate::i18n::tr("voice.room_identity_required").into());
     }
     let now = Utc::now();
     // Guest mints locally; host LiveKit validates. Clocks often skew a few

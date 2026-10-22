@@ -1,3 +1,4 @@
+import { useT } from "@/shared/i18n";
 import { McSelect } from "@/shared/ui/McSelect";
 
 export type PackOption = {
@@ -12,21 +13,26 @@ type Props = {
   value: string;
   onChange: (id: string) => void;
   disabled?: boolean;
+  /** Shown on the trigger when nothing is selected (e.g. empty list). */
+  placeholder?: string;
 };
 
 export function PackSelect({
-  label = "Installation",
+  label,
   packs,
   value,
   onChange,
   disabled = false,
+  placeholder,
 }: Props) {
+  const t = useT();
   return (
     <McSelect
-      label={label}
+      label={label ?? t("pack.select.installation")}
       value={value}
       onChange={onChange}
       disabled={disabled}
+      placeholder={placeholder}
       menuPlacement="up"
       options={packs.map((p) => ({
         id: p.id,

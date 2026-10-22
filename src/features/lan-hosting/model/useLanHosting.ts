@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { t } from "@/shared/i18n";
 import { MSG } from "@/shared/config/messages";
 import { TIMING } from "@/shared/config/timings";
 import { netLog } from "@/shared/api/netLog";
@@ -27,9 +28,13 @@ function liveLanPort(): number | null {
   return typeof port === "number" && port > 0 ? port : null;
 }
 
-function voiceBusy(): boolean {
-  const v = useVoiceStatusStore.getState();
-  return Boolean(v.hostRoomId || v.inRoom);
+/**
+ * True only when WE host the voice room: our relay host carries LiveKit, so LAN
+ * must attach to it without restarting frpc. Voice guests run a separate join
+ * tunnel, so they can host LAN on their own relay host without touching voice.
+ */
+function hostsVoice(): boolean {
+  return Boolean(useVoiceStatusStore.getState().hostRoomId);
 }
 
 /**
@@ -56,7 +61,7 @@ export function useLanHosting(): void {
         game().setHostingLan(null);
         busy.current = false;
         miss.current = 0;
-        if (!voiceBusy()) {
+        if (!hostsVoice()) {
           void relayStopHost().catch(() => undefined);
         }
       }
@@ -84,7 +89,7 @@ export function useLanHosting(): void {
                 `LAN closed → tear tunnel (was port=${publishedPort()})`,
               );
               game().setHostingLan(null);
-              if (voiceBusy()) {
+              if (hostsVoice()) {
                 // Keep voice; only drop the LAN proxy. Never rewrite the
                 // voice-room share code — that forces guests to reconnect.
                 await relayDetachLan().catch(() => undefined);
@@ -113,7 +118,7 @@ export function useLanHosting(): void {
 
           const host = await relayHostState().catch(() => null);
           const keyNow = host?.alive ? host.key?.trim() || null : null;
-          const voiceLive = voiceBusy();
+          const voiceLive = hostsVoice();
           const alreadyAttached = Boolean(keyNow) && host?.lan_port === port;
 
           busy.current = true;
@@ -140,7 +145,7 @@ export function useLanHosting(): void {
               // and drops LiveKit for everyone.
               if (!keyNow) {
                 throw new Error(
-                  "Voice is live but Relay key is missing — wait a moment and open LAN again",
+                  t("network.lan.voiceKeyMissing"),
                 );
               }
               rawKey = await relayAttachLan(port);

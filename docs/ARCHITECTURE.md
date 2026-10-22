@@ -1,6 +1,6 @@
 # Architecture
 
-**Release:** `0.9.5`
+**Release:** `1.0.1`
 **Stack:** Tauri 2, Rust, React 19, TypeScript, Vite, Supabase
 
 This document describes the implementation currently in the repository. The
@@ -11,7 +11,7 @@ source code is authoritative when this document and an implementation diverge.
 ```text
 React UI
   ├─ Zustand entity stores
-  ├─ typed Tauri command adapters
+  ├─ i18n (EN / RU) + typed Tauri command adapters
   └─ Supabase API modules
         │
         ▼
@@ -20,6 +20,7 @@ Tauri commands
   ├─ Java runtime and asset installation
   ├─ Remined Relay
   ├─ LiveKit runtime
+  ├─ Companion jar install + gamewatch activity
   └─ diagnostics, tray and updater integration
 ```
 
@@ -88,7 +89,8 @@ The Rust application is under `src-tauri/src/`.
 | Module | Responsibility |
 |---|---|
 | `lib.rs` | Tauri setup, command registration and shared state |
-| `runtime.rs`, `gamewatch.rs` | Minecraft launch, process state and log parsing |
+| `i18n.rs` | Native locale strings for command errors |
+| `runtime.rs`, `gamewatch.rs` | Minecraft launch, process state, log + Companion activity |
 | `java_runtime.rs` | Java discovery and runtime downloads |
 | `instance.rs`, `paths.rs`, `config.rs` | Install roots and local configuration |
 | `pack_sync.rs`, `vanilla.rs` | Cloud packs and official vanilla versions |
@@ -99,6 +101,11 @@ The Rust application is under `src-tauri/src/`.
 | `onboarding.rs`, `progress.rs`, `asset_cache.rs` | First run, progress events and media cache |
 | `diag.rs`, `net_log.rs` | Application and network diagnostics |
 | `tray.rs`, `cli.rs`, `smoke.rs` | Tray integration, CLI and smoke harness |
+
+Bundled Companion jar: `src-tauri/resources/remined-companion.jar` (source under
+`companion-mod/`). On Fabric launches the launcher installs it into the instance
+`mods/` folder. The mod writes `<gameDir>/.remined/state.json`; `gamewatch`
+merges that with `latest.log` into friend-visible activity codes.
 
 The native data root is platform-specific. On macOS:
 
@@ -120,10 +127,15 @@ Migrations are applied in filename order:
 | `011`–`013` | Playtime and RPC correction |
 | `014` | Cape storage and profile metadata |
 | `015` | Voice Relay share-code column |
+| `016` | Pack catalog `i18n` JSONB overrides |
+| `017` | Friend-visible `sessions.activity` |
 
 The client must tolerate offline mode and older deployments where optional
 columns are not present. Credentials are supplied through `.env.local` during
 development and GitHub Actions secrets during release builds.
+
+Frontend locale lives under `src/shared/i18n/`. Settings → Language switches
+UI copy; Settings → Motion controls page-transition preferences.
 
 ## Networking
 
@@ -149,6 +161,7 @@ may be attached to the same relay session without restarting LiveKit.
 | Launcher startup and panics | `<root>/.remined/logs/app.log` |
 | Voice and relay | `<root>/.remined/voice/voice.log` |
 | Game state | `<instance>/logs/latest.log` |
+| Companion activity | `<instance>/.remined/state.json` |
 | Installed mod inventory | `<instance>/mods-manifest.json` |
 
 ## Verification
@@ -168,3 +181,4 @@ cargo run --manifest-path src-tauri/Cargo.toml --bin remined-cli -- smoke-rv
 - [Pack assets](./PACK_ASSETS.md)
 - [Voice](./VOICE.md)
 - [Remined Vanilla](./REMINED_VANILLA.md)
+- [Companion](../companion-mod/README.md)

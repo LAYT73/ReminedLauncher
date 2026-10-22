@@ -76,7 +76,7 @@ pub fn status(root: &Path) -> RuntimeStatus {
 /// First-run gate: Java 25 only.
 pub async fn run_full(app: &AppHandle, root: &Path) -> Result<OnboardingState, String> {
     progress::reset();
-    progress::emit(app, "java", 1, "Checking Java…");
+    progress::emit(app, "java", 1, crate::i18n::tr("progress.checking_java"));
     let java = java_runtime::ensure_java25(app, root).await?;
 
     let state = OnboardingState {
@@ -85,7 +85,7 @@ pub async fn run_full(app: &AppHandle, root: &Path) -> Result<OnboardingState, S
         java_path: Some(java.path),
     };
     save_state(root, &state)?;
-    progress::emit(app, "done", 100, "Java ready");
+    progress::emit(app, "done", 100, crate::i18n::tr("progress.java_ready"));
     Ok(state)
 }
 
@@ -103,13 +103,13 @@ pub async fn ensure_pack(app: &AppHandle, root: &Path, pack_id: &str) -> Result<
 
     progress::reset();
 
-    progress::emit(app, "pack", 1, "Downloading pack…");
+    progress::emit(app, "pack", 1, crate::i18n::tr("progress.downloading_pack"));
     let pack = pack_sync::sync_pack(app, root, pack_id).await?;
 
     let instance = pack_dir(root, pack_id);
-    progress::emit(app, "fabric", 1, "Checking Fabric runtime…");
+    progress::emit(app, "fabric", 1, crate::i18n::tr("progress.checking_fabric_runtime"));
     runtime::prepare_runtime(app, root, &instance).await?;
 
-    progress::emit(app, "done", 100, "Ready to play");
+    progress::emit(app, "done", 100, crate::i18n::tr("progress.ready_to_play"));
     Ok(pack)
 }

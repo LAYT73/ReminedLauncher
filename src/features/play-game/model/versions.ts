@@ -1,5 +1,5 @@
 import { MSG } from "@/shared/config/messages";
-import { isCancelledError } from "@/shared/lib/errors";
+import { errorMessage, isCancelledError } from "@/shared/lib/errors";
 import { readLastPlayed } from "@/shared/lib/lastPlayed";
 import { isBrowserOnline } from "@/shared/lib/network";
 import { toast } from "@/shared/lib/toast";
@@ -56,7 +56,7 @@ export async function loadVersions(edition: Edition, force = false): Promise<voi
       patch(edition, { pick: fallbackPick(edition, list) });
     }
   } catch (err) {
-    toast(err instanceof Error ? err.message : String(err));
+    toast(errorMessage(err));
   } finally {
     patch(edition, { busy: false });
   }
@@ -86,7 +86,7 @@ export async function installVersion(
     return true;
   } catch (err) {
     if (isCancelledError(err)) setStatus(MSG.install.cancelled);
-    else setStatus(String(err), "error");
+    else setStatus(errorMessage(err), "error");
     return false;
   } finally {
     patch(edition, { busy: false });

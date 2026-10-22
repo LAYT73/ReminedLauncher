@@ -1,24 +1,33 @@
 import { useLauncherUpdate } from "@/features/launcher-update";
+import { useT } from "@/shared/i18n";
 import { useProfileStore } from "@/entities/profile";
 
+const SPLIT = "\u0000";
+
 export function LauncherSection() {
+  const t = useT();
   const appVersion = useProfileStore((s) => s.appVersion);
   const { busy, pending, checkForUpdate, installPending, dismissPending } =
     useLauncherUpdate();
 
+  const [readyPre = "", readyPost = ""] = t("settings.launcher.ready", {
+    v: SPLIT,
+  }).split(SPLIT);
+
   return (
     <div className="settings-block">
-      <h3 className="settings-heading">Launcher</h3>
+      <h3 className="settings-heading">{t("settings.launcher.title")}</h3>
       <div className="settings-row">
-        <span>Version</span>
+        <span>{t("settings.launcher.version")}</span>
         <span className="settings-value">{appVersion}</span>
       </div>
 
       {pending ? (
         <div className="launcher-update-confirm">
           <p className="friends-lead">
-            Version <strong>{pending.version}</strong> is ready to install.
-            Remined will download it and restart.
+            {readyPre}
+            <strong>{pending.version}</strong>
+            {readyPost}
           </p>
           {pending.notes ? (
             <pre className="launcher-update-notes">{pending.notes}</pre>
@@ -30,7 +39,9 @@ export function LauncherSection() {
               disabled={busy}
               onClick={() => void installPending()}
             >
-              {busy ? "Downloading…" : "Download & install"}
+              {busy
+                ? t("settings.launcher.downloading")
+                : t("settings.launcher.downloadInstall")}
             </button>
             <button
               type="button"
@@ -38,7 +49,7 @@ export function LauncherSection() {
               disabled={busy}
               onClick={() => dismissPending()}
             >
-              Later
+              {t("settings.launcher.later")}
             </button>
           </div>
         </div>
@@ -50,7 +61,7 @@ export function LauncherSection() {
             disabled={busy}
             onClick={() => void checkForUpdate()}
           >
-            {busy ? "Checking…" : "Check for updates"}
+            {busy ? t("settings.launcher.checking") : t("settings.launcher.check")}
           </button>
         </div>
       )}

@@ -1,5 +1,7 @@
 /** Names of Tauri commands exposed by the Rust backend (`src-tauri/src/lib.rs`). */
 export const CMD = {
+  // i18n
+  setUiLocale: "set_ui_locale",
   // pack
   listPacks: "list_packs",
   getPackStatus: "get_pack_status",
@@ -42,6 +44,7 @@ export const CMD = {
   netLogAppend: "net_log_append",
   netLogTail: "net_log_tail",
   netLogList: "net_log_list",
+  showFriendToast: "show_friend_toast",
   // voice
   voiceLogPath: "voice_log_path",
   voiceLogAppend: "voice_log_append",

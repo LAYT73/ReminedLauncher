@@ -1,0 +1,361 @@
+/*
+ * Boot splash — title-screen panorama, block-by-block logo, enchant-decoded
+ * status, XP bar. Fixed colors only: a theme applied mid-boot must not recolor it.
+ * Timeline (ms): focus 0-1200 · logo dissolve 150-690 · sheen 900-1800 ·
+ * status 600+ · bar 400+ · exit 480 (TIMING.bootLeave).
+ */
+.loading-screen {
+  --boot-ink: #e8e8e8;
+  --boot-muted: rgba(255, 255, 255, 0.4);
+  /* Fallback for WebViews without CSS round() (older WebView2 / WebKitGTK). */
+  --logo-size: min(408px, 48vw, 35vh);
+  position: relative;
+  overflow: hidden;
+  background: #0b0908;
+  opacity: 1;
+  transition: opacity 320ms cubic-bezier(0.4, 0, 1, 1) 160ms;
+}
+
+@supports (width: round(down, 100px, 12px)) {
+  .loading-screen {
+    --logo-size: round(down, min(416px, 48vw, 35vh), 12px);
+  }
+}
+
+.loading-screen.is-leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Panorama: outer layer racks focus + zooms out of the boot; inner layer pans. */
+.loading-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  filter: blur(0) brightness(0.62) saturate(0.9);
+  transform: scale(1);
+  animation: loading-focus 1200ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  transition:
+    transform 480ms cubic-bezier(0.5, 0, 0.75, 0),
+    filter 480ms ease-out;
+  will-change: transform, filter;
+}
+
+.loading-pan {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 116%;
+  background-size: cover;
+  background-position: center;
+  animation: loading-pan 60s linear infinite alternate;
+  will-change: transform;
+}
+
+.loading-screen.is-leaving .loading-bg {
+  transform: scale(1.06);
+  filter: blur(0) brightness(0.85) saturate(0.95);
+}
+
+@keyframes loading-focus {
+  from {
+    filter: blur(16px) brightness(0.3) saturate(0.9);
+  }
+  to {
+    filter: blur(0) brightness(0.62) saturate(0.9);
+  }
+}
+
+@keyframes loading-pan {
+  to {
+    transform: translate3d(-13.8%, 0, 0);
+  }
+}
+
+.loading-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to bottom, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.78) 100%),
+    radial-gradient(ellipse at 50% 46%, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.55) 62%, rgba(0, 0, 0, 0.92) 100%);
+}
+
+.loading-grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.04;
+  pointer-events: none;
+  background-size: 160px 160px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+.loading-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 280ms ease-in,
+    transform 480ms cubic-bezier(0.5, 0, 0.75, 0);
+}
+
+.loading-screen.is-leaving .loading-content {
+  opacity: 0;
+  transform: translateY(-12px);
+}
+
+/* Logo: 12x12 cells, each a slice of the image, appearing in a fixed shuffled order. */
+.loading-logo {
+  position: relative;
+  width: var(--logo-size);
+  height: var(--logo-size);
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-template-rows: repeat(12, 1fr);
+}
+
+.loading-cell {
+  background-image: var(--logo);
+  background-size: 1200% 1200%;
+  background-repeat: no-repeat;
+  opacity: 0;
+  animation:
+    loading-cell-in 60ms steps(1, end) var(--d) both,
+    loading-cell-out 1ms steps(1, end) 760ms forwards;
+}
+
+/* Once the last block lands (690+60ms), swap the slices for the whole image:
+   per-cell resampling leaves hairline seams that read as "unfinished". */
+.loading-logo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--logo) center / 100% 100% no-repeat;
+  opacity: 0;
+  animation: loading-cell-in 1ms steps(1, end) 760ms both;
+}
+
+@keyframes loading-cell-in {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes loading-cell-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* One specular sweep, clipped to the logo's alpha. */
+.loading-sheen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  -webkit-mask-image: var(--logo);
+  mask-image: var(--logo);
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  pointer-events: none;
+}
+
+.loading-sheen-band {
+  position: absolute;
+  top: -10%;
+  bottom: -10%;
+  left: 0;
+  width: 28%;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.42) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: translate3d(-120%, 0, 0);
+  animation: loading-sheen 900ms cubic-bezier(0.4, 0, 0.2, 1) 900ms 1 both;
+}
+
+@keyframes loading-sheen {
+  to {
+    transform: translate3d(460%, 0, 0);
+  }
+}
+
+/* Status line */
+.loading-status {
+  position: relative;
+  height: 16px;
+  margin-top: 16px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--boot-ink);
+}
+
+.loading-decode {
+  position: relative;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.loading-decode-size {
+  visibility: hidden;
+}
+
+.loading-decode-live {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+}
+
+.loading-decode-glyphs {
+  font-family: var(--font-enchant);
+  color: var(--boot-muted);
+}
+
+.loading-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* XP bar */
+.loading-bar {
+  position: relative;
+  width: 208px;
+  height: 12px;
+  margin-top: calc(var(--logo-size) * -0.02 + 48px);
+  box-sizing: border-box;
+  border: 2px solid #000;
+  background: #1c1c1c;
+  overflow: hidden;
+  opacity: 0;
+  animation: loading-fade 500ms ease-out 400ms both;
+}
+
+.loading-fill {
+  position: absolute;
+  inset: 0;
+  transform: scaleX(0.85);
+  transform-origin: left center;
+  background: linear-gradient(
+    to bottom,
+    #c8ff90 0 1px,
+    #80ff20 1px 5px,
+    #4fae12 5px 100%
+  );
+  animation: loading-fill 6s cubic-bezier(0.08, 0.6, 0.2, 1) 400ms both;
+}
+
+.loading-screen.is-leaving .loading-fill {
+  animation: none;
+  transform: scaleX(1);
+}
+
+.loading-notches {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to right,
+    transparent 0 14px,
+    rgba(0, 0, 0, 0.55) 14px 16px
+  );
+}
+
+@keyframes loading-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(0.85);
+  }
+}
+
+@keyframes loading-fade {
+  to {
+    opacity: 1;
+  }
+}
+
+/* Corners */
+.loading-corner {
+  position: absolute;
+  bottom: 32px;
+  z-index: 1;
+  color: var(--boot-muted);
+  opacity: 0.8;
+  transition: opacity 280ms ease-in;
+  animation: loading-fade 600ms ease-out 900ms backwards;
+}
+
+.loading-screen.is-leaving .loading-corner {
+  opacity: 0;
+}
+
+.loading-version {
+  left: 32px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.08em;
+}
+
+.loading-mark {
+  right: 32px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-bg,
+  .loading-pan,
+  .loading-cell,
+  .loading-sheen-band,
+  .loading-fill,
+  .loading-bar,
+  .loading-corner {
+    animation: none;
+  }
+
+  .loading-bar,
+  .loading-logo::before {
+    opacity: 1;
+    animation: none;
+  }
+
+  .loading-cell {
+    display: none;
+  }
+
+  .loading-sheen {
+    display: none;
+  }
+
+  .loading-corner {
+    opacity: 0.8;
+  }
+
+  .loading-bg,
+  .loading-screen.is-leaving .loading-bg,
+  .loading-content,
+  .loading-screen.is-leaving .loading-content {
+    transform: none;
+  }
+
+  .loading-screen {
+    transition: opacity 240ms linear;
+  }
+}

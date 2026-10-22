@@ -1,3 +1,4 @@
+import { t } from "@/shared/i18n";
 import { CMD, type Command } from "@/shared/config/commands";
 import { MSG } from "@/shared/config/messages";
 import {
@@ -42,7 +43,7 @@ export const EDITIONS: Record<Edition, EditionConfig> = {
     packId: vanillaPackId,
     installMessage: MSG.install.installingVersion,
     selectable: (v) => v.type === "release",
-    hint: (v) => (v.installed ? "Installed" : "Release"),
+    hint: (v) => (v.installed ? t("pack.select.installed") : t("pack.select.release")),
   },
   "remined-vanilla": {
     listCommand: CMD.listReminedVanillaVersions,
@@ -56,7 +57,7 @@ export const EDITIONS: Record<Edition, EditionConfig> = {
     packId: reminedVanillaPackId,
     installMessage: MSG.install.installingReminedVanilla,
     selectable: () => true,
-    hint: (v) => (v.installed ? "Installed" : "Fabric + skins"),
+    hint: (v) => (v.installed ? t("pack.select.installed") : t("pack.select.fabricSkins")),
   },
 };
 
@@ -75,5 +76,5 @@ export function editionOptions(
   if (fromManifest.length > 0) return fromManifest;
   return packs
     .filter((p) => cfg.isPackId(p.id))
-    .map((p) => ({ id: p.version, name: p.version, version: "Installed" }));
+    .map((p) => ({ id: p.version, name: p.version, version: t("pack.select.installed") }));
 }

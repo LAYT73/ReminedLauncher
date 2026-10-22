@@ -9,6 +9,7 @@ import {
   type RemoteParticipant,
   type RemoteTrackPublication,
 } from "livekit-client";
+import { t } from "@/shared/i18n";
 import { voiceLog, voiceLogPath, voiceMintToken } from "../api/voiceNative";
 import { installRtcDiagnostics } from "./rtcDiagnostics";
 
@@ -192,6 +193,7 @@ export class VoiceSession {
     name: string;
     micDeviceId?: string;
     outputDeviceId?: string;
+    camDeviceId?: string;
   }): Promise<void> {
     await this.disconnect();
     installRtcDiagnostics();
@@ -227,8 +229,8 @@ export class VoiceSession {
       await voiceLog("webrtc", `mic FAILED: ${msg}`);
       throw new Error(
         msg.includes("Permission") || msg.includes("NotAllowed")
-          ? "Microphone permission denied — allow mic for Remined, then retry"
-          : `Microphone unavailable: ${msg}`,
+          ? t("voice.errors.micDenied")
+          : t("voice.errors.micUnavailable", { msg }),
       );
     }
 
@@ -248,6 +250,9 @@ export class VoiceSession {
         noiseSuppression: true,
         autoGainControl: true,
       },
+      videoCaptureDefaults: opts.camDeviceId
+        ? { deviceId: opts.camDeviceId }
+        : undefined,
     });
 
     this.outputDeviceId = opts.outputDeviceId;
@@ -388,19 +393,13 @@ export class VoiceSession {
         /* ignore */
       }
       if (/could not establish pc connection/i.test(msg)) {
-        throw new Error(
-          "Voice WebRTC failed (no ICE to local LiveKit). Retry once; if it persists with a VPN/TUN, exclude 127.0.0.1 or bypass Remined.",
-        );
+        throw new Error(t("voice.errors.webrtcFailed"));
       }
       if (/not valid yet|invalid claims|invalid authorization token/i.test(msg)) {
-        throw new Error(
-          "Voice token rejected (clock skew between PCs). Sync date/time on both machines, then retry.",
-        );
+        throw new Error(t("voice.errors.tokenRejected"));
       }
       if (/timeout|timed out/i.test(msg)) {
-        throw new Error(
-          "Voice connection timeout. VPN or firewall may be blocking localhost.",
-        );
+        throw new Error(t("voice.errors.timeout"));
       }
       throw new Error(msg);
     }
@@ -578,7 +577,22 @@ export class VoiceSession {
 
   async switchMic(deviceId: string) {
     if (!this.room || !this.localTrack) return;
-    await this.localTrack.restartTrack({ deviceId });
+    // "" = system default.
+    await this.localTrack.restartTrack(
+      deviceId ? { deviceId } : { deviceId: undefined },
+    );
+  }
+
+  async switchCamera(deviceId: string) {
+    const room = this.room;
+    if (!room) return;
+    room.options.videoCaptureDefaults = {
+      ...room.options.videoCaptureDefaults,
+      deviceId: deviceId || undefined,
+    };
+    if (room.localParticipant.isCameraEnabled) {
+      await room.switchActiveDevice("videoinput", deviceId || "default");
+    }
   }
 
   async switchOutput(deviceId: string) {

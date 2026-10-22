@@ -1,3 +1,5 @@
+import type { TKey } from "@/shared/i18n";
+
 /**
  * Route model of the launcher. The router (`app/router`) is built from this;
  * widgets and features use the helpers to build links and read the location.
@@ -34,12 +36,13 @@ export const TAB = {
 
 export type Tab = (typeof TAB)[keyof typeof TAB];
 
-export const TAB_LABEL: Record<Tab, string> = {
-  play: "Play",
-  screenshots: "Shots",
-  friends: "Friends",
-  network: "Network",
-  voice: "Voice",
+/** i18n keys of tab labels — resolve with `t()` at render time. */
+export const TAB_LABEL_KEY: Record<Tab, TKey> = {
+  play: "shell.tabs.play",
+  screenshots: "shell.tabs.screenshots",
+  friends: "shell.tabs.friends",
+  network: "shell.tabs.network",
+  voice: "shell.tabs.voice",
 };
 
 const SOCIAL_TABS: readonly Tab[] = [TAB.friends, TAB.voice];

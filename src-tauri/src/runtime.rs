@@ -301,22 +301,22 @@ pub async fn prepare_runtime(app: &AppHandle, root: &Path, instance: &Path) -> R
         }
     }
 
-    progress::emit(app, "fabric", 5, "Resolving Fabric libraries…");
+    progress::emit(app, "fabric", 5, crate::i18n::tr("runtime.resolving_fabric"));
     let jar_hint = meta.as_ref().and_then(|m| m.client_jar.as_deref());
     let jars = ensure_libraries(app, root, instance, &version, jar_hint).await?;
     progress::emit(
         app,
         "fabric",
         55,
-        format!("Libraries ready ({})", jars.len()),
+        crate::i18n::trf("runtime.libraries_ready", &[("n", &jars.len().to_string())]),
     );
 
-    progress::emit(app, "assets", 60, "Checking game assets…");
+    progress::emit(app, "assets", 60, crate::i18n::tr("runtime.checking_assets"));
     let _index = ensure_assets(app, root, &version).await?;
-    progress::emit(app, "assets", 95, "Assets ready");
+    progress::emit(app, "assets", 95, crate::i18n::tr("runtime.assets_ready"));
 
     ensure_log_config(root, &version).await?;
-    progress::emit(app, "runtime", 100, "Runtime ready");
+    progress::emit(app, "runtime", 100, crate::i18n::tr("runtime.ready"));
     Ok(())
 }
 
@@ -379,7 +379,7 @@ async fn ensure_libraries(
                 &app,
                 "fabric",
                 pct.min(50),
-                format!("Library {n}/{total}: {rel}"),
+                crate::i18n::trf("runtime.library_n", &[("n", &n.to_string()), ("total", &total.to_string()), ("rel", &rel.to_string())]),
             );
             result.map(|_| dest)
         });
@@ -398,7 +398,7 @@ async fn ensure_libraries(
                 if url.is_empty() {
                     return Err("Client jar missing and no download URL".into());
                 }
-                progress::emit(app, "fabric", 52, "Downloading client jar…");
+                progress::emit(app, "fabric", 52, crate::i18n::tr("runtime.dl_client_jar"));
                 download_file(&client, url, &fallback).await?;
                 fallback
             } else {
@@ -466,7 +466,7 @@ async fn ensure_assets(app: &AppHandle, root: &Path, version: &Value) -> Result<
         return Ok(index_id);
     }
 
-    progress::emit(app, "assets", 65, format!("Downloading {total} assets…"));
+    progress::emit(app, "assets", 65, crate::i18n::trf("runtime.dl_assets", &[("total", &total.to_string())]));
     let done = Arc::new(AtomicUsize::new(0));
     let mut tasks = FuturesUnordered::new();
     // Limit concurrency by chunking
@@ -492,7 +492,7 @@ async fn ensure_assets(app: &AppHandle, root: &Path, version: &Value) -> Result<
             let n = done.fetch_add(1, Ordering::Relaxed) + 1;
             if n % 40 == 0 || n == total {
                 let pct = 65 + ((n as f64 / total as f64) * 28.0) as u32;
-                progress::emit(&app, "assets", pct.min(93), format!("Assets {n}/{total}"));
+                progress::emit(&app, "assets", pct.min(93), crate::i18n::trf("runtime.assets_n", &[("n", &n.to_string()), ("total", &total.to_string())]));
             }
             res
         });
@@ -922,10 +922,9 @@ exec {java}{argv} >{log} 2>&1
         .map_err(|e| format!("open LaunchServices: {e}"))?;
     if !open_out.status.success() {
         let err = String::from_utf8_lossy(&open_out.stderr);
-        return Err(format!(
-            "open failed with {}: {}",
-            open_out.status,
-            err.trim()
+        return Err(crate::i18n::trf(
+            "launch.open_failed",
+            &[("status", &open_out.status.to_string()), ("err", err.trim())],
         ));
     }
 
@@ -942,11 +941,11 @@ exec {java}{argv} >{log} 2>&1
     let pid = pid.ok_or_else(|| {
         let tail = fs::read_to_string(&log_path).unwrap_or_default();
         if tail.is_empty() {
-            "Game did not start (no pid)".into()
+            crate::i18n::tr("launch.no_pid").into()
         } else {
-            format!(
-                "Game did not start: {}",
-                tail.chars().take(200).collect::<String>()
+            crate::i18n::trf(
+                "launch.not_started",
+                &[("tail", &tail.chars().take(200).collect::<String>())],
             )
         }
     })?;
@@ -976,6 +975,48 @@ fn shell_single_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
+/// Companion Fabric mod (writes `<gameDir>/.remined/state.json` for friend activity).
+const COMPANION_JAR: &[u8] = include_bytes!("../resources/remined-companion.jar");
+
+/// True when the launch profile runs through Fabric Loader (plain vanilla is false).
+fn version_uses_fabric(version: &Value) -> bool {
+    let main_fabric = version
+        .get("mainClass")
+        .and_then(|m| m.as_str())
+        .is_some_and(|m| m.contains("fabricmc"));
+    main_fabric
+        || version
+            .get("libraries")
+            .and_then(|l| l.as_array())
+            .is_some_and(|libs| {
+                libs.iter().any(|l| {
+                    l.get("name")
+                        .and_then(|n| n.as_str())
+                        .is_some_and(|n| n.starts_with("net.fabricmc:fabric-loader"))
+                })
+            })
+}
+
+/// Fabric instances only: (re)install the companion jar and clear stale state. Best-effort.
+fn install_companion_mod(instance: &Path, version: &Value) {
+    if !version_uses_fabric(version) {
+        return;
+    }
+    let _ = fs::remove_file(instance.join(".remined").join("state.json"));
+    let mods = instance.join("mods");
+    if fs::create_dir_all(&mods).is_err() {
+        return;
+    }
+    let dest = mods.join("remined-companion.jar");
+    if fs::read(&dest).map(|b| b == COMPANION_JAR).unwrap_or(false) {
+        return;
+    }
+    let tmp = mods.join("remined-companion.jar.tmp");
+    if fs::write(&tmp, COMPANION_JAR).is_ok() && fs::rename(&tmp, &dest).is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+}
+
 /// Prepare (if needed) then spawn the game process.
 pub async fn launch_game(app: &AppHandle, opts: LaunchOpts) -> Result<LaunchedGame, String> {
     prepare_runtime(app, &opts.root, &opts.instance).await?;
@@ -992,6 +1033,8 @@ pub async fn spawn_game(opts: LaunchOpts) -> Result<LaunchedGame, String> {
     let version: Value =
         serde_json::from_str(&fs::read_to_string(&version_path).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
+
+    install_companion_mod(&opts.instance, &version);
 
     let jars = collect_classpath_paths(
         &opts.root,
@@ -1137,7 +1180,7 @@ pub async fn spawn_game(opts: LaunchOpts) -> Result<LaunchedGame, String> {
 
     cmd.spawn()
         .map(LaunchedGame::Child)
-        .map_err(|e| format!("Failed to start Java: {e}"))
+        .map_err(|e| crate::i18n::trf("launch.java_start_failed", &[("err", &e.to_string())]))
 }
 
 /// `org/ow2/asm/asm/9.6/asm-9.6.jar` -> (`org/ow2/asm/asm|`, `9.6`);

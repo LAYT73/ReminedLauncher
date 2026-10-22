@@ -25,14 +25,14 @@ fn os_arch() -> Result<(&'static str, &'static str), String> {
     } else if cfg!(target_os = "linux") {
         "linux"
     } else {
-        return Err("Unsupported OS".into());
+        return Err(crate::i18n::tr("java.unsupported_os").into());
     };
     let arch = if cfg!(target_arch = "aarch64") {
         "aarch64"
     } else if cfg!(target_arch = "x86_64") {
         "x64"
     } else {
-        return Err("Unsupported CPU arch".into());
+        return Err(crate::i18n::tr("java.unsupported_arch").into());
     };
     Ok((os, arch))
 }
@@ -203,7 +203,7 @@ async fn download_to_file(url: &str, dest: &Path, app: &AppHandle, phase: &str) 
         downloaded += chunk.len() as u64;
         if total > 0 {
             let pct = ((downloaded as f64 / total as f64) * 90.0) as u32;
-            progress::emit(app, phase, pct, "Downloading Java…");
+            progress::emit(app, phase, pct, crate::i18n::tr("java.downloading"));
         }
     }
     Ok(())
@@ -248,11 +248,11 @@ fn extract_archive(archive: &Path, dest: &Path) -> Result<(), String> {
 pub async fn ensure_java(app: &AppHandle, root: &Path, major: u32) -> Result<JavaInfo, String> {
     let existing = find_java(root, major, None);
     if existing.ok {
-        progress::emit(app, "java", 100, format!("Java {major} ready"));
+        progress::emit(app, "java", 100, crate::i18n::trf("java.ready", &[("major", &major.to_string())]));
         return Ok(existing);
     }
 
-    progress::emit(app, "java", 2, format!("Downloading OpenJDK {major}…"));
+    progress::emit(app, "java", 2, crate::i18n::trf("java.downloading_jdk", &[("major", &major.to_string())]));
     let (os, arch) = os_arch()?;
     let url = format!(
         "https://api.adoptium.net/v3/binary/latest/{major}/ga/{os}/{arch}/jdk/hotspot/normal/eclipse?project=jdk"
@@ -266,21 +266,21 @@ pub async fn ensure_java(app: &AppHandle, root: &Path, major: u32) -> Result<Jav
         .join("runtime")
         .join(format!("jdk-{major}-download.{ext}"));
     download_to_file(&url, &archive, app, "java").await?;
-    progress::emit(app, "java", 92, format!("Extracting Java {major}…"));
+    progress::emit(app, "java", 92, crate::i18n::trf("java.extracting", &[("major", &major.to_string())]));
     extract_archive(&archive, &runtime)?;
     let _ = fs::remove_file(&archive);
 
     let java = find_extracted_java(&runtime)
-        .ok_or_else(|| format!("Java {major} binary missing after extract"))?;
+        .ok_or_else(|| crate::i18n::trf("java.binary_missing", &[("major", &major.to_string())]))?;
     let info = probe_java_bin_for(&java, Some(major))
-        .ok_or_else(|| "Failed to probe installed Java".to_string())?;
+        .ok_or_else(|| crate::i18n::tr("java.probe_failed").to_string())?;
     if !info.ok {
-        return Err(format!(
-            "Installed Java is not {major}: {}",
-            info.version
+        return Err(crate::i18n::trf(
+            "java.wrong_version",
+            &[("major", &major.to_string()), ("version", &info.version)],
         ));
     }
-    progress::emit(app, "java", 100, format!("Java {major} installed"));
+    progress::emit(app, "java", 100, crate::i18n::trf("java.installed", &[("major", &major.to_string())]));
     Ok(info)
 }
 

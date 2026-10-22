@@ -82,10 +82,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v1.0.0
-          releaseName: Remined v1.0.0
+          tagName: v1.0.1
+          releaseName: Remined v1.0.1
           releaseBody: |
-            Remined launcher v1.0.0 — Remined Relay only (Porthole removed), empty states, voice/LAN polish, relay_share_code on Supabase.
+            Remined launcher v1.0.1 — EN/RU i18n, friend activity + Remined Companion mod, profile/motion polish, pack catalog locale overrides.
             macOS (arm64 + x64) and Windows builds.
           releaseDraft: false
           prerelease: false

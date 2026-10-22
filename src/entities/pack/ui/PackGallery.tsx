@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
+import { useT } from "@/shared/i18n";
 import { TIMING } from "@/shared/config/timings";
+import { PixelChevronLeftIcon, PixelChevronRightIcon } from "@/shared/ui/PixelIcons";
 
 type Props = {
   images: string[];
   altPrefix?: string;
 };
 
-export function PackGallery({ images, altPrefix = "Screenshot" }: Props) {
+export function PackGallery({ images, altPrefix }: Props) {
+  const t = useT();
+  const alt = altPrefix ?? t("pack.gallery.screenshot");
   const [index, setIndex] = useState(0);
   const count = images.length;
 
@@ -33,7 +37,7 @@ export function PackGallery({ images, altPrefix = "Screenshot" }: Props) {
           <img
             key={src}
             src={src}
-            alt={`${altPrefix} ${i + 1}`}
+            alt={`${alt} ${i + 1}`}
             className={`pack-gallery-slide ${i === index ? "is-active" : ""}`}
             draggable={false}
           />
@@ -44,50 +48,32 @@ export function PackGallery({ images, altPrefix = "Screenshot" }: Props) {
             <button
               type="button"
               className="pack-gallery-nav is-prev"
-              aria-label="Previous"
+              aria-label={t("pack.gallery.previous")}
               onClick={() => go(index - 1)}
             >
-              <svg viewBox="0 0 12 20" aria-hidden>
-                <path
-                  d="M10 2 2 10l8 8"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              <PixelChevronLeftIcon />
             </button>
             <button
               type="button"
               className="pack-gallery-nav is-next"
-              aria-label="Next"
+              aria-label={t("pack.gallery.next")}
               onClick={() => go(index + 1)}
             >
-              <svg viewBox="0 0 12 20" aria-hidden>
-                <path
-                  d="M2 2l8 8-8 8"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              <PixelChevronRightIcon />
             </button>
           </>
         ) : null}
       </div>
 
       {count > 1 ? (
-        <div className="pack-gallery-dots" role="tablist" aria-label="Gallery">
+        <div className="pack-gallery-dots" role="tablist" aria-label={t("pack.gallery.gallery")}>
           {images.map((_, i) => (
             <button
               key={i}
               type="button"
               role="tab"
               aria-selected={i === index}
-              aria-label={`Slide ${i + 1}`}
+              aria-label={t("pack.gallery.slide", { n: i + 1 })}
               className={`pack-gallery-dot ${i === index ? "is-active" : ""}`}
               onClick={() => setIndex(i)}
             />

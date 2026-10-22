@@ -562,7 +562,7 @@ async fn pick_fabric_loader(client: &reqwest::Client, game: &str) -> Result<Stri
         .await
         .map_err(|e| e.to_string())?;
     if list.is_empty() {
-        return Err(format!("No Fabric loader for {game}"));
+        return Err(crate::i18n::trf("rvanilla.no_loader", &[("game", game)]));
     }
     let stable = list.iter().find(|e| {
         e.pointer("/loader/stable")
@@ -1129,7 +1129,7 @@ async fn download_modrinth_mod(
 ) -> Result<String, String> {
     match try_download_modrinth_mod(client, project, game, mods_dir).await? {
         Some(name) => Ok(name),
-        None => Err(format!("No Modrinth Fabric build of {project} for {game}")),
+        None => Err(crate::i18n::trf("rvanilla.no_modrinth_build", &[("project", project), ("game", game)])),
     }
 }
 
@@ -1214,12 +1214,12 @@ async fn install_sodium_iris(
     game: &str,
     mods_dir: &Path,
 ) -> Result<(), String> {
-    progress::emit(app, "pack", 52, "Downloading Iris…");
+    progress::emit(app, "pack", 52, crate::i18n::tr("rvanilla.dl_iris"));
     let mut iris_versions = fetch_modrinth_versions(client, MODRINTH_IRIS, game).await?;
     if iris_versions.is_empty() {
-        progress::emit(app, "pack", 52, format!("Iris unavailable for {game} — skipped"));
+        progress::emit(app, "pack", 52, crate::i18n::trf("rvanilla.iris_unavailable", &[("game", game)]));
         // Still try Sodium alone for rendering wins.
-        progress::emit(app, "pack", 54, "Downloading Sodium…");
+        progress::emit(app, "pack", 54, crate::i18n::tr("rvanilla.dl_sodium"));
         clear_sodium_jars(mods_dir);
         let _ = try_download_modrinth_mod(client, MODRINTH_SODIUM, game, mods_dir).await;
         return Ok(());
@@ -1263,7 +1263,7 @@ async fn install_sodium_iris(
         (0, 6)
     };
 
-    progress::emit(app, "pack", 56, "Downloading Sodium…");
+    progress::emit(app, "pack", 56, crate::i18n::tr("rvanilla.dl_sodium"));
     clear_sodium_jars(mods_dir);
     // Prefer a Modrinth pin only when it already matches the Iris Sodium line.
     // Otherwise pick newest Sodium on that line (Iris 1.8.8 → 0.6.13, not latest 0.8.13).
@@ -1429,7 +1429,7 @@ async fn download_optional_mod_list(
         if resolved.contains(*project) {
             continue;
         }
-        progress::emit(app, "pack", pct, format!("Downloading {label}…"));
+        progress::emit(app, "pack", pct, crate::i18n::trf("pack.downloading_file", &[("name", label)]));
         match try_download_modrinth_mod_with_deps(
             client, project, game, mods_dir, &mut resolved, hints, 0,
         )
@@ -1441,11 +1441,11 @@ async fn download_optional_mod_list(
                     app,
                     "pack",
                     pct,
-                    format!("{label} unavailable for {game} — skipped"),
+                    crate::i18n::trf("rvanilla.item_unavailable", &[("label", label), ("game", game)]),
                 );
             }
             Err(err) => {
-                progress::emit(app, "pack", pct, format!("{label} skipped ({err})"));
+                progress::emit(app, "pack", pct, crate::i18n::trf("rvanilla.item_skipped", &[("label", label), ("err", &err.to_string())]));
             }
         }
         progress::check_cancelled()?;
@@ -1471,7 +1471,7 @@ async fn download_perf_mods(
     download_optional_mod_list(app, client, game, mods_dir, &mods, hints, 58, progress_end)
         .await?;
     for removed in reconcile_stacks(mods_dir) {
-        progress::emit(app, "pack", progress_end, format!("Dropped conflicting {removed}"));
+        progress::emit(app, "pack", progress_end, crate::i18n::trf("rvanilla.dropped_conflict", &[("removed", &removed)]));
     }
     Ok(())
 }
@@ -1659,25 +1659,25 @@ fn validate_mods_dir(mods_dir: &Path, game: &str) -> Result<(), String> {
     }
     let has_iris = names_have(&names, &["iris"]);
     if has_iris && !mods_dir_has_sodium(mods_dir) {
-        errs.push("Iris is installed without Sodium".into());
+        errs.push(crate::i18n::tr("rvanilla.iris_no_sodium").into());
     }
     // Iris/Sodium compatibility is decided by the real dependency audit (fabric.mod.json),
     // not by jar-name heuristics.
     if has_iris && iris_jar_mismatched_for_game(mods_dir, game) {
-        errs.push(format!("Iris jar does not target Minecraft {game}"));
+        errs.push(crate::i18n::trf("rvanilla.iris_wrong_game", &[("game", game)]));
     }
     if sodium_extra_line_mismatched(mods_dir, detect_sodium_maj_min(mods_dir)) {
-        errs.push("Sodium Extra is on a different line than Sodium".into());
+        errs.push(crate::i18n::tr("rvanilla.sodium_extra_mismatch").into());
     }
     if !stack_conflict_removals(&names).is_empty() {
-        errs.push("conflicting optimization stacks are still present".into());
+        errs.push(crate::i18n::tr("rvanilla.stack_conflict").into());
     }
     if errs.is_empty() {
         Ok(())
     } else {
-        Err(format!(
-            "Remined Vanilla {game}: mod set is not safe to launch — {}. Reinstall, or report this version.",
-            errs.join("; ")
+        Err(crate::i18n::trf(
+            "rvanilla.unsafe_mods",
+            &[("game", game), ("issues", &errs.join("; "))],
         ))
     }
 }
@@ -1743,7 +1743,7 @@ async fn repair_with_audit(
                 let path = mods_dir.join(&issue.owner_top_file);
                 if path.is_file() && fs::remove_file(&path).is_ok() {
                     let msg = format!("dropped {} ({why})", issue.owner_top_file);
-                    progress::emit(app, "pack", 31, format!("Removing {} — {why}", issue.owner_top_file));
+                    progress::emit(app, "pack", 31, crate::i18n::trf("rvanilla.removing", &[("file", &issue.owner_top_file), ("why", &why.to_string())]));
                     notes.push(msg);
                     return true;
                 }
@@ -1785,7 +1785,7 @@ async fn repair_with_audit(
                     }
                     let slug = slug_for_mod_id(&issue.dep);
                     let mut resolved = new_modrinth_resolved_set();
-                    progress::emit(app, "pack", 31, format!("Resolving dependency {slug}…"));
+                    progress::emit(app, "pack", 31, crate::i18n::trf("rvanilla.resolving_dep", &[("slug", &slug)]));
                     match try_download_modrinth_mod_with_deps(
                         client,
                         &slug,
@@ -1890,7 +1890,7 @@ async fn ensure_perf_mods(
         || iris_sodium_line_mismatch(mods_dir)
         || sodium_jar_is_prerelease(mods_dir);
     if needs_pair {
-        progress::emit(app, "pack", 42, "Fixing Sodium / Iris…");
+        progress::emit(app, "pack", 42, crate::i18n::tr("rvanilla.fixing_sodium_iris"));
         let _ = install_sodium_iris(app, client, game, mods_dir).await;
     }
 
@@ -1935,10 +1935,10 @@ async fn ensure_perf_mods(
             continue;
         }
         if mismatched {
-            progress::emit(app, "pack", 50, format!("Replacing {label} for {game}…"));
+            progress::emit(app, "pack", 50, crate::i18n::trf("rvanilla.replacing", &[("label", label), ("game", game)]));
             resolved.remove(project);
         } else {
-            progress::emit(app, "pack", 50, format!("Installing {label}…"));
+            progress::emit(app, "pack", 50, crate::i18n::trf("rvanilla.installing", &[("label", label)]));
         }
         let _ = try_download_modrinth_mod_with_deps(
             client, project, game, mods_dir, &mut resolved, hints, 0,
@@ -1957,35 +1957,33 @@ pub async fn install_version(
 ) -> Result<crate::pack_sync::PackStatus, String> {
     let version_id = version_id.trim();
     if version_id.is_empty() {
-        return Err("No version selected".into());
+        return Err(crate::i18n::tr("vanilla.no_version").into());
     }
     if !SUPPORTED_VERSIONS.contains(&version_id) {
-        return Err(format!(
-            "{version_id} is not in the Remined Vanilla skin-compatible set"
-        ));
+        return Err(crate::i18n::trf("rvanilla.unsupported_version", &[("version", version_id)]));
     }
 
     progress::reset();
-    progress::emit(app, "pack", 2, format!("Looking up {version_id}…"));
+    progress::emit(app, "pack", 2, crate::i18n::trf("progress.looking_up", &[("version", version_id)]));
 
     let manifest = vanilla::fetch_manifest().await?;
     let entry = manifest
         .versions
         .iter()
         .find(|v| v.id == version_id)
-        .ok_or_else(|| format!("Unknown Minecraft version: {version_id}"))?;
+        .ok_or_else(|| crate::i18n::trf("vanilla.unknown_version", &[("version", version_id)]))?;
 
     let pack_id = pack_id_for(version_id);
     let dest = pack_dir(root, &pack_id);
     fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
 
     let client = http_client()?;
-    progress::emit(app, "pack", 8, "Downloading Mojang version…");
+    progress::emit(app, "pack", 8, crate::i18n::tr("rvanilla.dl_mojang"));
     let mojang_bytes = download_bytes(&client, &entry.url).await?;
     let mojang: Value =
         serde_json::from_slice(&mojang_bytes).map_err(|e| format!("Invalid version JSON: {e}"))?;
     if mojang.pointer("/arguments/jvm").is_none() {
-        return Err(format!("{version_id} uses an unsupported launch format"));
+        return Err(crate::i18n::trf("rvanilla.new_launch_format", &[("version", version_id)]));
     }
 
     let client_jar_name = format!("{version_id}.jar");
@@ -1994,11 +1992,11 @@ pub async fn install_version(
         .pointer("/downloads/client/url")
         .and_then(|u| u.as_str())
         .ok_or("version JSON missing downloads.client.url")?;
-    progress::emit(app, "pack", 18, "Downloading client…");
+    progress::emit(app, "pack", 18, crate::i18n::tr("progress.dl_client"));
     download_to_file(&client, client_url, &client_jar_path).await?;
     progress::check_cancelled()?;
 
-    progress::emit(app, "pack", 35, "Resolving Fabric loader…");
+    progress::emit(app, "pack", 35, crate::i18n::tr("rvanilla.resolving_loader"));
     let loader = pick_fabric_loader(&client, version_id).await?;
     let fabric_profile = fetch_fabric_profile(&client, version_id, &loader).await?;
     let merged = merge_fabric_profile(mojang, fabric_profile)?;
@@ -2018,20 +2016,20 @@ pub async fn install_version(
     // Clear previous Remined-managed mod jars so versions don't stack.
     clear_managed_mod_jars(&mods_dir)?;
 
-    progress::emit(app, "pack", 48, "Downloading Fabric API…");
+    progress::emit(app, "pack", 48, crate::i18n::tr("rvanilla.dl_fabric_api"));
     download_modrinth_mod(&client, MODRINTH_FABRIC_API, version_id, &mods_dir).await?;
     progress::check_cancelled()?;
     download_perf_mods(app, &client, version_id, &mods_dir, java_major, 52, 70).await?;
-    progress::emit(app, "pack", 72, "Downloading SkinShuffle…");
+    progress::emit(app, "pack", 72, crate::i18n::tr("rvanilla.dl_skinshuffle"));
     download_modrinth_mod(&client, MODRINTH_SKINSHUFFLE, version_id, &mods_dir).await?;
     progress::check_cancelled()?;
-    progress::emit(app, "pack", 76, "Patching SkinShuffle…");
+    progress::emit(app, "pack", 76, crate::i18n::tr("rvanilla.patch_skinshuffle"));
     crate::skinshuffle_patch::prepare_instance(&dest, version_id)?;
     progress::check_cancelled()?;
-    progress::emit(app, "pack", 80, "Downloading CustomSkinLoader…");
+    progress::emit(app, "pack", 80, crate::i18n::tr("rvanilla.dl_csl"));
     download_modrinth_mod(&client, MODRINTH_CSL, version_id, &mods_dir).await?;
     progress::check_cancelled()?;
-    progress::emit(app, "pack", 84, "Downloading LAN (offline) helper…");
+    progress::emit(app, "pack", 84, crate::i18n::tr("rvanilla.dl_lan_helper"));
     download_modrinth_mod(&client, MODRINTH_MCWIFIPNP, version_id, &mods_dir).await?;
     write_mcwifipnp_offline_defaults(&dest)?;
     progress::check_cancelled()?;
@@ -2040,7 +2038,7 @@ pub async fn install_version(
     let repaired = repair_with_audit(app, &client, version_id, &mods_dir, &loader, java_major).await;
     reconcile_stacks(&mods_dir);
     for n in &repaired {
-        progress::emit(app, "pack", 38, format!("Dependency fix: {n}"));
+        progress::emit(app, "pack", 38, crate::i18n::trf("rvanilla.dep_fix", &[("n", n)]));
     }
     let final_issues = crate::mod_audit::audit(
         &crate::mod_audit::read_mods_dir(&mods_dir),
@@ -2052,9 +2050,9 @@ pub async fn install_version(
     );
     if !final_issues.is_empty() {
         let _ = clear_managed_mod_jars(&mods_dir);
-        return Err(format!(
-            "Remined Vanilla {version_id}: unresolved mod dependencies — {}",
-            final_issues.join("; ")
+        return Err(crate::i18n::trf(
+            "rvanilla.unresolved_deps",
+            &[("version", version_id), ("issues", &final_issues.join("; "))],
         ));
     }
     if let Err(e) = validate_mods_dir(&mods_dir, version_id) {
@@ -2074,9 +2072,9 @@ pub async fn install_version(
     };
     instance::write_meta(&dest, &meta)?;
 
-    progress::emit(app, "fabric", 1, "Checking Fabric libraries…");
+    progress::emit(app, "fabric", 1, crate::i18n::tr("rvanilla.checking_fabric_libs"));
     runtime::prepare_runtime(app, root, &dest).await?;
-    progress::emit(app, "done", 100, "Remined Vanilla ready");
+    progress::emit(app, "done", 100, crate::i18n::tr("rvanilla.ready"));
 
     Ok(crate::pack_sync::pack_status(root, &pack_id))
 }
@@ -2105,7 +2103,7 @@ pub async fn ensure_installed(
     let java_major = instance::read_meta(&instance).and_then(|m| m.java_major);
     let has_lan = mods_dir_has_marker(&mods_dir, &["mcwifipnp"]);
     if !has_lan && !game.is_empty() {
-        progress::emit(app, "pack", 40, "Installing LAN offline helper…");
+        progress::emit(app, "pack", 40, crate::i18n::tr("rvanilla.install_lan_helper"));
         let _ = download_modrinth_mod(&client, MODRINTH_MCWIFIPNP, game, &mods_dir).await;
     }
     let _ = ensure_perf_mods(app, &client, game, &mods_dir, java_major).await;
@@ -2120,13 +2118,13 @@ pub async fn ensure_installed(
     let _ = repair_with_audit(app, &client, game, &mods_dir, &loader_name, java_major).await;
     reconcile_stacks(&mods_dir);
     if let Err(e) = validate_mods_dir(&mods_dir, game) {
-        progress::emit(app, "pack", 50, format!("Warning: {e}"));
+        progress::emit(app, "pack", 50, crate::i18n::trf("rvanilla.warning", &[("err", &e.to_string())]));
     }
     let _ = write_mods_manifest(&instance, game, &loader_name, java_major);
     let _ = write_mcwifipnp_offline_defaults(&instance);
-    progress::emit(app, "fabric", 1, "Checking Fabric runtime…");
+    progress::emit(app, "fabric", 1, crate::i18n::tr("progress.checking_fabric_runtime"));
     runtime::prepare_runtime(app, root, &instance).await?;
-    progress::emit(app, "done", 100, "Ready to play");
+    progress::emit(app, "done", 100, crate::i18n::tr("progress.ready_to_play"));
     Ok(crate::pack_sync::pack_status(root, pack_id))
 }
 

@@ -1,4 +1,6 @@
 import { open } from "@tauri-apps/plugin-dialog";
+import { Fragment, type ReactNode } from "react";
+import { useT } from "@/shared/i18n";
 import { FolderIconBtn } from "@/shared/ui/FolderIconBtn";
 import { useRelayStatus } from "../model/useRelayStatus";
 
@@ -11,6 +13,13 @@ type Props = {
   embedded?: boolean;
   onToast: (msg: string) => void;
 };
+
+/** Renders `<b>…</b>` segments of a translated string as <strong>. */
+function rich(text: string): ReactNode {
+  return text.split(/<b>(.*?)<\/b>/g).map((part, i) =>
+    i % 2 ? <strong key={i}>{part}</strong> : <Fragment key={i}>{part}</Fragment>,
+  );
+}
 
 function StatusBadge({
   label,
@@ -37,6 +46,7 @@ export function NetworkPlayPanel({
   embedded,
   onToast,
 }: Props) {
+  const t = useT();
   const relay = useRelayStatus(onToast);
 
   const relayInstalled = Boolean(relay.status?.installed);
@@ -56,18 +66,18 @@ export function NetworkPlayPanel({
   const relayValue = !relay.status
     ? "…"
     : relay.checking
-      ? "Checking"
+      ? t("network.panel.checking")
       : relay.check
         ? relay.check.ok
-          ? "Ready"
+          ? t("network.panel.ready")
           : relayInstalled
-            ? "Issue"
-            : "Missing"
+            ? t("network.panel.issue")
+            : t("network.panel.missing")
         : relayInstalled
           ? relay.status.version
             ? `v${relay.status.version}`
-            : "Found"
-          : "Missing";
+            : t("network.panel.found")
+          : t("network.panel.missing");
 
   const relayStatusClass = relay.check
     ? relay.check.ok
@@ -78,18 +88,18 @@ export function NetworkPlayPanel({
       : "is-missing";
   const relayTitle = relay.check
     ? relay.check.ok
-      ? "Ready for voice + LAN"
-      : "Needs attention"
+      ? t("network.panel.readyForVoiceLan")
+      : t("network.panel.needsAttention")
     : relayInstalled
-      ? "Found"
-      : "Not found";
+      ? t("network.panel.foundTitle")
+      : t("network.panel.notFound");
   const relayBody = relay.checking
-    ? "Checking Relay…"
+    ? t("network.panel.checkingRelay")
     : relay.check
       ? relay.check.message
       : relayInstalled
-        ? relay.status?.path ?? "Binary found."
-        : "Tap Check to download frpc for voice and Open-to-LAN.";
+        ? relay.status?.path ?? t("network.panel.binaryFound")
+        : t("network.panel.tapCheck");
 
   async function browseRelay() {
     const selected = await open({ multiple: false, directory: false });
@@ -106,7 +116,7 @@ export function NetworkPlayPanel({
       }
     >
       <div className={embedded ? "network-embedded-badges" : "page-title-row"}>
-        {embedded ? null : <h2 className="page-title">Network Play</h2>}
+        {embedded ? null : <h2 className="page-title">{t("network.panel.title")}</h2>}
         <div className="network-status-badges" aria-live="polite">
           <StatusBadge label="Relay" value={relayValue} tone={relayTone} />
         </div>
@@ -114,16 +124,14 @@ export function NetworkPlayPanel({
 
       {voiceLive ? (
         <p className="friends-lead">
-          Voice room is live — friends hear you while you play; nothing extra to
-          set up.
+          {t("network.panel.voiceLive")}
         </p>
       ) : null}
 
       <div className="network-relay">
-        <h3 className="settings-heading">Remined Relay</h3>
+        <h3 className="settings-heading">{t("network.panel.relayHeading")}</h3>
         <p className="friends-lead">
-          Voice and Open-to-LAN go through <strong>Remined Relay</strong> on your
-          server. Friends only need Remined.
+          {rich(t("network.panel.relayLead"))}
         </p>
         <div className={`network-status ${relayStatusClass}`}>
           <div className="network-status-copy">
@@ -138,7 +146,7 @@ export function NetworkPlayPanel({
                 disabled={relay.busy || relay.checking}
                 onClick={() => void relay.openDownload()}
               >
-                Get frpc
+                {t("network.panel.getFrpc")}
               </button>
             ) : null}
             <button
@@ -147,7 +155,7 @@ export function NetworkPlayPanel({
               disabled={relay.busy || relay.checking}
               onClick={() => void relay.runCheck()}
             >
-              {relay.checking ? "Checking…" : "Check"}
+              {relay.checking ? t("network.panel.checkingBtn") : t("network.panel.check")}
             </button>
             <button
               type="button"
@@ -155,7 +163,7 @@ export function NetworkPlayPanel({
               disabled={relay.busy || relay.checking}
               onClick={() => void relay.refresh()}
             >
-              Refresh
+              {t("network.panel.refresh")}
             </button>
             {relayInstalled ? (
               <button
@@ -164,7 +172,7 @@ export function NetworkPlayPanel({
                 disabled={relay.busy || relay.checking}
                 onClick={() => void relay.openDownload()}
               >
-                frp releases
+                {t("network.panel.frpReleases")}
               </button>
             ) : null}
           </div>
@@ -175,13 +183,13 @@ export function NetworkPlayPanel({
         ) : null}
 
         <div className="field">
-          <label htmlFor="relay-path">frpc binary</label>
+          <label htmlFor="relay-path">{t("network.panel.frpcBinary")}</label>
           <div className="field-row">
             <input
               id="relay-path"
               type="text"
               spellCheck={false}
-              placeholder="Auto-detect"
+              placeholder={t("network.panel.autoDetect")}
               value={relay.pathDraft}
               onChange={(e) => relay.setPathDraft(e.target.value)}
               onBlur={() => {
@@ -190,7 +198,7 @@ export function NetworkPlayPanel({
               }}
             />
             <FolderIconBtn
-              title="Browse for frpc binary"
+              title={t("network.panel.browse")}
               disabled={relay.busy}
               onClick={() => void browseRelay()}
             />
@@ -204,48 +212,38 @@ export function NetworkPlayPanel({
                   void relay.savePath(null);
                 }}
               >
-                Auto
+                {t("network.panel.auto")}
               </button>
             ) : null}
           </div>
           <p className="field-hint">
-            If auto-find misses it: point at frpc (downloaded under .remined/frp/).
+            {t("network.panel.pathHint")}
           </p>
         </div>
       </div>
 
       {hostingSelf ? (
         <p className="friends-hosting-banner" role="status">
-          You are hosting
-          {hostingPort ? ` on port ${hostingPort}` : ""} — friends can Join from
-          the Friends tab.
+          {hostingPort
+            ? t("network.panel.hostingBannerPort", { port: hostingPort })
+            : t("network.panel.hostingBanner")}
         </p>
       ) : null}
 
       <div className="network-steps">
         <div className="network-step">
-          <h3 className="settings-heading">Host</h3>
+          <h3 className="settings-heading">{t("network.panel.hostHeading")}</h3>
           <ol>
-            <li>Tap Check to install frpc (once per PC).</li>
-            <li>
-              Play → open a world → pause → <strong>Open to LAN</strong>.
-            </li>
-            <li>
-              Remined picks up the port automatically and marks you as{" "}
-              <strong>Hosting</strong>.
-            </li>
+            <li>{t("network.panel.hostStep1")}</li>
+            <li>{rich(t("network.panel.hostStep2"))}</li>
+            <li>{rich(t("network.panel.hostStep3"))}</li>
           </ol>
         </div>
         <div className="network-step">
-          <h3 className="settings-heading">Join a friend</h3>
+          <h3 className="settings-heading">{t("network.panel.joinHeading")}</h3>
           <ol>
-            <li>
-              Friends tab → when they show <strong>Hosting</strong>, hit{" "}
-              <strong>Join</strong>.
-            </li>
-            <li>
-              Remined connects the relay and launches their pack into the world.
-            </li>
+            <li>{rich(t("network.panel.joinStep1"))}</li>
+            <li>{t("network.panel.joinStep2")}</li>
           </ol>
         </div>
       </div>

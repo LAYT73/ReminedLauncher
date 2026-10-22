@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { netLog } from "@/shared/api/netLog";
 import { TIMING } from "@/shared/config/timings";
 import { useRail } from "@/shared/lib/useRoute";
+import { useSharePrefs } from "@/shared/lib/sharePrefs";
 import { useGameStore } from "@/entities/game";
 import { useRailPackId, useActiveReminePack } from "@/entities/pack";
 import { useProfileStore } from "@/entities/profile";
@@ -19,12 +20,28 @@ export function usePresenceHeartbeat(): void {
   const phase = useGameStore((s) => s.phase);
   const hostingLan = useGameStore((s) => s.hostingLan);
   const runningPackId = useGameStore((s) => s.runningPackId);
+  const shareActivity = useSharePrefs((s) => s.shareActivity);
+  const liveActivity = useGameStore((s) =>
+    shareActivity && s.phase === "running" ? s.live?.activity || null : null,
+  );
+  const [activity, setActivity] = useState<string | null>(null);
   const voiceInRoom = useVoiceStatusStore((s) => s.inRoom);
   const railPackId = useRailPackId(useRail());
   const activePackId = useActiveReminePack()?.id;
   const selectedPackId = useProfileStore((s) => s.profile.selected_pack);
   const playingPackId =
     (runningPackId ?? railPackId) ?? activePackId ?? (selectedPackId || null);
+  // Debounce activity changes (~5 s) so quick menu flips don't spam the server;
+  // first value and "stopped playing" apply immediately.
+  useEffect(() => {
+    if (liveActivity === null || activity === null) {
+      setActivity(liveActivity);
+      return;
+    }
+    const id = window.setTimeout(() => setActivity(liveActivity), 5_000);
+    return () => window.clearTimeout(id);
+  }, [liveActivity, activity]);
+
   /** Avoid spamming net log on every 40s heartbeat — only on change. */
   const lastHostLog = useRef<string>("");
 
@@ -32,7 +49,7 @@ export function usePresenceHeartbeat(): void {
     if (!userId || !enabled) return;
 
     const push = () => {
-      if (hostingLan) {
+      if (hostingLan && phase !== "idle") {
         const key = `${hostingLan.shareCode}|${hostingLan.gamePort}|${hostingLan.packId}`;
         if (lastHostLog.current !== key) {
           lastHostLog.current = key;
@@ -48,6 +65,7 @@ export function usePresenceHeartbeat(): void {
           shareCode: hostingLan.shareCode,
           gamePort: hostingLan.gamePort,
           inVoice: voiceInRoom,
+          activity,
         });
         return;
       }
@@ -63,6 +81,7 @@ export function usePresenceHeartbeat(): void {
         shareCode: null,
         gamePort: null,
         inVoice: voiceInRoom,
+        activity: playing ? activity : null,
       });
     };
     push();
@@ -80,7 +99,7 @@ export function usePresenceHeartbeat(): void {
       window.removeEventListener("pagehide", goOffline);
       window.removeEventListener("beforeunload", goOffline);
     };
-  }, [userId, enabled, phase, hostingLan, voiceInRoom, playingPackId]);
+  }, [userId, enabled, phase, hostingLan, voiceInRoom, playingPackId, activity]);
 
   // Offline on sign-out (gate leaves app) — not on window hide to tray.
   useEffect(() => {
