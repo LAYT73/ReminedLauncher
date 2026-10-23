@@ -4,7 +4,12 @@ export const STORAGE_KEY = {
   lastPlayed: "remined.lastPlayed.v1",
   /** Per-user pack playtime cache: `${prefix}${userId}`. */
   packPlaytimePrefix: "remined.packPlaytime.v1.",
-  voicePtt: "remined.voice.ptt",
   dismissedNotes: "remined.dismissedNotes.v1",
   achievementPrefix: "remined.ach.",
+  gameBridge: "remined.gameBridge",
+  shareActivity: "remined.shareActivity",
+  pageTransition: "remined.pageTransition",
+  voiceDevices: "remined.voice.devices",
+  friendToast: "remined.friend-toast",
+  locale: "remined.locale",
 } as const;

@@ -9,6 +9,7 @@ import { LauncherSection } from "./sections/LauncherSection";
 import { MotionSection } from "./sections/MotionSection";
 import { NetworkSection } from "./sections/NetworkSection";
 import { PackSection } from "./sections/PackSection";
+import { InGameSection } from "./sections/InGameSection";
 import { NotificationsSection } from "./sections/NotificationsSection";
 import { ThemeSection } from "./sections/ThemeSection";
 
@@ -95,6 +96,7 @@ export function SettingsPage() {
               <ThemeSection key="theme" />,
               <MotionSection key="motion" />,
               <NotificationsSection key="notifications" />,
+              <InGameSection key="in-game" />,
               <AccountSection key="account" />,
             ]}
           />

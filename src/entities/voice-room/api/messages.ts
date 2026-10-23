@@ -5,6 +5,9 @@ import type { VoiceMessage } from "../model/types";
 import { FALLBACK_USERNAME } from "@/shared/config/limits";
 import { t } from "@/shared/i18n";
 
+/** Newest messages loaded per chat catch-up. */
+export const VOICE_MESSAGE_PAGE_SIZE = 100;
+
 export async function listMessages(roomId: string, limit = 80): Promise<VoiceMessage[]> {
   const { data, error } = await supabase
     .from(TABLE.voiceMessages)

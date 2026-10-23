@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "remined-companion",
+  "version": "${version}",
+  "name": "Remined Companion",
+  "description": "Remined launcher companion: voice HUD, notifications, keybindings and a settings screen. Reports game state to the launcher.",
+  "authors": ["Remined"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["dev.remined.companion.Companion"]
+  },
+  "depends": {
+    "fabricloader": ">=0.12"
+  },
+  "recommends": {
+    "fabric-api": "*"
+  }
+}

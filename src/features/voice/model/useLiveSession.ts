@@ -29,6 +29,7 @@ import { VoiceSession, type VoiceVideoTile } from "../lib/voiceSession";
 import { errorMessage } from "@/shared/lib/errors";
 import type { ToastFn } from "./types";
 import { MSG } from "@/shared/config/messages";
+import { LIVEKIT_LOCAL_WS_URL } from "@/shared/config/voice";
 
 /** Long enough to cover guest Relay/LiveKit reconnect after host opens LAN. */
 const REMOTE_LEAVE_GRACE_MS = 25_000;
@@ -60,7 +61,11 @@ export function useLiveSession({
   const sessionRef = useRef<VoiceSession | null>(null);
   const [status, setStatus] = useState("");
   const [muted, setMuted] = useState(false);
+  const mutedRef = useRef(false);
+  mutedRef.current = muted;
   const [deafened, setDeafened] = useState(false);
+  const deafenedRef = useRef(false);
+  deafenedRef.current = deafened;
   const [speaking, setSpeaking] = useState<Record<string, boolean>>({});
   const [volumes, setVolumes] = useState<Record<string, number>>({});
   const [videoTiles, setVideoTiles] = useState<VoiceVideoTile[]>([]);
@@ -126,6 +131,22 @@ export function useLiveSession({
     await voiceGuestDisconnect().catch(() => undefined);
     onRoomEndedRef.current?.(fresh?.status === "closed" ? "closed" : "missing");
     return null;
+  }, []);
+
+  /** Single mic-mute toggle for the toolbar and the in-game mute key. */
+  const toggleMute = useCallback(() => {
+    const next = !mutedRef.current;
+    mutedRef.current = next;
+    setMuted(next);
+    void sessionRef.current?.setMuted(next);
+  }, []);
+
+  /** Single deafen toggle for the toolbar and the in-game deafen key. */
+  const toggleDeafen = useCallback(() => {
+    const next = !deafenedRef.current;
+    deafenedRef.current = next;
+    setDeafened(next);
+    sessionRef.current?.setDeafened(next);
   }, []);
 
   const refreshVideo = useCallback(() => {
@@ -270,7 +291,7 @@ export function useLiveSession({
         const session = new VoiceSession({
           onParticipants: () => {
             setStateTick((t) => t + 1);
-            void listRoomMembers(liveRoom.id).then(setMembers);
+            void listRoomMembers(liveRoom.id).then(setMembers).catch(() => undefined);
           },
           onVideo: () => {
             refreshVideo();
@@ -362,7 +383,7 @@ export function useLiveSession({
           },
           onError: (m) => onToast(m, "err"),
         });
-        const wsUrl = (liveRoom.lkWsUrl || "ws://127.0.0.1:7880").replace(
+        const wsUrl = (liveRoom.lkWsUrl || LIVEKIT_LOCAL_WS_URL).replace(
           "ws://localhost:",
           "ws://127.0.0.1:",
         );
@@ -758,8 +779,10 @@ export function useLiveSession({
     setStatus,
     muted,
     setMuted,
+    toggleMute,
     deafened,
     setDeafened,
+    toggleDeafen,
     speaking,
     volumes,
     setVolumes,

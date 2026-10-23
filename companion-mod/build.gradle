@@ -1,32 +1,56 @@
+// Merged multi-version build. core = plain Java 8 (no Minecraft imports). mc1201, mc121, mc1212, mc1216, mc1219 and
+// mc12111 = Minecraft version families (Mojang mappings, remapped to intermediary). mc26 = Minecraft 26.x
+// (unobfuscated). Output: build/libs/remined-companion.jar.
 plugins {
-    id 'java'
+    id 'base'
+    id 'fabric-loom' version '1.19.3' apply false
+    id 'net.fabricmc.fabric-loom' version '1.19.3' apply false
 }
 
-group = 'dev.remined'
-version = '1.0.0'
+// Version families. Each family is compiled against its lowest version (the compile pin below) and checked against
+// every other version of the family with -PcheckMc=<version> (see README "Verify"). fabricApi maps every supported
+// MC version to the Fabric API build used for that check.
+ext.families = [
+    mc1201: ['1.20', '1.20.1', '1.20.2', '1.20.3', '1.20.4', '1.20.5', '1.20.6'],
+    mc121 : ['1.21', '1.21.1'],
+    mc1212: ['1.21.2', '1.21.3', '1.21.4', '1.21.5'],
+    mc1216: ['1.21.6', '1.21.7', '1.21.8'],
+    mc1219: ['1.21.9', '1.21.10'],
+    mc12111: ['1.21.11'],
+    mc26  : ['26.1', '26.1.1', '26.1.2', '26.2', '26.3'],
+]
+ext.fabricApi = [
+    '1.20'   : '0.83.0+1.20',    '1.20.1' : '0.92.9+1.20.1',  '1.20.2' : '0.91.6+1.20.2',
+    '1.20.3' : '0.91.1+1.20.3',  '1.20.4' : '0.97.3+1.20.4',  '1.20.5' : '0.97.8+1.20.5',
+    '1.20.6' : '0.100.8+1.20.6', '1.21'   : '0.102.0+1.21',   '1.21.1' : '0.116.17+1.21.1',
+    '1.21.2' : '0.106.1+1.21.2', '1.21.3' : '0.114.1+1.21.3', '1.21.4' : '0.119.4+1.21.4',
+    '1.21.5' : '0.128.2+1.21.5', '1.21.6' : '0.128.2+1.21.6', '1.21.7' : '0.129.0+1.21.7',
+    '1.21.8' : '0.136.1+1.21.8', '1.21.9' : '0.134.1+1.21.9', '1.21.10': '0.138.4+1.21.10',
+    '1.21.11': '0.141.6+1.21.11', '26.1'  : '0.144.3+26.1',   '26.1.1' : '0.145.4+26.1.1',
+    '26.1.2' : '0.155.3+26.1.2', '26.2'   : '0.161.0+26.2',    '26.3'   : '0.164.0+26.3',
+]
+ext.loaderVersion = '0.19.5'
+// Mod version follows the launcher version (package.json). core expands it into fabric.mod.json.
+ext.launcherVersion = new groovy.json.JsonSlurper().parse(file('../package.json')).version
 
-repositories {
-    maven { url = 'https://maven.fabricmc.net/' }
-    mavenCentral()
-}
-
-dependencies {
-    // API only (MappingResolver, ClientModInitializer, FabricLoader). No Minecraft, no Fabric API.
-    compileOnly('net.fabricmc:fabric-loader:0.14.25') { transitive = false }
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.2'
-}
-
-tasks.withType(JavaCompile).configureEach {
-    options.release = 8
-    options.encoding = 'UTF-8'
-}
-
-test {
-    useJUnitPlatform()
-}
-
-jar {
+tasks.register('merged', Jar) {
     archiveBaseName = 'remined-companion'
-    from('LICENSE') { into 'META-INF' }
+    destinationDirectory = layout.buildDirectory.dir('libs')
+    dependsOn ':core:jar', ':mc1201:remapJar', ':mc121:remapJar', ':mc1212:remapJar', ':mc1216:remapJar',
+        ':mc1219:remapJar', ':mc12111:remapJar', ':mc26:jar'
+    from(zipTree(project(':core').tasks.named('jar').flatMap { it.archiveFile }))
+    ['mc1201', 'mc121', 'mc1212', 'mc1216', 'mc1219', 'mc12111'].each { fam ->
+        from(zipTree(project(":${fam}").tasks.named('remapJar').flatMap { it.archiveFile })) {
+            exclude 'META-INF/MANIFEST.MF'
+        }
+    }
+    from(zipTree(project(':mc26').tasks.named('jar').flatMap { it.archiveFile })) {
+        exclude 'META-INF/MANIFEST.MF'
+    }
+    from(file('LICENSE')) { into 'META-INF' }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.named('assemble') {
+    dependsOn 'merged'
 }

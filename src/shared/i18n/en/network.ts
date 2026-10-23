@@ -8,6 +8,7 @@ export const network = {
       "Voice is live but Relay key is missing — wait a moment and open LAN again",
   },
   panel: {
+    relayLabel: "Relay",
     title: "Network Play",
     checking: "Checking",
     ready: "Ready",
@@ -55,6 +56,7 @@ export const network = {
     credsFailed: "Failed to fetch Remined Relay credentials",
     credsEmpty: "Remined Relay credentials response was empty",
     installFailed: "Failed to install Remined Relay (frpc)",
+    invalidPath: "Select an existing frpc binary file.",
   },
   toast: {
     checkPassed: "Relay check passed",

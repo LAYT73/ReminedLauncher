@@ -260,6 +260,7 @@ fn clear_to_menu(st: &mut GameLogStatus) {
 /// World/LAN state is sticky: we only demote to menu on explicit leave/disconnect
 /// lines. Bare `Stopping server` is ignored — mods spam it mid-session and that
 /// was flipping the tray to "In menu" while still in a world.
+#[cfg(test)]
 pub fn parse_game_log(text: &str) -> GameLogStatus {
     parse_game_log_ctx(text, &LogCtx::default())
 }
@@ -359,11 +360,6 @@ pub fn parse_game_log_ctx(text: &str, ctx: &LogCtx) -> GameLogStatus {
     }
     st.finalize(true);
     st
-}
-
-pub fn read_lan_port(log_path: &Path) -> Option<u16> {
-    let text = fs::read_to_string(log_path).ok()?;
-    parse_game_log(&text).lan_port
 }
 
 /// `host, port` / `'127.0.0.1', 25565` / junk around an IP → `host:port`.

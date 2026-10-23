@@ -153,7 +153,7 @@ export function AuthScreen() {
             type="button"
             className="btn-mc dim gate-offline-btn"
             disabled={busy}
-            onClick={() => void continueOffline()}
+            onClick={() => void continueOffline().catch(() => undefined)}
           >
             {t("auth.screen.continueOffline")}
           </button>

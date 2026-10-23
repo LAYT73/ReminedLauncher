@@ -37,4 +37,16 @@ export const TIMING = {
   /** Playbar slide in / out when entering or leaving a pack rail. */
   playbarSlide: 360,
   pageSafety: 2_000,
+  /** Voice room chat safety-net re-fetch. */
+  voiceChatPoll: 12_000,
+  /** Voice room closed-state check while a room is open. */
+  voiceRoomStatusPoll: 4_000,
+  /** Re-check of the host's Relay key while a guest joins. */
+  hostKeyPoll: 500,
+  /** Browser-offline grace before the app switches to offline mode. */
+  offlineGrace: 2_500,
+  /** Default online probe timeout. */
+  networkProbe: 2_500,
+  /** Presence activity change debounce. */
+  activityDebounce: 5_000,
 } as const;

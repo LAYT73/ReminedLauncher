@@ -1,7 +1,7 @@
 //! Network / Relay / LAN diagnostics — split into small chunk files.
 //!
 //! Dir: `<remined_root>/.remined/network/`
-//! Active: `current.log` (rotated when large or on `begin_chunk`)
+//! Active: `current.log` (rotated when large)
 //! Archives: `net-YYYYMMDD-HHMMSS.log` (oldest pruned; keeps last [`MAX_CHUNKS`])
 
 use crate::paths;
@@ -14,8 +14,6 @@ use tauri::AppHandle;
 const MAX_CHUNK_BYTES: u64 = 180_000; // ~180 KB — easy to read whole
 const MAX_CHUNKS: usize = 24;
 static LOCK: Mutex<()> = Mutex::new(());
-/// Last `read_lan` value we logged — suppress poll spam.
-static LAST_LAN: Mutex<Option<Option<u16>>> = Mutex::new(None);
 
 pub fn dir(app: &AppHandle) -> Result<PathBuf, String> {
     let root = paths::remined_root(app)?;
@@ -28,18 +26,6 @@ fn current_path(dir: &Path) -> PathBuf {
     dir.join("current.log")
 }
 
-/// Start a fresh chunk (call on host/join begin so each attempt is isolatable).
-pub fn begin_chunk(app: &AppHandle, label: &str) {
-    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let Ok(dir) = dir(app) else { return };
-    rotate_locked(&dir);
-    let _ = append_locked(
-        &dir,
-        "session",
-        &format!("—— chunk begin: {label} ——"),
-    );
-}
-
 pub fn append_ok(app: &AppHandle, source: &str, message: &str) {
     let _ = append(app, source, message);
 }
@@ -49,26 +35,6 @@ pub fn append(app: &AppHandle, source: &str, message: &str) -> Result<(), String
     let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     maybe_rotate_by_size_locked(&dir);
     append_locked(&dir, source, message)
-}
-
-/// Log Open-to-LAN poll only when the detected port changes.
-pub fn lan_poll(app: &AppHandle, pack_id: &str, port: Option<u16>) {
-    let changed = {
-        let mut prev = LAST_LAN.lock().unwrap_or_else(|e| e.into_inner());
-        if *prev == Some(port) {
-            false
-        } else {
-            *prev = Some(port);
-            true
-        }
-    };
-    if !changed {
-        return;
-    }
-    match port {
-        Some(p) => append_ok(app, "lan", &format!("pack={pack_id} port={p}")),
-        None => append_ok(app, "lan", &format!("pack={pack_id} port=- (closed/miss)")),
-    }
 }
 
 /// Tail of the active chunk (and previous archive if current is tiny).

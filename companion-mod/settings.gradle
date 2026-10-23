@@ -1,1 +1,8 @@
+pluginManagement {
+    repositories {
+        maven { url 'https://maven.fabricmc.net/' }
+        gradlePluginPortal()
+    }
+}
 rootProject.name = 'remined-companion'
+include 'core', 'mc1201', 'mc121', 'mc1212', 'mc1216', 'mc1219', 'mc12111', 'mc26'

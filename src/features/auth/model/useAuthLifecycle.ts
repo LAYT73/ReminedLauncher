@@ -7,6 +7,7 @@ import { applyTheme, DEFAULT_THEME } from "@/entities/theme";
 import { loadLocalProfile } from "@/entities/profile";
 import { useSessionStore } from "@/entities/session";
 import { resolveGate, startBoot } from "./session-actions";
+import { TIMING } from "@/shared/config/timings";
 
 /** Boot flow, Supabase auth subscription and the online/offline watcher. */
 export function useAuthLifecycle(): void {
@@ -16,7 +17,7 @@ export function useAuthLifecycle(): void {
       .then((p) => applyTheme(p.theme, p.theme_custom))
       .catch(() => applyTheme(DEFAULT_THEME));
 
-    void startBoot();
+    void startBoot().catch(() => undefined);
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
       // Boot already handles getSession; INITIAL_SESSION would race / re-enter cloud.
@@ -56,7 +57,7 @@ export function useAuthLifecycle(): void {
             cur.setOfflineMode(true);
             toast(MSG.boot.connectionLost, "err");
           }
-        }, 2500);
+        }, TIMING.offlineGrace);
         return;
       }
       clearOfflineTimer();

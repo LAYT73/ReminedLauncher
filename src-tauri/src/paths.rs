@@ -77,3 +77,18 @@ pub fn pack_dir(root: &Path, pack_id: &str) -> PathBuf {
     }
     under_packs
 }
+
+/// Write `contents` to `path` via a pid-suffixed temp file and rename, so readers
+/// never observe a half-written file. The temp file is removed on failure.
+pub fn write_atomic(path: &Path, contents: impl AsRef<[u8]>) -> std::io::Result<()> {
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let tmp = path.with_file_name(format!("{name}.tmp-{}", std::process::id()));
+    let result = std::fs::write(&tmp, contents).and_then(|_| std::fs::rename(&tmp, path));
+    if result.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    result
+}

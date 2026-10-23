@@ -23,7 +23,7 @@ function commitHex(
 ) {
   const trimmed = raw.trim();
   setDraftHex(trimmed);
-  if (parseHex(trimmed)) void setCustomTheme({ [field]: trimmed });
+  if (parseHex(trimmed)) void setCustomTheme({ [field]: trimmed }).catch(() => undefined);
 }
 
 export function ThemeSection() {
@@ -47,26 +47,26 @@ export function ThemeSection() {
 
   function pickPreset(id: (typeof THEME_PRESETS)[number]["id"]) {
     setEditorOpen(false);
-    void setTheme(id);
+    void setTheme(id).catch(() => undefined);
   }
 
   function toggleCustomEditor() {
     if (customActive && editorOpen) {
       setEditorOpen(false);
-      void setTheme(DEFAULT_THEME);
+      void setTheme(DEFAULT_THEME).catch(() => undefined);
       return;
     }
     const next = custom ?? DEFAULT_CUSTOM_THEME;
     setAccentHex(next.accent);
     setSurfaceHex(next.surface);
     setEditorOpen(true);
-    void setCustomTheme(next);
+    void setCustomTheme(next).catch(() => undefined);
   }
 
   function setMode(mode: "dark" | "light") {
     const surface = MODE_SURFACE[mode];
     setSurfaceHex(surface);
-    void setCustomTheme({ mode, surface });
+    void setCustomTheme({ mode, surface }).catch(() => undefined);
   }
 
   return (
@@ -151,7 +151,7 @@ export function ThemeSection() {
                 value={draft.accent}
                 onChange={(e) => {
                   setAccentHex(e.target.value);
-                  void setCustomTheme({ accent: e.target.value });
+                  void setCustomTheme({ accent: e.target.value }).catch(() => undefined);
                 }}
                 aria-label={t("settings.theme.accentColor")}
               />
@@ -178,7 +178,7 @@ export function ThemeSection() {
                 value={draft.surface}
                 onChange={(e) => {
                   setSurfaceHex(e.target.value);
-                  void setCustomTheme({ surface: e.target.value });
+                  void setCustomTheme({ surface: e.target.value }).catch(() => undefined);
                 }}
                 aria-label={t("settings.theme.surfaceColor")}
               />

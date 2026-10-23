@@ -3,6 +3,7 @@ import { supabase } from "@/shared/api/supabase";
 import { TABLE } from "@/shared/config/supabase";
 import type { VoiceRoom, VoiceRoomStatus } from "../model/types";
 import { t } from "@/shared/i18n";
+import { LIVEKIT_LOCAL_WS_URL, LIVEKIT_TCP_PORT } from "@/shared/config/voice";
 
 type RoomRow = {
   id: string;
@@ -24,8 +25,8 @@ function mapRoom(r: RoomRow): VoiceRoom {
     title: r.title,
     status: r.status,
     relayShareCode: r.relay_share_code,
-    lkWsUrl: r.lk_ws_url || "ws://127.0.0.1:7880",
-    lkTcpPort: r.lk_tcp_port ?? 7880,
+    lkWsUrl: r.lk_ws_url || LIVEKIT_LOCAL_WS_URL,
+    lkTcpPort: r.lk_tcp_port ?? LIVEKIT_TCP_PORT,
     lkUdpStart: r.lk_udp_start ?? 7882,
     lkUdpEnd: r.lk_udp_end ?? 7901,
     createdAt: r.created_at,

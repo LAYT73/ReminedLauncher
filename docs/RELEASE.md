@@ -1,6 +1,6 @@
 # Release procedure
 
-The current release is `1.0.1`.
+The current release is `1.0.2`.
 
 ## Version surface
 
@@ -80,3 +80,8 @@ git push origin main vX.Y.Z
 
 The workflow is responsible for packaging and updater metadata. Verify the
 GitHub Release assets and updater JSON after the workflow completes.
+
+The Remined Companion jar is not committed. The `mod` job builds it from
+`companion-mod/` (JDK 25) and uploads it as an artifact, and the release jobs
+download it into `src-tauri/resources/` before building. The mod version follows
+`package.json`. For local builds run `npm run mod:build`.

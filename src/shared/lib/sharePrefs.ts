@@ -1,7 +1,8 @@
 import { create } from "zustand";
+import { STORAGE_KEY } from "@/shared/config/storage-keys";
 
 /** Local per-device privacy pref: share in-game activity (dimension, pause...) with friends. */
-const KEY = "remined.shareActivity";
+const KEY = STORAGE_KEY.shareActivity;
 
 function load(): boolean {
   try {

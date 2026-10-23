@@ -58,8 +58,6 @@ export const RAIL_TABS: Record<Rail, readonly Tab[]> = {
   [RAIL.profile]: [],
 };
 
-export const ROUTE_ROOT = "/";
-
 export function isPackRail(rail: Rail): rail is PackRail {
   return (PACK_RAILS as readonly Rail[]).includes(rail);
 }

@@ -81,7 +81,6 @@ export const PixelTrashIcon = make("PixelTrashIcon");
 export const PixelCopyIcon = make("PixelCopyIcon");
 export const PixelSkinIcon = make("PixelSkinIcon");
 /** @deprecated use PixelSkinIcon */
-export const PixelShirtIcon = PixelSkinIcon;
 export const PixelCapeIcon = make("PixelCapeIcon");
 export const PixelSignOutIcon = make("PixelSignOutIcon");
 export const PixelLeaveIcon = make("PixelLeaveIcon");

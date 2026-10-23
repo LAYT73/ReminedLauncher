@@ -52,6 +52,11 @@ export const settings: Dict<typeof en> = {
     surfaceColor: "Цвет фона",
     surfaceHex: "HEX фона",
   },
+  inGame: {
+    title: "В игре",
+    notifications: "Уведомления в игре",
+    voiceHud: "HUD «кто говорит» (голосовой чат)",
+  },
   notifications: {
     title: "Уведомления",
     friendAlerts: "Оповещения о друзьях",

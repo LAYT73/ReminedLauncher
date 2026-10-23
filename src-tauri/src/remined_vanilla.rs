@@ -1022,15 +1022,6 @@ async fn fetch_modrinth_version_by_id(
         .map_err(|e| e.to_string())
 }
 
-async fn download_modrinth_version_id(
-    client: &reqwest::Client,
-    version_id: &str,
-    mods_dir: &Path,
-) -> Result<String, String> {
-    let ver = fetch_modrinth_version_by_id(client, version_id).await?;
-    download_modrinth_version_file(client, &ver, mods_dir).await
-}
-
 fn skip_auto_dep_project(project: &str) -> bool {
     matches!(
         project,

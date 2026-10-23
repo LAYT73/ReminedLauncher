@@ -177,7 +177,6 @@ export const voice: Dict<typeof en> = {
     reconnectFailed: "Не удалось переподключить голос: {err}",
     cameraUnavailable: "Камера недоступна: {err}",
     screenUnavailable: "Показ экрана недоступен: {err}",
-    pttUnavailable: "Клавиша рации {key} недоступна: {err}",
   },
 
   errors: {

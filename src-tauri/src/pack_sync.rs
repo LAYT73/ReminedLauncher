@@ -137,18 +137,6 @@ pub async fn fetch_release(pack_id: &str) -> Result<PackRelease, String> {
         .ok_or_else(|| crate::i18n::trf("pack.not_in_catalog", &[("id", &pack_id)]))
 }
 
-pub async fn default_pack_id() -> Result<String, String> {
-    let catalog = fetch_catalog().await?;
-    if let Some(p) = catalog.packs.iter().find(|p| p.is_default) {
-        return Ok(p.id.clone());
-    }
-    catalog
-        .packs
-        .first()
-        .map(|p| p.id.clone())
-        .ok_or_else(|| crate::i18n::tr("pack.catalog_empty").into())
-}
-
 fn local_version_file(dir: &Path) -> PathBuf {
     dir.join(".remined-pack-version")
 }
@@ -338,7 +326,7 @@ pub async fn sync_pack(app: &AppHandle, root: &Path, pack_id: &str) -> Result<Pa
                 kind: None,
             };
             instance::write_meta(&dest, &meta)?;
-            fs::write(local_version_file(&dest), &release.version).map_err(|e| e.to_string())?;
+            crate::paths::write_atomic(&local_version_file(&dest), &release.version).map_err(|e| e.to_string())?;
             progress::emit(
                 app,
                 "pack",
@@ -415,7 +403,7 @@ pub async fn sync_pack(app: &AppHandle, root: &Path, pack_id: &str) -> Result<Pa
         kind: None,
     };
     instance::write_meta(&dest, &meta)?;
-    fs::write(local_version_file(&dest), &release.version).map_err(|e| e.to_string())?;
+    crate::paths::write_atomic(&local_version_file(&dest), &release.version).map_err(|e| e.to_string())?;
     let _ = fs::remove_file(&zip_path);
 
     // Validate discovery works

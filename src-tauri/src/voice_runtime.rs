@@ -7,7 +7,7 @@ use chrono::{Duration, Utc};
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -746,11 +746,4 @@ pub fn read_child_alive(state: &VoiceRuntimeState) -> bool {
         Some(child) => matches!(child.try_wait(), Ok(None)),
         None => false,
     }
-}
-
-/// Touch unused import for Read trait in some toolchains.
-#[allow(dead_code)]
-fn _read_touch(mut r: impl Read) {
-    let mut b = [0u8; 1];
-    let _ = r.read(&mut b);
 }

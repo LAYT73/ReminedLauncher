@@ -30,7 +30,9 @@ export function JavaSection() {
           id="ram"
           value={String(profile.ram_mb)}
           onChange={(e) =>
-            void persist({ ...profile, ram_mb: Number(e.target.value) })
+            void persist({ ...profile, ram_mb: Number(e.target.value) }).catch(
+              () => undefined,
+            )
           }
         >
           {RAM_OPTIONS_GB.map((gb) => (
@@ -62,16 +64,16 @@ export function JavaSection() {
               })
             }
             onBlur={() => {
-              void persist(profile);
+              void persist(profile).catch(() => undefined);
               void refreshJava(profile.java_path);
             }}
           />
-          <FolderIconBtn title={t("settings.java.browse")} onClick={() => void pickJava()} />
+          <FolderIconBtn title={t("settings.java.browse")} onClick={() => void pickJava().catch(() => undefined)} />
           {profile.java_path ? (
             <button
               type="button"
               className="btn-mc dim"
-              onClick={() => void clearJava()}
+              onClick={() => void clearJava().catch(() => undefined)}
             >
               {t("settings.java.auto")}
             </button>
@@ -102,7 +104,7 @@ export function JavaSection() {
           onChange={(e) =>
             setProfile({ ...profile, jvm_args: e.target.value })
           }
-          onBlur={() => void persist(profile)}
+          onBlur={() => void persist(profile).catch(() => undefined)}
         />
         <p className="field-hint">
           {t("settings.java.jvmHint")}

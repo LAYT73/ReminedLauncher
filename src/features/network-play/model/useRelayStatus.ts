@@ -78,7 +78,8 @@ export function useRelayStatus(onToast: (message: string) => void) {
       await refresh();
       onToast(path ? t("network.toast.pathSaved") : t("network.toast.autoDetect"));
     } catch (err) {
-      setError(errorMessage(err));
+      const msg = errorMessage(err);
+      setError(msg === "frpc_invalid_path" ? t("network.relay.invalidPath") : msg);
     } finally {
       setBusy(false);
     }

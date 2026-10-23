@@ -29,7 +29,6 @@ export const CMD = {
   launchPack: "launch_pack",
   gameLogStatus: "game_log_status",
   latestCrashReport: "latest_crash_report",
-  readLanPort: "read_lan_port",
   // versions
   listVanillaVersions: "list_vanilla_versions",
   installVanillaVersion: "install_vanilla_version",
@@ -45,6 +44,9 @@ export const CMD = {
   netLogTail: "net_log_tail",
   netLogList: "net_log_list",
   showFriendToast: "show_friend_toast",
+  // in-game companion bridge (localhost socket to the Fabric mod)
+  gameBridgeSend: "game_bridge_send",
+  gameBridgeStatus: "game_bridge_status",
   // voice
   voiceLogPath: "voice_log_path",
   voiceLogAppend: "voice_log_append",

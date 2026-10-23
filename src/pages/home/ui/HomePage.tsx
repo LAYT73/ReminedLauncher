@@ -34,7 +34,7 @@ export function HomePage() {
 
   function openFeature(packId: string) {
     const { profile: current, persist } = useProfileStore.getState();
-    void persist({ ...current, selected_pack: packId });
+    void persist({ ...current, selected_pack: packId }).catch(() => undefined);
     transitionTo(routeFor(RAIL.java));
   }
 

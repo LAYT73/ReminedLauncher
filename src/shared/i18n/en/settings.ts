@@ -49,6 +49,11 @@ export const settings = {
     surfaceColor: "Surface color",
     surfaceHex: "Surface hex",
   },
+  inGame: {
+    title: "In-game",
+    notifications: "In-game notifications",
+    voiceHud: "Voice HUD (who is speaking)",
+  },
   notifications: {
     title: "Notifications",
     friendAlerts: "Friend alerts",

@@ -623,9 +623,8 @@
   line-height: 1.4;
 }
 
-/* ---------- Voice: member grid, per-user volume, video, PTT ---------- */
-.voice-icon-btn.voice-text-btn,
-.voice-icon-btn.voice-ptt-btn {
+/* ---------- Voice: member grid, per-user volume, video ---------- */
+.voice-icon-btn.voice-text-btn {
   width: auto;
   min-width: 44px;
   padding: 0 10px;
@@ -649,21 +648,6 @@
   50% {
     filter: brightness(1.12);
   }
-}
-
-.voice-icon-btn.voice-ptt-btn.is-talking {
-  filter: brightness(1.25);
-  box-shadow: var(--bevel-btn), 0 0 0 2px color-mix(in srgb, var(--mc-green-hi) 80%, transparent);
-}
-
-.voice-ptt-key {
-  height: 44px;
-  box-sizing: border-box;
-  padding: 0 6px;
-  border: 3px solid #000;
-  background: var(--bg-input);
-  color: var(--text-on-stone);
-  font-family: inherit;
 }
 
 .voice-tile-grid {

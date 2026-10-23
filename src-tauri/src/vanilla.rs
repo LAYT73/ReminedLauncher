@@ -186,7 +186,7 @@ pub async fn install_version(
 
     let version_json_name = format!("{version_id}.json");
     let version_path = dest.join(&version_json_name);
-    fs::write(&version_path, &version_bytes).map_err(|e| e.to_string())?;
+    crate::paths::write_atomic(&version_path, &version_bytes).map_err(|e| e.to_string())?;
 
     let client_jar_name = format!("{version_id}.jar");
     let client_jar_path = dest.join(&client_jar_name);

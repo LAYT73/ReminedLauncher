@@ -8,12 +8,6 @@ export interface PluralForms {
   other: string;
 }
 
-/** English plural forms only need one/other; ru must supply all four. */
-export interface EnPluralForms {
-  one: string;
-  other: string;
-}
-
 /**
  * Shape a translation must mirror: same keys, strings stay strings, plural
  * objects become full PluralForms. TS errors on missing/extra keys.

@@ -91,7 +91,7 @@ export function selectInstalledPack(pack: Pack): void {
   }
   writeLastPlayed({ java: pack.id });
   const { profile, persist } = useProfileStore.getState();
-  void persist({ ...profile, selected_pack: pack.id });
+  void persist({ ...profile, selected_pack: pack.id }).catch(() => undefined);
   navigateTo(routeFor(RAIL.java));
 }
 

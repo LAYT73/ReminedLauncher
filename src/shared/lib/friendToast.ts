@@ -1,9 +1,8 @@
 import { call } from "@/shared/api/invoke";
 import { CMD } from "@/shared/config/commands";
 import type { Locale } from "@/shared/i18n";
+import { STORAGE_KEY } from "@/shared/config/storage-keys";
 
-export const FRIEND_TOAST_LABEL = "friend-toast";
-export const FRIEND_TOAST_STORAGE_KEY = "remined.friend-toast";
 /** Query param carrying the toast payload (WebView2 may not share localStorage). */
 export const FRIEND_TOAST_QUERY = "toast";
 
@@ -62,19 +61,6 @@ export function decodeToastPayload(encoded: string): FriendToastPayload | null {
   }
 }
 
-/** Persist payload for the overlay window (separate webview can't share React state). */
-export function stashFriendToast(payload: FriendToastPayload): void {
-  memoryPayload = payload;
-  try {
-    localStorage.setItem(
-      FRIEND_TOAST_STORAGE_KEY,
-      JSON.stringify({ ...payload, at: Date.now() }),
-    );
-  } catch {
-    /* ignore quota */
-  }
-}
-
 export function takeFriendToast(): FriendToastPayload | null {
   if (typeof window !== "undefined") {
     const fromUrl = new URLSearchParams(window.location.search).get(
@@ -90,8 +76,8 @@ export function takeFriendToast(): FriendToastPayload | null {
   }
   if (memoryPayload?.title) return memoryPayload;
   try {
-    const raw = localStorage.getItem(FRIEND_TOAST_STORAGE_KEY);
-    localStorage.removeItem(FRIEND_TOAST_STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY.friendToast);
+    localStorage.removeItem(STORAGE_KEY.friendToast);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as FriendToastPayload & { at?: number };
     if (!parsed?.title) return null;

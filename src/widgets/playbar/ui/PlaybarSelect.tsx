@@ -48,7 +48,7 @@ function ReminePackSelect() {
       onChange={(id) => {
         writeLastPlayed({ java: id });
         const { profile, persist } = useProfileStore.getState();
-        void persist({ ...profile, selected_pack: id });
+        void persist({ ...profile, selected_pack: id }).catch(() => undefined);
       }}
       disabled={showProgress}
     />

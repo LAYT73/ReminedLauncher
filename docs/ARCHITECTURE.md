@@ -1,6 +1,6 @@
 # Architecture
 
-**Release:** `1.0.1`
+**Release:** `1.0.2`
 **Stack:** Tauri 2, Rust, React 19, TypeScript, Vite, Supabase
 
 This document describes the implementation currently in the repository. The
@@ -20,7 +20,7 @@ Tauri commands
   ├─ Java runtime and asset installation
   ├─ Remined Relay
   ├─ LiveKit runtime
-  ├─ Companion jar install + gamewatch activity
+  ├─ Companion jar install, gamewatch activity + game bridge
   └─ diagnostics, tray and updater integration
 ```
 
@@ -91,6 +91,7 @@ The Rust application is under `src-tauri/src/`.
 | `lib.rs` | Tauri setup, command registration and shared state |
 | `i18n.rs` | Native locale strings for command errors |
 | `runtime.rs`, `gamewatch.rs` | Minecraft launch, process state, log + Companion activity |
+| `game_bridge.rs` | Localhost socket to the Companion mod (voice HUD, notifications, keys) |
 | `java_runtime.rs` | Java discovery and runtime downloads |
 | `instance.rs`, `paths.rs`, `config.rs` | Install roots and local configuration |
 | `pack_sync.rs`, `vanilla.rs` | Cloud packs and official vanilla versions |
@@ -106,6 +107,13 @@ Bundled Companion jar: `src-tauri/resources/remined-companion.jar` (source under
 `companion-mod/`). On Fabric launches the launcher installs it into the instance
 `mods/` folder. The mod writes `<gameDir>/.remined/state.json`; `gamewatch`
 merges that with `latest.log` into friend-visible activity codes.
+
+The mod also writes `<gameDir>/.remined/bridge.json` (`port` + `token`) and listens
+on `127.0.0.1`. `game_bridge` connects with the token and exchanges line-delimited
+JSON: the launcher pushes voice room state, member heads and notifications; the
+mod sends mic/deafen/join key actions. Both files are cleared on every launch.
+The jar is git-ignored and built with `npm run mod:build` (JDK 25) or by the
+release workflow.
 
 The native data root is platform-specific. On macOS:
 
@@ -162,6 +170,7 @@ may be attached to the same relay session without restarting LiveKit.
 | Voice and relay | `<root>/.remined/voice/voice.log` |
 | Game state | `<instance>/logs/latest.log` |
 | Companion activity | `<instance>/.remined/state.json` |
+| Companion bridge | `<instance>/.remined/bridge.json` |
 | Installed mod inventory | `<instance>/mods-manifest.json` |
 
 ## Verification

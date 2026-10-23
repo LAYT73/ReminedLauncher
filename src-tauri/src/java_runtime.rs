@@ -53,11 +53,6 @@ fn parse_java_major(text: &str) -> Option<u32> {
     })
 }
 
-#[allow(dead_code)]
-pub fn probe_java_bin(java: &Path) -> Option<JavaInfo> {
-    probe_java_bin_for(java, None)
-}
-
 fn probe_java_bin_for(java: &Path, want_major: Option<u32>) -> Option<JavaInfo> {
     if !java.is_file() {
         return None;

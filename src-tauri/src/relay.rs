@@ -178,7 +178,17 @@ pub fn get_custom_path(app: &AppHandle) -> Option<String> {
 pub fn set_custom_path(app: &AppHandle, path: Option<String>) -> Result<(), String> {
     let file = custom_path_file(app)?;
     match path.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
-        Some(p) => fs::write(&file, format!("{p}\n")).map_err(|e| e.to_string()),
+        Some(p) => {
+            let src = PathBuf::from(&p);
+            let name_ok = src
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.to_ascii_lowercase().starts_with("frpc"));
+            if !src.is_file() || !name_ok {
+                return Err("frpc_invalid_path".into());
+            }
+            paths::write_atomic(&file, format!("{p}\n")).map_err(|e| e.to_string())
+        }
         None => {
             if file.exists() {
                 fs::remove_file(&file).map_err(|e| e.to_string())?;
@@ -485,9 +495,9 @@ localPort = {p2}
         port = c.port,
         token = c.token,
         sk = spec.sk,
-        n0 = spec.proxy_name("lk7880"),
-        n1 = spec.proxy_name("lk7881"),
-        n2 = spec.proxy_name("lk7882"),
+        n0 = spec.proxy_name(&format!("lk{LK_TCP_PORT}")),
+        n1 = spec.proxy_name(&format!("lk{LK_RTC_TCP_PORT}")),
+        n2 = spec.proxy_name(&format!("lk{LK_UDP_MUX}")),
         p0 = LK_TCP_PORT,
         p1 = LK_RTC_TCP_PORT,
         p2 = LK_UDP_MUX,
@@ -507,7 +517,7 @@ localPort = {lan}
             lan = lan,
         ));
     }
-    fs::write(path, body).map_err(|e| e.to_string())
+    paths::write_atomic(path, body).map_err(|e| e.to_string())
 }
 
 fn write_lan_host_toml(path: &Path, spec: &SessionSpec, lan: u16) -> Result<(), String> {
@@ -533,7 +543,7 @@ localPort = {lan}
         sk = spec.sk,
         lan = lan,
     );
-    fs::write(path, body).map_err(|e| e.to_string())
+    paths::write_atomic(path, body).map_err(|e| e.to_string())
 }
 
 fn write_lan_visitor_toml(path: &Path, spec: &SessionSpec, lan: u16) -> Result<(), String> {
@@ -560,7 +570,7 @@ bindPort = {lan}
         sk = spec.sk,
         lan = lan,
     );
-    fs::write(path, body).map_err(|e| e.to_string())
+    paths::write_atomic(path, body).map_err(|e| e.to_string())
 }
 
 fn write_visitor_toml(path: &Path, spec: &SessionSpec) -> Result<(), String> {
@@ -600,9 +610,9 @@ bindPort = {p2}
         port = c.port,
         token = c.token,
         sk = spec.sk,
-        n0 = spec.proxy_name("lk7880"),
-        n1 = spec.proxy_name("lk7881"),
-        n2 = spec.proxy_name("lk7882"),
+        n0 = spec.proxy_name(&format!("lk{LK_TCP_PORT}")),
+        n1 = spec.proxy_name(&format!("lk{LK_RTC_TCP_PORT}")),
+        n2 = spec.proxy_name(&format!("lk{LK_UDP_MUX}")),
         p0 = LK_TCP_PORT,
         p1 = LK_RTC_TCP_PORT,
         p2 = LK_UDP_MUX,
@@ -623,7 +633,7 @@ bindPort = {lan}
             lan = lan,
         ));
     }
-    fs::write(path, body).map_err(|e| e.to_string())
+    paths::write_atomic(path, body).map_err(|e| e.to_string())
 }
 
 fn spawn_frpc(bin: &Path, config: &Path) -> Result<Child, String> {
@@ -661,10 +671,6 @@ fn reap_host_child(state: &RelayState) {
 
 pub fn current_host_key(state: &RelayState) -> Option<String> {
     state.lock().ok()?.host_key.clone()
-}
-
-pub fn host_lan_port(state: &RelayState) -> Option<u16> {
-    state.lock().ok()?.host_lan_port
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -867,10 +873,6 @@ fn read_child_stderr(child: &mut Child) -> String {
         let _ = err.read_to_string(&mut buf);
     }
     buf.trim().chars().take(400).collect()
-}
-
-pub fn start_voice_host(app: &AppHandle, state: &RelayState) -> Result<String, String> {
-    ensure_shared_host(app, state, None)
 }
 
 pub fn stop_host(app: &AppHandle, state: &RelayState) {
@@ -1085,22 +1087,3 @@ fn port_open(port: u16) -> bool {
     TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_ok()
 }
 
-/// Legacy name — opens frp releases (frpc auto-downloads on Check).
-pub const DOWNLOAD_URL: &str = "https://github.com/fatedier/frp/releases";
-
-/// Kept for call sites that built Relay CLI port args; unused by FRP host.
-pub fn voice_port_args() -> Vec<String> {
-    vec![
-        format!("{LK_TCP_PORT}/tcp"),
-        format!("{LK_RTC_TCP_PORT}/tcp"),
-        format!("{LK_UDP_MUX}/udp"),
-    ]
-}
-
-pub fn shared_port_args(lan_port: Option<u16>) -> Vec<String> {
-    let mut args = voice_port_args();
-    if let Some(port) = lan_port.filter(|p| *p > 0) {
-        args.push(format!("{port}/tcp"));
-    }
-    args
-}

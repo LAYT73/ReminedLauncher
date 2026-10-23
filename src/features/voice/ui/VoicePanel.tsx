@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { t, useT } from "@/shared/i18n";
+import { useGameBridgeVoice } from "../model/useGameBridgeVoice";
 import { useLiveSession } from "../model/useLiveSession";
 import { useRoomData } from "../model/useRoomData";
 import { useRuntimeModal } from "../model/useRuntimeModal";
@@ -46,6 +47,18 @@ export function VoicePanel({
       const id = activeRoomIdRef.current;
       if (id) void kickRef.current(id);
     },
+  });
+  useGameBridgeVoice({
+    userId,
+    room: room.active,
+    status: live.status,
+    speaking: live.speaking,
+    members: room.members,
+    muted: live.muted,
+    deafened: live.deafened,
+    sessionRef: live.sessionRef,
+    toggleMute: live.toggleMute,
+    toggleDeafen: live.toggleDeafen,
   });
   const actions = useVoiceActions({
     userId,
@@ -135,9 +148,9 @@ export function VoicePanel({
         volumes={live.volumes}
         setVolumes={live.setVolumes}
         muted={live.muted}
-        setMuted={live.setMuted}
+        toggleMute={live.toggleMute}
         deafened={live.deafened}
-        setDeafened={live.setDeafened}
+        toggleDeafen={live.toggleDeafen}
         camOn={live.camOn}
         screenOn={live.screenOn}
         needsAudioUnlock={live.needsAudioUnlock}

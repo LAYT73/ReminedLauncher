@@ -4,4 +4,8 @@ export const EVENT = {
   progress: "remined-progress",
   /** Voice runtime (LiveKit + Remined Relay) download progress. */
   voiceRuntimeProgress: "voice-runtime-progress",
+  /** In-game companion bridge: `{ t, ... }` JSON lines from the mod. */
+  gameBridge: "game-bridge",
+  /** In-game companion bridge connection: `{ connected }`. */
+  gameBridgeStatus: "game-bridge-status",
 } as const;

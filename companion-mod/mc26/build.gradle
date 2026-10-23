@@ -1,0 +1,25 @@
+plugins {
+    id 'net.fabricmc.fabric-loom'
+}
+
+repositories {
+    mavenCentral()
+}
+
+// No mappings: 26.x ships official Mojang names. One jar serves 26.1 to 26.3: the direct members used were checked
+// against those jars; members that moved in 26.2 (screen, HUD visibility) are reached by reflection. Compiled
+// against the lowest version (26.1) unless -PcheckMc=<version> names another member of this family (verification).
+def checkMc = findProperty('checkMc')
+def target = checkMc != null && rootProject.ext.families.mc26.contains(checkMc) ? checkMc : rootProject.ext.families.mc26[0]
+
+dependencies {
+    minecraft "com.mojang:minecraft:${target}"
+    implementation "net.fabricmc:fabric-loader:${rootProject.ext.loaderVersion}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${rootProject.ext.fabricApi[target]}"
+    implementation project(':core')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 25
+    options.encoding = 'UTF-8'
+}

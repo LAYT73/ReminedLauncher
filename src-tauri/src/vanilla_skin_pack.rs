@@ -4,7 +4,7 @@
 use crate::runtime::offline_player_uuid;
 use serde_json::{json, Value};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub const PACK_DIR_NAME: &str = "ReminedSkin";
 const PACK_OPTIONS_ID: &str = "file/ReminedSkin";
@@ -302,7 +302,3 @@ pub fn pack_format_for_version(version_id: &str) -> u32 {
     }
 }
 
-#[allow(dead_code)]
-pub fn pack_path(instance: &Path) -> PathBuf {
-    instance.join("resourcepacks").join(PACK_DIR_NAME)
-}

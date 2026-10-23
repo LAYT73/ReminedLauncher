@@ -124,6 +124,7 @@ export function VoiceDevicesModal({
     setLoading(true);
     void listAudioDevices()
       .then(setDevices)
+      .catch(() => setDevices({ inputs: [], outputs: [], cams: [] }))
       .finally(() => setLoading(false));
   }, [open, micId, outputId, camId]);
 

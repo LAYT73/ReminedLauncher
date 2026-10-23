@@ -118,7 +118,6 @@ export function encodeRelayShareCode(key: string): string {
   const k = key.trim();
   if (!k) return k;
   if (k.toLowerCase().startsWith(RELAY_SHARE_PREFIX)) return k;
-  if (k.startsWith("rmd1_")) return `${RELAY_SHARE_PREFIX}${k}`;
   return `${RELAY_SHARE_PREFIX}${k}`;
 }
 

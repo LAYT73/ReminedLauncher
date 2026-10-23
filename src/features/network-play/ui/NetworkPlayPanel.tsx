@@ -118,7 +118,7 @@ export function NetworkPlayPanel({
       <div className={embedded ? "network-embedded-badges" : "page-title-row"}>
         {embedded ? null : <h2 className="page-title">{t("network.panel.title")}</h2>}
         <div className="network-status-badges" aria-live="polite">
-          <StatusBadge label="Relay" value={relayValue} tone={relayTone} />
+          <StatusBadge label={t("network.panel.relayLabel")} value={relayValue} tone={relayTone} />
         </div>
       </div>
 

@@ -1003,6 +1003,7 @@ fn install_companion_mod(instance: &Path, version: &Value) {
         return;
     }
     let _ = fs::remove_file(instance.join(".remined").join("state.json"));
+    let _ = fs::remove_file(instance.join(".remined").join("bridge.json"));
     let mods = instance.join("mods");
     if fs::create_dir_all(&mods).is_err() {
         return;
@@ -1011,10 +1012,7 @@ fn install_companion_mod(instance: &Path, version: &Value) {
     if fs::read(&dest).map(|b| b == COMPANION_JAR).unwrap_or(false) {
         return;
     }
-    let tmp = mods.join("remined-companion.jar.tmp");
-    if fs::write(&tmp, COMPANION_JAR).is_ok() && fs::rename(&tmp, &dest).is_err() {
-        let _ = fs::remove_file(&tmp);
-    }
+    let _ = crate::paths::write_atomic(&dest, COMPANION_JAR);
 }
 
 /// Prepare (if needed) then spawn the game process.

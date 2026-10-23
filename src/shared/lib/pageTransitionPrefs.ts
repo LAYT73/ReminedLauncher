@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { STORAGE_KEY } from "@/shared/config/storage-keys";
 
 /** Local per-device UI preference for the page tile wipe (not synced). */
 export type PageTransitionSpeed = "slow" | "normal" | "fast";
@@ -21,7 +22,7 @@ export const PAGE_TRANSITION_SPEED_MULT: Record<PageTransitionSpeed, number> = {
   fast: 0.6,
 };
 
-const KEY = "remined.pageTransition";
+const KEY = STORAGE_KEY.pageTransition;
 const DEFAULTS: PageTransitionPrefs = { enabled: true, speed: "normal" };
 
 function load(): PageTransitionPrefs {

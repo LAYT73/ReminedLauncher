@@ -1,4 +1,3 @@
-import type { VoiceSession } from "../lib/voiceSession";
 import {
   CamIcon,
   HearIcon,
@@ -12,14 +11,13 @@ import { MSG } from "@/shared/config/messages";
 import { PixelGearIcon } from "@/shared/ui/PixelIcons";
 
 type Props = {
-  session: VoiceSession | null;
   isHost: boolean;
   busy: boolean;
   lobbyReady: boolean;
   muted: boolean;
-  setMuted: (v: boolean) => void;
+  toggleMute: () => void;
   deafened: boolean;
-  setDeafened: (v: boolean) => void;
+  toggleDeafen: () => void;
   camOn: boolean;
   screenOn: boolean;
   needsAudioUnlock: boolean;
@@ -33,14 +31,13 @@ type Props = {
 
 /** Mic / deafen / camera / share / invite / devices / leave — single row. */
 export function VoiceToolbar({
-  session,
   isHost,
   busy,
   lobbyReady,
   muted,
-  setMuted,
+  toggleMute,
   deafened,
-  setDeafened,
+  toggleDeafen,
   camOn,
   screenOn,
   needsAudioUnlock,
@@ -64,11 +61,7 @@ export function VoiceToolbar({
         aria-pressed={!muted}
         title={muted ? MSG.voice.unmute : MSG.voice.mute}
         aria-label={muted ? MSG.voice.unmute : MSG.voice.mute}
-        onClick={() => {
-          const next = !muted;
-          setMuted(next);
-          void session?.setMuted(next);
-        }}
+        onClick={toggleMute}
       >
         <MicIcon slashed={muted} />
       </button>
@@ -78,11 +71,7 @@ export function VoiceToolbar({
         aria-pressed={!deafened}
         title={deafened ? t("voice.undeafen") : t("voice.deafen")}
         aria-label={deafened ? t("voice.undeafen") : t("voice.deafen")}
-        onClick={() => {
-          const next = !deafened;
-          setDeafened(next);
-          session?.setDeafened(next);
-        }}
+        onClick={toggleDeafen}
       >
         <HearIcon slashed={deafened} />
       </button>

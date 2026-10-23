@@ -1,5 +1,7 @@
+import { STORAGE_KEY } from "@/shared/config/storage-keys";
+
 /** Persisted voice device preferences (mic / speaker / camera). */
-const KEY = "remined.voice.devices";
+const KEY = STORAGE_KEY.voiceDevices;
 
 export type DevicePref = { id: string; label: string };
 export type DevicePrefs = {

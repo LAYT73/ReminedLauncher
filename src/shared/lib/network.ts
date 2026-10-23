@@ -1,3 +1,5 @@
+import { TIMING } from "@/shared/config/timings";
+
 /** Best-effort online check for Tauri / WKWebView. */
 
 /** Dev-only: `VITE_FORCE_OFFLINE=1 npm run tauri:dev:offline` */
@@ -18,7 +20,7 @@ export function isBrowserOnline(): boolean {
  */
 export async function probeOnline(
   url?: string,
-  timeoutMs = 2500,
+  timeoutMs = TIMING.networkProbe,
 ): Promise<boolean> {
   if (!isBrowserOnline()) return false;
   const target =

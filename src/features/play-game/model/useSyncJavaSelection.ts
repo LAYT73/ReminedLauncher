@@ -12,6 +12,6 @@ export function useSyncJavaSelection(): void {
   useEffect(() => {
     if (rail !== RAIL.java || !activeId || selected === activeId) return;
     const { profile, persist } = useProfileStore.getState();
-    void persist({ ...profile, selected_pack: activeId });
+    void persist({ ...profile, selected_pack: activeId }).catch(() => undefined);
   }, [rail, activeId, selected]);
 }

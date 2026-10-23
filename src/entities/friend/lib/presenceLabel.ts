@@ -1,13 +1,13 @@
 import type { FriendRow } from "../api/friends";
 import { getLocale, t } from "@/shared/i18n";
-import { activityLabel } from "@/shared/lib/activityLabel";
+import { activityLabel, activityShortLabel } from "@/shared/lib/activityLabel";
 
 export type PresenceBadge = {
   status: string;
-  kind: string;
+  /** Short badge text (activity, "В игре", "Не в сети", ...). */
+  label: string;
+  /** Dimmer second part (last seen time). */
   detail?: string;
-  /** Localized activity line (menu, singleplayer, ...) when known. */
-  activity?: string;
   voice: boolean;
   /** Full line for tooltip / aria. */
   title: string;
@@ -52,31 +52,36 @@ export function presenceBadge(row: FriendRow): PresenceBadge {
         : t("social.presence.playing");
     const code = row.sessionActivity?.trim();
     const activity = code ? activityLabel(code) : undefined;
+    const label =
+      (code ? activityShortLabel(code) : undefined) ??
+      (st === "hosting"
+        ? t("social.presence.badgeHostLan")
+        : t("social.presence.badgeInGame"));
     const title =
       (pack ? `${kind} ${pack}` : kind) +
       (activity ? ` · ${activity}` : "") +
       (voice ? ` · ${t("social.presence.inVoiceSuffix")}` : "");
-    return { status: st, kind, detail: pack, activity, voice, title };
+    return { status: st, label, voice, title };
   }
   if (st === "online") {
     const title = voice
       ? t("social.presence.onlineInVoice")
       : t("social.presence.online");
-    return { status: st, kind: t("social.presence.online"), voice, title };
+    return { status: st, label: t("social.presence.online"), voice, title };
   }
 
   const when = formatLastSeen(row.sessionUpdatedAt);
   if (when) {
     return {
       status: "offline",
-      kind: t("social.presence.lastSeen"),
+      label: t("social.presence.lastSeen"),
       detail: when,
       voice: false,
       title: t("social.presence.lastSeenTitle", { when }),
     };
   }
   const offline = t("social.presence.offline");
-  return { status: "offline", kind: offline, voice: false, title: offline };
+  return { status: "offline", label: offline, voice: false, title: offline };
 }
 
 /** Legacy one-line label (tooltips / plain text). */

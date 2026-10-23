@@ -3,6 +3,7 @@ pub mod cli;
 mod config;
 mod diag;
 mod i18n;
+mod game_bridge;
 mod gamewatch;
 pub mod mod_audit;
 mod instance;
@@ -224,7 +225,7 @@ fn lock_skinshuffle_ui(instance: &Path) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    fs::write(path, serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+    paths::write_atomic(&path, serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
 }
 
 fn clear_skinshuffle(instance: &Path) -> Result<(), String> {
@@ -551,8 +552,16 @@ async fn probe_java(app: AppHandle, path: Option<String>) -> Result<JavaInfo, St
 #[tauri::command]
 async fn read_skin_data_url(path: String) -> Result<Option<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        const MAX_SKIN_BYTES: u64 = 1024 * 1024;
         let p = PathBuf::from(&path);
-        if !p.is_file() {
+        let is_png = p
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("png"));
+        if !is_png || !p.is_file() {
+            return Ok(None);
+        }
+        if p.metadata().map(|m| m.len() > MAX_SKIN_BYTES).unwrap_or(true) {
             return Ok(None);
         }
         let bytes = fs::read(p).map_err(|e| e.to_string())?;
@@ -670,12 +679,6 @@ async fn fetch_pack_catalog() -> Result<PackCatalog, String> {
 #[tauri::command]
 async fn fetch_pack_release(pack_id: String) -> Result<PackRelease, String> {
     pack_sync::fetch_release(&pack_id).await
-}
-
-#[tauri::command]
-async fn sync_selected_pack(app: AppHandle, pack_id: String) -> Result<PackStatus, String> {
-    let root = paths::remined_root(&app)?;
-    pack_sync::sync_pack(&app.clone().into(), &root, &pack_id).await
 }
 
 #[tauri::command]
@@ -1045,19 +1048,6 @@ fn voice_mint_token(room: String, identity: String, name: String) -> Result<Stri
 }
 
 #[tauri::command]
-async fn read_lan_port(app: AppHandle, pack_id: String) -> Result<Option<u16>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let root = paths::remined_root(&app)?;
-        let log = paths::pack_dir(&root, &pack_id).join("logs").join("latest.log");
-        let port = gamewatch::read_lan_port(&log);
-        net_log::lan_poll(&app, &pack_id, port);
-        Ok(port)
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
-#[tauri::command]
 async fn diag_logs_dir(app: AppHandle) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let root = paths::remined_root(&app)?;
@@ -1414,6 +1404,7 @@ async fn launch_pack(
         launch_label_suffix: None,
     };
 
+    let bridge_dir = opts.instance.clone();
     let mut child = match runtime::launch_game(&app.clone().into(), opts).await {
         Ok(child) => child,
         Err(err) => return fail(&session, err),
@@ -1450,6 +1441,7 @@ async fn launch_pack(
         Ok(None) => {
             session.child = Some(child);
             session.phase = GamePhase::Running;
+            game_bridge::start(app.clone(), bridge_dir);
             Ok(LaunchResult {
                 ok: true,
                 message: String::new(),
@@ -1488,8 +1480,6 @@ pub fn run() {
             {
                 app.handle()
                     .plugin(tauri_plugin_updater::Builder::new().build())?;
-                app.handle()
-                    .plugin(tauri_plugin_global_shortcut::Builder::new().build())?;
                 if let Err(err) = tray::install(app.handle()) {
                     diag::log("tray", &format!("install failed: {err}"));
                 }
@@ -1499,6 +1489,7 @@ pub fn run() {
         .manage(Mutex::new(GameSession::default()))
         .manage(relay::RelayState::default())
         .manage(voice_runtime::VoiceRuntimeState::default())
+        .manage(game_bridge::GameBridgeState::default())
         .invoke_handler(tauri::generate_handler![
             list_packs,
             set_ui_locale,
@@ -1516,7 +1507,6 @@ pub fn run() {
             run_onboarding,
             fetch_pack_catalog,
             fetch_pack_release,
-            sync_selected_pack,
             get_pack_status,
             ensure_pack,
             cancel_install,
@@ -1558,12 +1548,13 @@ pub fn run() {
             relay_start_game_join,
             relay_stop_game_join,
             relay_stop_host,
-            read_lan_port,
             gamewatch::latest_crash_report,
             gamewatch::game_log_status,
             gamewatch::list_screenshots,
             gamewatch::read_screenshot,
             gamewatch::screenshots_dir,
+            game_bridge::game_bridge_send,
+            game_bridge::game_bridge_status,
         ]);
 
     #[cfg(desktop)]

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   listMessages,
+  VOICE_MESSAGE_PAGE_SIZE,
   listRoomMembers,
   subscribeRoomChat,
   subscribeRoomMembers,
@@ -10,6 +11,12 @@ import {
 } from "@/entities/voice-room";
 import { voiceLog } from "../api/voiceNative";
 import { FALLBACK_USERNAME } from "@/shared/config/limits";
+import { sendGameNotifyWithHead } from "@/entities/skin";
+import { useGameBridgePrefs } from "@/shared/lib/gameBridgePrefs";
+import { useGameBridgeStore } from "@/shared/lib/gameBridgeStore";
+import { TIMING } from "@/shared/config/timings";
+
+const CHAT_TOAST_MAX = 80;
 
 /** The joined room plus its members and chat (live-subscribed). */
 export function useRoomData(userId: string, displayName: string) {
@@ -53,7 +60,7 @@ export function useRoomData(userId: string, displayName: string) {
     };
     const catchUp = () => {
       if (disposed) return;
-      void listMessages(roomId, 100)
+      void listMessages(roomId, VOICE_MESSAGE_PAGE_SIZE)
         .then((rows) => {
           if (!disposed) merge(rows);
         })
@@ -62,7 +69,25 @@ export function useRoomData(userId: string, displayName: string) {
 
     const unsub = subscribeRoomChat(
       roomId,
-      (msg) => merge([msg]),
+      (msg) => {
+        merge([msg]);
+        if (
+          msg.senderId === userId ||
+          !useGameBridgeStore.getState().connected ||
+          !useGameBridgePrefs.getState().notifications
+        ) {
+          return;
+        }
+        const name =
+          msg.senderName ||
+          membersRef.current.find((m) => m.userId === msg.senderId)?.username ||
+          FALLBACK_USERNAME;
+        const body = msg.body.length > CHAT_TOAST_MAX ? `${msg.body.slice(0, CHAT_TOAST_MAX - 1)}…` : msg.body;
+        sendGameNotifyWithHead(
+          { kind: "chat", title: name, body },
+          { userId: msg.senderId, skinUrl: msg.senderSkinPath },
+        );
+      },
       (status) => {
         if (status !== "SUBSCRIBED") {
           void voiceLog("chat", `realtime ${roomId} status=${status}`);
@@ -75,7 +100,7 @@ export function useRoomData(userId: string, displayName: string) {
     );
 
     // Safety net: realtime can die silently (sleeping socket, hidden webview).
-    const poll = window.setInterval(catchUp, 12_000);
+    const poll = window.setInterval(catchUp, TIMING.voiceChatPoll);
     const onVis = () => {
       if (document.visibilityState === "visible") catchUp();
     };

@@ -11,6 +11,7 @@ export const network: Dict<typeof en> = {
       "Голосовая комната активна, но ключ Relay не найден — подожди немного и снова открой мир для LAN",
   },
   panel: {
+    relayLabel: "Relay",
     title: "Network Play",
     checking: "Проверка",
     ready: "Готов",
@@ -58,6 +59,7 @@ export const network: Dict<typeof en> = {
     credsFailed: "Не удалось получить доступ к Remined Relay",
     credsEmpty: "Ответ Remined Relay с доступом пустой",
     installFailed: "Не удалось установить Remined Relay (frpc)",
+    invalidPath: "Выбери существующий файл frpc.",
   },
   toast: {
     checkPassed: "Проверка Relay пройдена",

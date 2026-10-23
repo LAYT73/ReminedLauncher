@@ -37,6 +37,7 @@ import type { useRuntimeModal } from "./useRuntimeModal";
 import type { useVoiceLists } from "./useVoiceLists";
 import { MSG } from "@/shared/config/messages";
 import { t } from "@/shared/i18n";
+import { TIMING } from "@/shared/config/timings";
 
 function lanPortNow(): number | null {
   return useGameStore.getState().hostingLan?.gamePort ?? null;
@@ -170,7 +171,7 @@ export function useVoiceActions({
         .catch(() => undefined);
     };
     tick();
-    const id = window.setInterval(tick, 4000);
+    const id = window.setInterval(tick, TIMING.voiceRoomStatusPoll);
     const onVis = () => {
       if (document.visibilityState === "visible") tick();
     };
@@ -340,7 +341,7 @@ export function useVoiceActions({
         let room = joined;
         for (let i = 0; i < 10 && !room.relayShareCode; i++) {
           live.setStatus(t("voice.s.waitingShareKey"));
-          await new Promise((r) => setTimeout(r, 500));
+          await new Promise((r) => setTimeout(r, TIMING.hostKeyPoll));
           room = (await getVoiceRoom(joined.id)) ?? room;
         }
         if (!room.relayShareCode) {

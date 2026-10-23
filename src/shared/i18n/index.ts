@@ -21,6 +21,7 @@ import * as en from "./en";
 import * as ru from "./ru";
 
 export type { Locale } from "./types";
+import { STORAGE_KEY } from "@/shared/config/storage-keys";
 export type Dictionary = typeof en;
 export type TKey = Paths<Dictionary>;
 export type TFunction = (key: TKey, params?: Params) => string;
@@ -30,7 +31,6 @@ export const LOCALES: { id: Locale; label: string }[] = [
   { id: "ru", label: "Русский" },
 ];
 
-const STORAGE_KEY = "remined.locale";
 const DICTS: Record<Locale, unknown> = { en, ru };
 
 function isLocale(v: unknown): v is Locale {
@@ -39,7 +39,7 @@ function isLocale(v: unknown): v is Locale {
 
 function initialLocale(): Locale {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(STORAGE_KEY.locale);
     if (isLocale(saved)) return saved;
   } catch {
     /* ignore */
@@ -69,7 +69,7 @@ const useLocaleStore = create<LocaleState>((set) => ({
   locale: initialLocale(),
   setLocale: (locale) => {
     try {
-      localStorage.setItem(STORAGE_KEY, locale);
+      localStorage.setItem(STORAGE_KEY.locale, locale);
     } catch {
       /* ignore */
     }
@@ -154,10 +154,6 @@ export function useT(): TFunction {
     () => (key, params) => translate(locale, key, params),
     [locale],
   );
-}
-
-export function formatNumber(n: number, opts?: Intl.NumberFormatOptions): string {
-  return new Intl.NumberFormat(getLocale(), opts).format(n);
 }
 
 export function formatRelativeTime(date: Date | number | string): string {

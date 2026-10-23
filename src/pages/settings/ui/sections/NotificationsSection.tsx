@@ -15,7 +15,7 @@ export function NotificationsSection() {
       <h3 className="settings-heading">{t("settings.notifications.title")}</h3>
       <McToggle
         checked={friendToasts}
-        onChange={(next) => void setFriendToasts(next)}
+        onChange={(next) => void setFriendToasts(next).catch(() => undefined)}
         label={t("settings.notifications.friendAlerts")}
       />
       <McToggle

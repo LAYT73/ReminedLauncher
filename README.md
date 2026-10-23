@@ -18,7 +18,9 @@ profiles, skins, friends, LAN sessions and voice rooms.
 - **Voice:** a local LiveKit server exposed through the Remined Relay.
 - **Localization:** English and Russian UI; pack catalog strings can override
   per locale.
-- **Companion:** a tiny Fabric mod writes richer in-game activity for friends.
+- **Companion:** a Fabric mod (Minecraft 1.20–26.x) that reports in-game activity
+  for friends and adds an in-game voice HUD, notifications, mic/deafen/join keys
+  and a settings screen (V).
 - **Operations:** diagnostics, crash detection, updater, tray integration and
   an offline mode after the first successful online setup.
 
@@ -54,6 +56,8 @@ brew install openjdk@25
 npm install
 npm run tauri dev
 ```
+
+A fresh clone must run `npm run mod:build` (JDK 25) once before `npm run tauri dev`, because the companion jar is git-ignored and built from `companion-mod/`.
 
 Offline frontend mode:
 
@@ -128,5 +132,5 @@ Important logs:
 
 ## Release
 
-The current release is **1.0.1**. Release procedure and the complete version
+The current release is **1.0.2**. Release procedure and the complete version
 surface are maintained in [docs/RELEASE.md](./docs/RELEASE.md).

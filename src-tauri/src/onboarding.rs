@@ -58,7 +58,7 @@ pub fn save_state(root: &Path, state: &OnboardingState) -> Result<(), String> {
     let dir = root.join(".remined");
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let json = serde_json::to_string_pretty(state).map_err(|e| e.to_string())?;
-    fs::write(onboarding_path(root), json).map_err(|e| e.to_string())
+    crate::paths::write_atomic(&onboarding_path(root), json).map_err(|e| e.to_string())
 }
 
 pub fn status(root: &Path) -> RuntimeStatus {

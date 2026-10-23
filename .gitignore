@@ -13,3 +13,13 @@ src-tauri/target
 # keep .env.example tracked; prefer `.env.local` for real keys
 *.tsbuildinfo
 supabase/.temp/
+
+# Built from companion-mod/ by `npm run mod:build` (or CI)
+src-tauri/resources/remined-companion.jar
+
+# JVM heap dumps
+*.hprof
+*.bak
+*.orig
+*~
+*.tmp

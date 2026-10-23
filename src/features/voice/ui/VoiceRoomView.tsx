@@ -33,9 +33,9 @@ type Props = {
   volumes: Record<string, number>;
   setVolumes: Dispatch<SetStateAction<Record<string, number>>>;
   muted: boolean;
-  setMuted: (v: boolean) => void;
+  toggleMute: () => void;
   deafened: boolean;
-  setDeafened: (v: boolean) => void;
+  toggleDeafen: () => void;
   camOn: boolean;
   screenOn: boolean;
   needsAudioUnlock: boolean;
@@ -174,14 +174,13 @@ export function VoiceRoomView(props: Props) {
           </div>
 
           <VoiceToolbar
-            session={session}
             isHost={isHost}
             busy={busy}
             lobbyReady={lobbyReady}
             muted={props.muted}
-            setMuted={props.setMuted}
+            toggleMute={props.toggleMute}
             deafened={props.deafened}
-            setDeafened={props.setDeafened}
+            toggleDeafen={props.toggleDeafen}
             camOn={props.camOn}
             screenOn={props.screenOn}
             needsAudioUnlock={props.needsAudioUnlock}

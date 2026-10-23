@@ -38,7 +38,7 @@ export function usePresenceHeartbeat(): void {
       setActivity(liveActivity);
       return;
     }
-    const id = window.setTimeout(() => setActivity(liveActivity), 5_000);
+    const id = window.setTimeout(() => setActivity(liveActivity), TIMING.activityDebounce);
     return () => window.clearTimeout(id);
   }, [liveActivity, activity]);
 
@@ -86,6 +86,9 @@ export function usePresenceHeartbeat(): void {
     };
     push();
     const heartbeat = window.setInterval(push, TIMING.presenceHeartbeat);
+    // Visibility flips (tray restore, alt-tab) push right away instead of waiting for the next tick.
+    const onVisibility = () => push();
+    document.addEventListener("visibilitychange", onVisibility);
 
     /** Real process teardown — not window.hide() to tray. */
     const goOffline = () => {
@@ -96,6 +99,7 @@ export function usePresenceHeartbeat(): void {
 
     return () => {
       window.clearInterval(heartbeat);
+      document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", goOffline);
       window.removeEventListener("beforeunload", goOffline);
     };

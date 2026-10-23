@@ -173,7 +173,6 @@ export const voice = {
     reconnectFailed: "Voice reconnect failed: {err}",
     cameraUnavailable: "Camera unavailable: {err}",
     screenUnavailable: "Screen share unavailable: {err}",
-    pttUnavailable: "Push-to-talk key {key} unavailable: {err}",
   },
 
   errors: {

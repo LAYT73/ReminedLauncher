@@ -1,0 +1,26 @@
+plugins {
+    id 'fabric-loom'
+}
+
+repositories {
+    mavenCentral()
+}
+
+// Family 1.21.2 to 1.21.5 (RenderType blit). Compiled against the lowest version (1.21.2) unless
+// -PcheckMc=<version> names another member of this family (verification only, see README).
+// checkMc is ignored (lowest used) when it names a version outside this family, so configuring other projects still works.
+def checkMc = findProperty('checkMc')
+def target = checkMc != null && rootProject.ext.families.mc1212.contains(checkMc) ? checkMc : rootProject.ext.families.mc1212[0]
+
+dependencies {
+    minecraft "com.mojang:minecraft:${target}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${rootProject.ext.loaderVersion}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${rootProject.ext.fabricApi[target]}"
+    implementation project(':core')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
+    options.encoding = 'UTF-8'
+}

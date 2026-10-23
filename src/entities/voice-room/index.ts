@@ -23,7 +23,7 @@ export {
   respondVoiceInvite,
 } from "./api/invites";
 export { listRoomMembers } from "./api/members";
-export { listMessages, sendMessage } from "./api/messages";
+export { listMessages, sendMessage, VOICE_MESSAGE_PAGE_SIZE } from "./api/messages";
 export {
   subscribeInvites,
   subscribeRoomChat,

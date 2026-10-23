@@ -10,7 +10,35 @@ permissions:
   contents: write
 
 jobs:
+  mod:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: gradle
+          cache-dependency-path: companion-mod/**/*.gradle*
+
+      - name: Build Remined Companion mod
+        working-directory: companion-mod
+        run: |
+          chmod +x gradlew
+          ./gradlew build
+
+      - name: Upload mod jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: remined-companion
+          path: companion-mod/build/libs/remined-companion.jar
+          if-no-files-found: error
+
   release:
+    needs: mod
     strategy:
       fail-fast: false
       matrix:
@@ -75,6 +103,12 @@ jobs:
             echo "upload_updater=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Download mod jar
+        uses: actions/download-artifact@v4
+        with:
+          name: remined-companion
+          path: src-tauri/resources
+
       - name: Build and release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -82,10 +116,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v1.0.1
-          releaseName: Remined v1.0.1
+          tagName: v1.0.2
+          releaseName: Remined v1.0.2
           releaseBody: |
-            Remined launcher v1.0.1 — EN/RU i18n, friend activity + Remined Companion mod, profile/motion polish, pack catalog locale overrides.
+            Remined launcher v1.0.2 — in-game Remined Companion: voice HUD, notifications and settings screen (V), mic/deafen/join keys; Minecraft 1.20–26.x support; security hardening (CSP), cleanup of legacy push-to-talk.
             macOS (arm64 + x64) and Windows builds.
           releaseDraft: false
           prerelease: false

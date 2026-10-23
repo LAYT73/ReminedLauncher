@@ -23,7 +23,7 @@ type ProfileState = {
   refreshJava: (path?: string | null) => Promise<void>;
 };
 
-export const useProfileStore = create<ProfileState>((set) => ({
+export const useProfileStore = create<ProfileState>((set, get) => ({
   profile: DEFAULT_PROFILE,
   javaInfo: null,
   appVersion: FALLBACK_APP_VERSION,
@@ -35,9 +35,19 @@ export const useProfileStore = create<ProfileState>((set) => ({
   setUsernameDraft: (usernameDraft) => set({ usernameDraft }),
   setUsernameBusy: (usernameBusy) => set({ usernameBusy }),
   persist: async (next) => {
+    const prev = get().profile;
     set({ profile: next });
     applyTheme(next.theme, next.theme_custom);
-    await profileApi.save(next);
+    try {
+      await profileApi.save(next);
+    } catch (e) {
+      // Only roll back if no newer persist has replaced this value meanwhile.
+      if (get().profile === next) {
+        set({ profile: prev });
+        applyTheme(prev.theme, prev.theme_custom);
+      }
+      throw e;
+    }
   },
   refreshJava: async (path) => {
     try {

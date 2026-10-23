@@ -69,7 +69,7 @@ export function SkinCard({ skinUrl, hasSkin, skinModel }: SkinProps) {
                 skinModel === kind ? " is-active" : ""
               }`}
               aria-pressed={skinModel === kind}
-              onClick={() => void setSkinModel(kind)}
+              onClick={() => void setSkinModel(kind).catch(() => undefined)}
             >
               {label}
             </button>
@@ -89,7 +89,7 @@ export function SkinCard({ skinUrl, hasSkin, skinModel }: SkinProps) {
           <button
             type="button"
             className="btn-mc danger btn-mc-icon"
-            onClick={() => void clearSkin()}
+            onClick={() => void clearSkin().catch(() => undefined)}
           >
             <PixelTrashIcon />
             {t("profile.wardrobe.remove")}
@@ -167,7 +167,7 @@ export function CapeCard({ capeUrl, hasCape }: CapeProps) {
           <button
             type="button"
             className="btn-mc danger btn-mc-icon"
-            onClick={() => void clearCape()}
+            onClick={() => void clearCape().catch(() => undefined)}
           >
             <PixelTrashIcon />
             {t("profile.wardrobe.remove")}
