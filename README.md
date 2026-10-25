@@ -140,5 +140,5 @@ Important logs:
 
 ## Release
 
-The current release is **1.0.3**. Release procedure and the complete version
+The current release is **1.0.4**. Release procedure and the complete version
 surface are maintained in [docs/RELEASE.md](./docs/RELEASE.md).

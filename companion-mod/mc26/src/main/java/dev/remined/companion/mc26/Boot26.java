@@ -199,13 +199,22 @@ public final class Boot26 implements Platform {
         Minecraft mc = Minecraft.getInstance();
         IntegratedServer server = mc.getSingleplayerServer();
         if (server == null || server.isPublished() || mc.gameMode == null) return false;
+        // Remined accounts are offline and guests arrive through the relay tunnel: open the world the way the
+        // Open-to-LAN screen of mcwifipnp does (no Mojang auth, proxies allowed). Vanilla publishServer keeps
+        // authentication on, so offline guests were dropped during login.
+        server.setUsesAuthentication(false);
+        server.setPreventProxyConnections(false);
         try {
             if (!publishServer(server, mc.gameMode.getPlayerMode(), cheats, port)) return false;
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("publishServer not found", e);
         }
-        // publishServer only logs, so post the line the LAN screen shows.
-        mc.gui.getChat().addClientSystemMessage(Component.translatable("commands.publish.started", port));
+        // publishServer only logs, so post the line the LAN screen shows. The chat accessor moved within 26.x;
+        // the world is already published, so a missing method must not turn this into a failure.
+        try {
+            mc.gui.getChat().addClientSystemMessage(Component.translatable("commands.publish.started", port));
+        } catch (Throwable ignored) {
+        }
         return true;
     }
 

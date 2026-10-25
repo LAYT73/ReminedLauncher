@@ -116,10 +116,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v1.0.3
-          releaseName: Remined v1.0.3
+          tagName: v1.0.4
+          releaseName: Remined v1.0.4
           releaseBody: |
-            Remined launcher v1.0.3 — pack updates keep your saves, screenshots, Xaero maps and notes; companion: crosshair hints, compass toggle, guidebook key, flower light, shutdown fix; pack page parallax hero and new screenshot gallery; video loading screen.
+            Remined launcher v1.0.4 — fix party guests unable to join: the auto-opened LAN world now uses offline mode (like Open to LAN via mcwifipnp); the in-game "world opened" message no longer fails the open on 26.2.
             macOS (arm64 + x64) and Windows builds.
           releaseDraft: false
           prerelease: false

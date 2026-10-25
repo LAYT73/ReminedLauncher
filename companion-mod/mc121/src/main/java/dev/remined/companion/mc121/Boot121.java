@@ -141,6 +141,9 @@ public final class Boot121 implements Platform {
         Minecraft mc = Minecraft.getInstance();
         IntegratedServer server = mc.getSingleplayerServer();
         if (server == null || server.isPublished() || mc.gameMode == null) return false;
+        // Offline Remined accounts arrive through the relay: no Mojang auth, proxies allowed (as mcwifipnp does).
+        server.setUsesAuthentication(false);
+        server.setPreventProxyConnections(false);
         if (!server.publishServer(mc.gameMode.getPlayerMode(), cheats, port)) return false;
         // publishServer only logs; the vanilla "Open to LAN" screen posts this line itself.
         mc.gui.getChat().addMessage(Component.translatable("commands.publish.started", port));
