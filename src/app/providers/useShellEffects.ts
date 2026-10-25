@@ -6,6 +6,7 @@ import {
   usePresenceHeartbeat,
 } from "@/features/presence";
 import { useProgressListener, useTransientStatus } from "@/entities/install";
+import { useDeepLinkEffects } from "./useDeepLinkEffects";
 import { useGameBridgeEffects } from "./useGameBridgeEffects";
 
 /** Background behaviours that live as long as the signed-in app shell. */
@@ -17,6 +18,7 @@ export function useShellEffects(): void {
   usePresenceHeartbeat();
   useFriendPlayToasts();
   useGameBridgeEffects();
+  useDeepLinkEffects();
   useAutoLoadVersions();
   useSyncJavaSelection();
 }

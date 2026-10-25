@@ -34,10 +34,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use runtime::LaunchedGame;
-use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, State};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tauri::{AppHandle, Emitter, Manager, State};
 #[cfg(target_os = "macos")]
 use tauri::RunEvent;
+use tauri_plugin_deep_link::DeepLinkExt;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Pack {
@@ -475,6 +476,59 @@ fn get_app_version(app: AppHandle) -> String {
     app.package_info().version.to_string()
 }
 
+/// Total physical RAM in MB (0 when the OS does not report it).
+fn total_memory_mb() -> u32 {
+    let mut sys = sysinfo::System::new();
+    sys.refresh_memory();
+    u32::try_from(sys.total_memory() / (1024 * 1024)).unwrap_or(u32::MAX)
+}
+
+#[tauri::command]
+fn system_memory_mb() -> u32 {
+    total_memory_mb()
+}
+
+/// Mirrors `recommendRamMb` in `src/entities/profile/lib/profile.ts`; keep both in sync.
+fn recommend_ram_mb(total_mb: u32, modded: bool) -> u32 {
+    const OPTIONS_GB: [u32; 7] = [2, 4, 6, 8, 10, 12, 16];
+    let total_gb = f64::from(total_mb) / 1024.0;
+    let (min_gb, max_gb, ratio) = if modded { (4.0, 8.0, 0.4) } else { (2.0, 4.0, 0.25) };
+    let want = f64::min(max_gb, f64::max(min_gb, total_gb * ratio));
+    let cap = f64::min(want, total_gb - 2.0);
+    let pick = OPTIONS_GB
+        .iter()
+        .copied()
+        .filter(|gb| f64::from(*gb) <= cap)
+        .max()
+        .unwrap_or(OPTIONS_GB[0]);
+    pick * 1024
+}
+
+#[cfg(test)]
+mod ram_recommendation_tests {
+    use super::recommend_ram_mb;
+
+    #[test]
+    fn modded_recommendation_follows_rule() {
+        assert_eq!(recommend_ram_mb(8 * 1024, true), 4 * 1024);
+        assert_eq!(recommend_ram_mb(16 * 1024, true), 6 * 1024);
+        assert_eq!(recommend_ram_mb(32 * 1024, true), 8 * 1024);
+    }
+
+    #[test]
+    fn vanilla_recommendation_follows_rule() {
+        assert_eq!(recommend_ram_mb(8 * 1024, false), 2 * 1024);
+        assert_eq!(recommend_ram_mb(16 * 1024, false), 4 * 1024);
+        assert_eq!(recommend_ram_mb(64 * 1024, false), 4 * 1024);
+    }
+
+    #[test]
+    fn never_exceeds_total_minus_two_gb() {
+        assert_eq!(recommend_ram_mb(4 * 1024, true), 2 * 1024);
+        assert_eq!(recommend_ram_mb(0, true), 2 * 1024);
+    }
+}
+
 #[tauri::command]
 async fn list_packs(app: AppHandle) -> Result<Vec<Pack>, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -512,6 +566,13 @@ async fn list_packs(app: AppHandle) -> Result<Vec<Pack>, String> {
 async fn get_profile(app: AppHandle) -> Result<Profile, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let root = paths::remined_root(&app)?;
+        // No profile.json yet means first run: start from the RAM recommendation.
+        if !paths::profile_path(&root).exists() {
+            return Ok(Profile {
+                ram_mb: recommend_ram_mb(total_memory_mb(), true),
+                ..Profile::default()
+            });
+        }
         Ok(load_profile(&root))
     })
     .await
@@ -1460,13 +1521,109 @@ async fn launch_pack(
     }
 }
 
+/// Event carrying one raw `remined://` URL to the frontend.
+const DEEP_LINK_EVENT: &str = "deep-link";
+
+/// Autostart passes this flag; the main window then stays hidden (tray only).
+const START_MINIMIZED_ARG: &str = "--minimized";
+
+/// Same URL delivered again within this window is dropped (macOS cold start can report it twice).
+const DEEP_LINK_DEDUPE_WINDOW: Duration = Duration::from_secs(2);
+
+/// Deep links that arrived before the frontend subscribed (cold start).
+#[derive(Default)]
+pub struct DeepLinkState {
+    inner: Mutex<DeepLinkInner>,
+}
+
+#[derive(Default)]
+struct DeepLinkInner {
+    /// Set by `drain_deep_links`; cleared by `release_deep_links`. While set, URLs are emitted directly.
+    ready: bool,
+    pending: Vec<String>,
+    /// The last URL handed out, and when.
+    last_delivered: Option<(String, Instant)>,
+}
+
+/// Focus the main window and hand the URL to the frontend (or queue it until it is ready).
+fn deliver_deep_link(app: &AppHandle, url: String) {
+    tray::restore_main(app);
+    let state = app.state::<DeepLinkState>();
+    let mut inner = state.inner.lock().unwrap_or_else(|e| e.into_inner());
+    let now = Instant::now();
+    if let Some((last, at)) = &inner.last_delivered {
+        if *last == url && now.duration_since(*at) < DEEP_LINK_DEDUPE_WINDOW {
+            return;
+        }
+    }
+    inner.last_delivered = Some((url.clone(), now));
+    if !inner.ready {
+        if !inner.pending.contains(&url) {
+            inner.pending.push(url);
+        }
+        return;
+    }
+    drop(inner);
+    let _ = app.emit(DEEP_LINK_EVENT, url);
+}
+
+/// Frontend handshake: call after subscribing to `deep-link`. Returns URLs received earlier.
+#[tauri::command]
+fn drain_deep_links(state: State<'_, DeepLinkState>) -> Vec<String> {
+    let mut inner = state.inner.lock().unwrap_or_else(|e| e.into_inner());
+    inner.ready = true;
+    std::mem::take(&mut inner.pending)
+}
+
+/// Frontend teardown: call when the listener is removed. Later URLs queue until the next drain.
+#[tauri::command]
+fn release_deep_links(state: State<'_, DeepLinkState>) {
+    let mut inner = state.inner.lock().unwrap_or_else(|e| e.into_inner());
+    inner.ready = false;
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     diag::install_panic_hook();
-    let mut builder = tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    // Registered first so a second launch (or a deep link opened while running)
+    // is forwarded to this process. Off in debug so dev and second-client runs are not blocked.
+    #[cfg(all(desktop, not(debug_assertions)))]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            tray::restore_main(app);
+        }));
+    }
+
+    builder = builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_notification::init())
+        .manage(DeepLinkState::default());
+
+    #[cfg(desktop)]
+    {
+        builder = builder
+            .plugin(tauri_plugin_autostart::init(
+                tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                Some(vec![START_MINIMIZED_ARG]),
+            ))
+            .plugin(
+                tauri_plugin_window_state::Builder::default()
+                    // Visibility is not restored: autostart with --minimized must stay in the tray.
+                    .with_state_flags(
+                        tauri_plugin_window_state::StateFlags::all()
+                            - tauri_plugin_window_state::StateFlags::VISIBLE,
+                    )
+                    .with_denylist(&["friend-toast"])
+                    .build(),
+            );
+    }
+
+    builder = builder
         .setup(|app| {
             voice_runtime::apply_loopback_no_proxy();
             if let Ok(root) = paths::remined_root(app.handle()) {
@@ -1478,14 +1635,43 @@ pub fn run() {
             }
             #[cfg(desktop)]
             {
-                app.handle()
-                    .plugin(tauri_plugin_updater::Builder::new().build())?;
+                // Logged, not `?`: a failure here must not skip showing the main window below.
+                if let Err(err) = app
+                    .handle()
+                    .plugin(tauri_plugin_updater::Builder::new().build())
+                {
+                    diag::log("updater", &format!("plugin register failed: {err}"));
+                }
                 if let Err(err) = tray::install(app.handle()) {
                     diag::log("tray", &format!("install failed: {err}"));
                 }
             }
+            // Dev only: register remined:// for Windows/Linux (release installers do this).
+            #[cfg(all(debug_assertions, any(windows, target_os = "linux")))]
+            if let Err(err) = app.deep_link().register_all() {
+                diag::log("deep-link", &format!("register failed: {err}"));
+            }
+            let handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                for url in event.urls() {
+                    deliver_deep_link(&handle, url.to_string());
+                }
+            });
+            if let Ok(Some(urls)) = app.deep_link().get_current() {
+                for url in urls {
+                    deliver_deep_link(app.handle(), url.to_string());
+                }
+            }
+            // The window is created hidden (tauri.conf.json); autostart keeps it in the tray.
+            if !std::env::args().any(|a| a == START_MINIMIZED_ARG) {
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.show();
+                }
+            }
             Ok(())
-        })
+        });
+
+    builder = builder
         .manage(Mutex::new(GameSession::default()))
         .manage(relay::RelayState::default())
         .manage(voice_runtime::VoiceRuntimeState::default())
@@ -1555,6 +1741,10 @@ pub fn run() {
             gamewatch::screenshots_dir,
             game_bridge::game_bridge_send,
             game_bridge::game_bridge_status,
+            game_bridge::game_bridge_info,
+            drain_deep_links,
+            release_deep_links,
+            system_memory_mb,
         ]);
 
     #[cfg(desktop)]

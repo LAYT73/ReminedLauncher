@@ -10,6 +10,8 @@ repositories {
 dependencies {
     // API only (MappingResolver, ClientModInitializer, FabricLoader). No Minecraft, no Fabric API.
     compileOnly('net.fabricmc:fabric-loader:0.14.25') { transitive = false }
+    compileOnly('net.fabricmc:sponge-mixin:0.13.3+mixin.0.8.5') { transitive = false }
+    compileOnly 'org.ow2.asm:asm-tree:9.6'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.2'
 }

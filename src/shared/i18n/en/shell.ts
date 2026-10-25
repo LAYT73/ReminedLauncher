@@ -4,7 +4,7 @@ export const shell = {
     screenshots: "Shots",
     friends: "Friends",
     network: "Network",
-    voice: "Voice",
+    voice: "Party",
   },
   rail: {
     home: "Home",
@@ -60,5 +60,27 @@ export const shell = {
     dismiss: "Dismiss",
     hideHelp: "Hide help",
     showHelp: "Show help",
+  },
+  /** Native OS notifications (sent only while the launcher window is in the background). */
+  notify: {
+    packReady: {
+      title: "Pack ready",
+      body: "{name} is installed and ready to play.",
+    },
+    launcherUpdate: {
+      title: "Launcher update available",
+      body: "Remined {v} is ready to install.",
+    },
+    friendRequest: {
+      title: "Friend request",
+      body: "{name} wants to be your friend.",
+    },
+    partyInvite: {
+      title: "Party invite",
+    },
+    partyWorld: {
+      title: "{host} opened the world",
+      body: "Join from the Party tab.",
+    },
   },
 };

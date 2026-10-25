@@ -4,6 +4,7 @@ export { profileApi } from "./api/profile-api";
 export type { Profile, JavaInfo, RuntimeStatus, NetworkMode } from "./model/types";
 export {
   RAM_OPTIONS_GB,
+  recommendRamMb,
   DEFAULT_PROFILE,
   DEFAULT_LAN_PORT,
   normalizeProfile,

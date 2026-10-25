@@ -201,7 +201,11 @@ async fn second_client(args: &[String]) -> Result<(), String> {
             for ent in rd.flatten() {
                 let name = ent.file_name().to_string_lossy().to_ascii_lowercase();
                 if name.contains("mcwifipnp") && name.ends_with(".jar") {
-                    let _ = fs::copy(ent.path(), mods_dir.join(ent.file_name()));
+                    let target = mods_dir.join(ent.file_name());
+                    // --from == --as: copying a file onto itself truncates it to 0 bytes.
+                    if target != ent.path() {
+                        let _ = fs::copy(ent.path(), target);
+                    }
                 }
             }
         }

@@ -10,6 +10,7 @@ import type { VoiceSession, VoiceVideoTile } from "../lib/voiceSession";
 import { SkinHead } from "@/entities/skin";
 import { useT } from "@/shared/i18n";
 import { displayRoomTitle } from "../lib/roomName";
+import { partyPackLabel } from "../lib/partyPack";
 import { VoiceChat } from "./VoiceChat";
 import { VoiceInviteModal, type InviteOption } from "./VoiceInviteModal";
 import { VoiceMembers } from "./VoiceMembers";
@@ -54,6 +55,8 @@ type Props = {
   onInvite: () => Promise<void>;
   onLeave: () => Promise<void>;
   onSend: (e: FormEvent) => Promise<void>;
+  /** Party header card (pack, host, primary action). */
+  partyCard?: ReactNode;
   children?: ReactNode;
 };
 
@@ -104,6 +107,8 @@ export function VoiceRoomView(props: Props) {
         </div>
       </div>
 
+      {props.partyCard}
+
       {invites.length > 0 ? (
         <div className="voice-invite-banner" role="status" aria-live="polite">
           {invites.map((inv) => (
@@ -116,8 +121,10 @@ export function VoiceRoomView(props: Props) {
               <div className="voice-invite-banner-copy">
                 {fillTemplate(t("voice.invitedYou"), {
                   name: <strong>{inv.fromName || t("voice.aFriend")}</strong>,
-                  room: <strong>{displayRoomTitle(inv.roomTitle) || t("voice.aVoiceRoom")}</strong>,
                 })}
+                {inv.roomPackId ? (
+                  <span className="voice-invite-banner-pack">{partyPackLabel(inv.roomPackId)}</span>
+                ) : null}
               </div>
               <div className="voice-invite-banner-actions">
                 <button
@@ -126,7 +133,7 @@ export function VoiceRoomView(props: Props) {
                   disabled={busy}
                   onClick={() => void onAcceptInvite(inv)}
                 >
-                  {t("voice.join")}
+                  {t("social.friends.accept")}
                 </button>
                 <button
                   type="button"
@@ -134,7 +141,7 @@ export function VoiceRoomView(props: Props) {
                   disabled={busy}
                   onClick={() => void onDeclineInvite(inv)}
                 >
-                  {t("voice.decline")}
+                  {t("social.friends.decline")}
                 </button>
               </div>
             </div>
@@ -158,6 +165,7 @@ export function VoiceRoomView(props: Props) {
               volumes={props.volumes}
               setVolumes={props.setVolumes}
               lanJoin={props.lanJoin}
+              partyEnabled={Boolean(active.packId)}
             />
           </div>
 

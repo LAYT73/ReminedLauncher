@@ -1,6 +1,6 @@
 # Architecture
 
-**Release:** `1.0.2`
+**Release:** `1.0.3`
 **Stack:** Tauri 2, Rust, React 19, TypeScript, Vite, Supabase
 
 This document describes the implementation currently in the repository. The
@@ -103,6 +103,34 @@ The Rust application is under `src-tauri/src/`.
 | `diag.rs`, `net_log.rs` | Application and network diagnostics |
 | `tray.rs`, `cli.rs`, `smoke.rs` | Tray integration, CLI and smoke harness |
 
+Tauri plugins in use: `opener`, `dialog`, `process`, `updater` (desktop, set up
+in `setup`), and the desktop-integration set registered in `lib.rs` `run()`:
+
+| Plugin | Role |
+|---|---|
+| `single-instance` | Registered first; release builds only (debug runs are not blocked). A second launch focuses the main window. Deep-link arguments are forwarded to the deep-link plugin. |
+| `deep-link` | Scheme `remined` (`tauri.conf.json` `plugins.deep-link`). Rust queues URLs until the frontend calls `drain_deep_links`, then emits the `deep-link` event. |
+| `autostart` | LaunchAgent on macOS, `--minimized` argument. Toggle in Settings → Launcher. |
+| `window-state` | Size, position and maximized state of `main`. Visibility is not saved; `friend-toast` is denylisted. |
+| `notification` | Native notifications, sent only while the main window is not focused (`src/shared/lib/systemNotify.ts`). Toggle in Settings → Notifications. |
+
+Deep link URL formats (parsed in `src/shared/lib/deepLink.ts`):
+
+```text
+remined://pack/<id>      opens the pack page (Java catalog pack or vanilla edition)
+remined://join/<code>    parsed (relay share code, "rmd:" prefix optional) but not routed yet:
+                         there is no join-by-code UI to hand it to
+```
+
+Unknown URLs are ignored. Cold starts on Windows and Linux read the URL from
+the launch arguments; on macOS the URL arrives as an Apple event, so links only
+work from the bundled app and not from `tauri dev`. Dev builds on Windows and
+Linux register the scheme at startup (`register_all`).
+
+Autostart launches with `--minimized`. The main window is created hidden
+(`visible: false`) and shown in `setup` unless that flag is present, so a
+normal launch shows the window as before and an autostart stays in the tray.
+
 Bundled Companion jar: `src-tauri/resources/remined-companion.jar` (source under
 `companion-mod/`). On Fabric launches the launcher installs it into the instance
 `mods/` folder. The mod writes `<gameDir>/.remined/state.json`; `gamewatch`
@@ -137,6 +165,8 @@ Migrations are applied in filename order:
 | `015` | Voice Relay share-code column |
 | `016` | Pack catalog `i18n` JSONB overrides |
 | `017` | Friend-visible `sessions.activity` |
+| `018` | Party: pack, game state and member state on voice rooms; tightened member insert |
+| `019` | Party: invite branch of the member insert admits only pending or accepted invites |
 
 The client must tolerate offline mode and older deployments where optional
 columns are not present. Credentials are supplied through `.env.local` during

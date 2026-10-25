@@ -12,4 +12,6 @@ export const STORAGE_KEY = {
   voiceDevices: "remined.voice.devices",
   friendToast: "remined.friend-toast",
   locale: "remined.locale",
+  /** Native notifications while the launcher is in the background (`"0"` = off). */
+  systemNotify: "remined.systemNotify",
 } as const;

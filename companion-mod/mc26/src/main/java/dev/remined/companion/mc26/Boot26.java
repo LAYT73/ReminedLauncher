@@ -12,17 +12,21 @@ import java.util.Map;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.level.GameType;
 
 /**
  * Minecraft 26.x backend (official Mojang names, no mappings). Compiled against 26.1. The direct members used
@@ -44,12 +48,15 @@ public final class Boot26 implements Platform {
     private Method isHiddenMethod;
 
     public Boot26() {
+        TitleScapeTweak.register();
+        CrosshairHints.register();
     }
 
     @Override
     public void registerKey(String id, String translationKey, String defaultKey) {
         if (category == null) {
             category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath("remined", "main"));
+            GuideKey.register(category);
         }
         int code = defaultKey == null ? -1 : constant("KEY_" + defaultKey, -1);
         keys.put(id, KeyMappingHelper.registerKeyMapping(new KeyMapping(translationKey, code, category)));
@@ -86,6 +93,15 @@ public final class Boot26 implements Platform {
     public void onHud(Hud hud) {
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(NS, "hud"),
             (GuiGraphicsExtractor g, DeltaTracker dt) -> hud.render(new Gfx26(g)));
+    }
+
+    @Override
+    public void onContainerScreen(Hud hud) {
+        ScreenEvents.AFTER_INIT.register((mc, screen, w, h) -> {
+            if (screen instanceof AbstractContainerScreen<?>) {
+                ScreenEvents.afterExtract(screen).register((s, g, mx, my, delta) -> hud.render(new Gfx26(g)));
+            }
+        });
     }
 
     /** Options.hideGui on 26.1; Minecraft.gui.hud.isHidden() on 26.2+. Unknown layout: not hidden. */
@@ -169,6 +185,60 @@ public final class Boot26 implements Platform {
     @Override
     public void releaseHead(String key) {
         Minecraft.getInstance().getTextureManager().release(head(key));
+    }
+
+    @Override
+    public int lanPort() {
+        IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
+        if (server == null) return -1;
+        return server.isPublished() ? server.getPort() : 0;
+    }
+
+    @Override
+    public boolean publishLan(int port, boolean cheats) {
+        Minecraft mc = Minecraft.getInstance();
+        IntegratedServer server = mc.getSingleplayerServer();
+        if (server == null || server.isPublished() || mc.gameMode == null) return false;
+        try {
+            if (!publishServer(server, mc.gameMode.getPlayerMode(), cheats, port)) return false;
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("publishServer not found", e);
+        }
+        // publishServer only logs, so post the line the LAN screen shows.
+        mc.gui.getChat().addClientSystemMessage(Component.translatable("commands.publish.started", port));
+        return true;
+    }
+
+    /**
+     * publishServer changed per 26.x release: (GameType, cheats, port) through 26.1.2, (scope, GameType, cheats, port)
+     * in 26.2, (scope, cheats, port) in 26.3, where the game mode is not an argument. The scope type does not exist
+     * before 26.2, so the overload is picked by reflection; the game mode is passed when the overload takes it.
+     */
+    private static boolean publishServer(IntegratedServer server, GameType mode, boolean cheats, int port)
+            throws ReflectiveOperationException {
+        for (Method m : server.getClass().getMethods()) {
+            if (!"publishServer".equals(m.getName())) continue;
+            Class<?>[] p = m.getParameterTypes();
+            Object[] args;
+            if (p.length == 3 && p[0] == GameType.class) {
+                args = new Object[] {mode, cheats, port};
+            } else if (p.length == 4 && p[1] == GameType.class) {
+                args = new Object[] {lanScope(p[0]), mode, cheats, port};
+            } else if (p.length == 3 && p[1] == boolean.class) {
+                args = new Object[] {lanScope(p[0]), cheats, port};
+            } else {
+                continue;
+            }
+            return Boolean.TRUE.equals(m.invoke(server, args));
+        }
+        throw new NoSuchMethodException("IntegratedServer.publishServer");
+    }
+
+    private static Object lanScope(Class<?> scope) {
+        for (Object c : scope.getEnumConstants()) {
+            if ("LAN".equals(((Enum<?>) c).name())) return c;
+        }
+        throw new IllegalStateException("no LAN scope");
     }
 
     @Override

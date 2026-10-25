@@ -116,10 +116,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v1.0.2
-          releaseName: Remined v1.0.2
+          tagName: v1.0.3
+          releaseName: Remined v1.0.3
           releaseBody: |
-            Remined launcher v1.0.2 — in-game Remined Companion: voice HUD, notifications and settings screen (V), mic/deafen/join keys; Minecraft 1.20–26.x support; security hardening (CSP), cleanup of legacy push-to-talk.
+            Remined launcher v1.0.3 — pack updates keep your saves, screenshots, Xaero maps, notes and settings (options merge); companion: crosshair hints, compass toggle, guidebook key, flower light, shutdown fix; pack page parallax hero and new screenshot gallery; video loading screen.
             macOS (arm64 + x64) and Windows builds.
           releaseDraft: false
           prerelease: false

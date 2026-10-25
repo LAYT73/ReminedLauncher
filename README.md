@@ -16,6 +16,9 @@ profiles, skins, friends, LAN sessions and voice rooms.
   per-pack playtime.
 - **Network play:** Open-to-LAN sessions shared through the Remined Relay.
 - **Voice:** a local LiveKit server exposed through the Remined Relay.
+- **Party:** voice + shared world: a voice room that also runs one pack for the
+  host's single-player world, opened to LAN for the party, with invites, a member
+  cap and `remined://party/<id>` invite links.
 - **Localization:** English and Russian UI; pack catalog strings can override
   per locale.
 - **Companion:** a Fabric mod (Minecraft 1.20–26.x) that reports in-game activity
@@ -23,6 +26,11 @@ profiles, skins, friends, LAN sessions and voice rooms.
   and a settings screen (V).
 - **Operations:** diagnostics, crash detection, updater, tray integration and
   an offline mode after the first successful online setup.
+- **Desktop integration:** `remined://pack/<id>` and `remined://party/<id>` deep links (the macOS scheme
+  only works from the bundled app), a single
+  running instance, optional launch at system startup minimized to the tray,
+  remembered window size and position, and native system notifications while
+  the launcher is in the background.
 
 ## Technology
 
@@ -132,5 +140,5 @@ Important logs:
 
 ## Release
 
-The current release is **1.0.2**. Release procedure and the complete version
+The current release is **1.0.3**. Release procedure and the complete version
 surface are maintained in [docs/RELEASE.md](./docs/RELEASE.md).

@@ -1,12 +1,34 @@
+import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { RAM_OPTIONS_GB, useProfileStore } from "@/entities/profile";
+import {
+  RAM_OPTIONS_GB,
+  recommendRamMb,
+  useProfileStore,
+} from "@/entities/profile";
+import { systemMemoryMb } from "@/shared/api/system";
+import { isVanillaPackId } from "@/shared/lib/packIds";
 import { FolderIconBtn } from "@/shared/ui/FolderIconBtn";
 import { useT } from "@/shared/i18n";
+
+/** RAM kept free for the OS when offering memory options. */
+const OS_RESERVE_MB = 2048;
 
 export function JavaSection() {
   const t = useT();
   const { profile, javaInfo, setProfile, persist, refreshJava } =
     useProfileStore();
+  const [totalMb, setTotalMb] = useState<number | null>(null);
+
+  useEffect(() => {
+    void systemMemoryMb().then(setTotalMb).catch(() => undefined);
+  }, []);
+
+  // Only vanilla is non-modded; an empty selection is treated as modded.
+  const modded = !isVanillaPackId(profile.selected_pack);
+  const recommendedMb =
+    totalMb != null ? recommendRamMb(totalMb, modded) : null;
+  const maxSafeMb = totalMb != null ? totalMb - OS_RESERVE_MB : null;
+  const tooHigh = maxSafeMb != null && profile.ram_mb > maxSafeMb;
 
   async function pickJava() {
     const selected = await open({ multiple: false, directory: false });
@@ -36,7 +58,15 @@ export function JavaSection() {
           }
         >
           {RAM_OPTIONS_GB.map((gb) => (
-            <option key={gb} value={gb * 1024}>
+            <option
+              key={gb}
+              value={gb * 1024}
+              disabled={
+                maxSafeMb != null &&
+                gb * 1024 > maxSafeMb &&
+                gb * 1024 !== profile.ram_mb
+              }
+            >
               {gb} {t("settings.java.gb")}
             </option>
           ))}
@@ -46,6 +76,31 @@ export function JavaSection() {
             </option>
           ) : null}
         </select>
+        {totalMb != null && recommendedMb != null ? (
+          <p className={tooHigh ? "java-probe is-warn" : "field-hint"}>
+            {t("settings.java.ramHint", {
+              total: Math.round(totalMb / 1024),
+              rec: recommendedMb / 1024,
+            })}
+            {tooHigh ? ` ${t("settings.java.ramTooHigh")}` : ""}
+            {profile.ram_mb !== recommendedMb ? (
+              <>
+                {" "}
+                <button
+                  type="button"
+                  className="btn-mc dim"
+                  onClick={() =>
+                    void persist({ ...profile, ram_mb: recommendedMb }).catch(
+                      () => undefined,
+                    )
+                  }
+                >
+                  {t("settings.java.ramUseRecommended")}
+                </button>
+              </>
+            ) : null}
+          </p>
+        ) : null}
       </div>
 
       <div className="field">

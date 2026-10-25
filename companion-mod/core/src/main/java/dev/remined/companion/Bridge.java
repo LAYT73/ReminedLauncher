@@ -23,11 +23,13 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
 /**
- * Localhost JSON-lines bridge to the Remined launcher (protocol v2, see README). Socket and disk errors
+ * Localhost JSON-lines bridge to the Remined launcher (protocol v3, see README). Socket and disk errors
  * drop the client only; nothing here may throw into the game.
  */
 final class Bridge {
-    private static final int VERSION = 2;
+    private static final int VERSION = 3;
+    /** Message types this mod handles from the launcher; the hello reply lists them so the launcher can feature-detect. */
+    private static final String CAPS = "[\"voice\",\"head\",\"notify\",\"connect\",\"open_lan\",\"battery\"]";
     private static final int HELLO_TIMEOUT_MS = 5_000;
     private static final int MAX_LINE = 64 * 1024;
     private static final int OUT_CAPACITY = 64;
@@ -103,7 +105,8 @@ final class Bridge {
             if (!"hello".equals(Protocol.str(hello, "t")) || !token.equals(Protocol.str(hello, "token"))) return;
             s.setSoTimeout(0);
             String st = reflect.strategy();
-            if (!write(c, "{\"t\":\"hello\",\"v\":" + VERSION + ",\"strategy\":" + Snapshot.str(st == null ? "unresolved" : st) + "}")) return;
+            if (!write(c, "{\"t\":\"hello\",\"v\":" + VERSION + ",\"strategy\":" + Snapshot.str(st == null ? "unresolved" : st)
+                + ",\"caps\":" + CAPS + "}")) return;
             Conn old = current;
             current = c;
             if (old != null) old.close();
@@ -124,6 +127,7 @@ final class Bridge {
                     if (hub != null) {
                         hub.onVoice(Protocol.Voice.off());
                         hub.clearInvite();
+                        hub.onBattery(null);
                     }
                 });
             }
@@ -143,6 +147,13 @@ final class Bridge {
                 final Protocol.Voice v = Protocol.voice(m);
                 onClient("voice", () -> {
                     if (hub != null) hub.onVoice(v);
+                });
+                break;
+            }
+            case "battery": {
+                final Protocol.Battery b = Protocol.battery(m);
+                onClient("battery", () -> {
+                    if (hub != null) hub.onBattery(b);
                 });
                 break;
             }
@@ -177,6 +188,19 @@ final class Bridge {
                 }
                 break;
             }
+            case "open_lan": {
+                final Protocol.OpenLan o = Protocol.openLan(m);
+                if (o.port < 0) {
+                    send(c, openLanLine("bad port", 0, false));
+                    break;
+                }
+                try {
+                    submit(new Pending("open_lan", () -> openLanJob(c, o.port, o.cheats), c));
+                } catch (Throwable e) {
+                    send(c, openLanLine("client not ready", 0, false));
+                }
+                break;
+            }
             default:
                 break;
         }
@@ -194,8 +218,54 @@ final class Bridge {
     }
 
     private static String connectResult(String error) {
-        if (error == null) return "{\"t\":\"connect_result\",\"ok\":true}";
-        return "{\"t\":\"connect_result\",\"ok\":false,\"error\":" + Snapshot.str(error) + "}";
+        return resultLine("connect", error);
+    }
+
+    /** {"t":"&lt;what&gt;_result","ok":...} for jobs that only report success or an error. */
+    private static String resultLine(String what, String error) {
+        if (error == null) return "{\"t\":\"" + what + "_result\",\"ok\":true}";
+        return "{\"t\":\"" + what + "_result\",\"ok\":false,\"error\":" + Snapshot.str(error) + "}";
+    }
+
+    /**
+     * Publishes the current single-player world to LAN. Already published (also by another mod) answers with the
+     * current port and never calls publishServer again. Errors are "not_singleplayer", "publish_failed" or
+     * "unsupported" (no platform, or the game does not expose the members; never thrown).
+     */
+    private void openLanJob(Conn c, int wanted, boolean cheats) {
+        String res;
+        try {
+            Platform pf = hub == null ? null : hub.platform();
+            if (pf == null) {
+                res = openLanLine("unsupported", 0, false);
+            } else {
+                int cur = pf.lanPort();
+                if (cur < 0) {
+                    res = openLanLine("not_singleplayer", 0, false);
+                } else if (cur > 0) {
+                    res = openLanLine(null, cur, true);
+                } else {
+                    int port = wanted > 0 ? wanted : freePort();
+                    res = pf.publishLan(port, cheats) ? openLanLine(null, port, false) : openLanLine("publish_failed", 0, false);
+                }
+            }
+        } catch (Throwable e) {
+            owner.log("open_lan failed", e);
+            res = openLanLine("unsupported", 0, false);
+        }
+        send(c, res);
+    }
+
+    private static String openLanLine(String error, int port, boolean already) {
+        if (error != null) return "{\"t\":\"open_lan_result\",\"ok\":false,\"error\":" + Snapshot.str(error) + "}";
+        return "{\"t\":\"open_lan_result\",\"ok\":true,\"port\":" + port + (already ? ",\"already\":true" : "") + "}";
+    }
+
+    /** A free ephemeral port, picked the way vanilla "Open to LAN" does it. */
+    private static int freePort() throws IOException {
+        try (ServerSocket s = new ServerSocket(0)) {
+            return s.getLocalPort();
+        }
     }
 
     /** Runs a job on the client thread; queued while the client is not ready. Failures are logged, never thrown. */
@@ -232,7 +302,7 @@ final class Bridge {
             if (pending.isEmpty() && runOnClient(p)) return;
             if (pending.size() >= PENDING_CAPACITY) {
                 owner.log("pending queue full", null);
-                if (p.replyTo != null) send(p.replyTo, connectResult("client not ready"));
+                if (p.replyTo != null) send(p.replyTo, resultLine(p.what, "client not ready"));
                 return;
             }
             pending.addLast(p);
@@ -260,7 +330,7 @@ final class Bridge {
             Pending p = it.next();
             if (p.replyTo != null && now - p.since >= CONNECT_WAIT_MS) {
                 it.remove();
-                send(p.replyTo, connectResult("client not ready"));
+                send(p.replyTo, resultLine(p.what, "client not ready"));
             }
         }
         while (!pending.isEmpty() && runOnClient(pending.peekFirst())) pending.pollFirst();

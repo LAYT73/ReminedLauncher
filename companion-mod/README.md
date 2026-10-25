@@ -1,7 +1,7 @@
 # Remined Companion
 
 Client-side Fabric mod for the Remined launcher. It reports the local player's game state to the launcher
-(`state.json`), and talks to the launcher over a localhost socket (protocol v2, below) for the voice HUD,
+(`state.json`), and talks to the launcher over a localhost socket (protocol v3, below) for the voice HUD,
 notifications, keybinds and connect. It runs in every Fabric instance the launcher starts, so it must never
 crash the game.
 
@@ -30,19 +30,38 @@ The core module has no Minecraft compile dependency and no mixins.
 Bytecode: `core` is Java 8, `mc1201` is Java 17, the 1.21 families and `mc12111` are Java 21, `mc26` is Java 25.
 A family never contains classes newer than the Java its lowest version runs on.
 
-### Protocol v2 summary
+### Protocol v3 summary
 
 On init the mod binds `127.0.0.1` on an ephemeral port and writes `<gameDir>/.remined/bridge.json`
-(`{"v":1,"port":N,"token":"<32 hex>"}`, temp file + rename). TCP, UTF-8, one JSON object per line; a new
+(`{"v":3,"port":N,"token":"<32 hex>"}`, temp file + rename). TCP, UTF-8, one JSON object per line; a new
 client that passes `hello` replaces the old one. Field details live in `core/.../Protocol.java`.
 
 - Handshake: the client sends `{"t":"hello","token":"<token>"}`; the mod replies
-  `{"t":"hello","v":2,"strategy":"intermediary"|"mojmap"|"unresolved"}`.
+  `{"t":"hello","v":3,"strategy":"intermediary"|"mojmap"|"unresolved","caps":["voice","head","notify","connect","open_lan","battery"]}`.
+  `caps` lists the launcher to mod message types this mod handles. Check it before sending a newer message: an
+  older mod ignores unknown types silently, so no reply arrives.
 - Launcher to mod: `voice` (room state and members, `active:false` turns the HUD off), `head` (8x8 avatar as
-  `rgba`), `notify` (card with optional `join` action and `ttl`), `connect` (answered by `connect_result`).
-- Mod to launcher: `key` with `action` `mute`, `deafen` or `join` (plus `id` for join), and `connect_result`.
+  `rgba`), `notify` (card with optional `join` action and `ttl`), `connect` (answered by `connect_result`),
+  `open_lan` (answered by `open_lan_result`, see below), `battery` (see below).
+- Mod to launcher: `key` with `action` `mute`, `deafen` or `join` (plus `id` for join), `connect_result`, and
+  `open_lan_result`.
+- `battery`: `{"t":"battery","present":true,"level":87,"charging":false}`, sent on connect, every 30 s and when the
+  charging state changes, only if `caps` has `battery`. `level` is 0 to 100. While a container screen (inventory,
+  chest, crafting, furnace, ...) is open the mod draws a small badge top-left; `present:false` or no data hides it. It
+  is a no-op on pause, chat and settings screens, and when the Fabric screen API is missing. No reply.
+- `open_lan` (new in v3): `{"t":"open_lan","port":N,"cheats":false}`. Both fields are optional; `port` 0 or absent
+  picks a free port, `cheats` defaults to false. It opens the current single-player world to LAN, the same way
+  "Open to LAN" does, using the player's current game mode (on 26.3 the game takes no mode argument, so the world's
+  mode applies). It never publishes twice. Replies:
+  - `{"t":"open_lan_result","ok":true,"port":P}` after a new publish.
+  - `{"t":"open_lan_result","ok":true,"port":P,"already":true}` when the world was already published, also by
+    another mod such as mcwifipnp. Nothing is published again.
+  - `{"t":"open_lan_result","ok":false,"error":E}` with E = `not_singleplayer` (no integrated server running),
+    `publish_failed` (the game refused), `unsupported` (no UI backend for this version, or the game does not expose
+    the members), `bad port` (outside 0 to 65535) or `client not ready` (queued for more than 10 s).
 - Messages that arrive before the Minecraft client is ready are queued (bounded, 256, in order) and run once the
-  client is ready. A `connect` that waits more than 10 s gets `{"t":"connect_result","ok":false,"error":"client not ready"}`.
+  client is ready. A `connect` or `open_lan` that waits more than 10 s gets `{"t":"connect_result","ok":false,"error":"client not ready"}`
+  or `{"t":"open_lan_result","ok":false,"error":"client not ready"}`.
 - When the launcher disconnects, the mod resets voice state to off and disarms any join invite.
 
 ### Keybinds

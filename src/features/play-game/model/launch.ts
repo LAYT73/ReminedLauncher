@@ -35,46 +35,53 @@ type LaunchOpts = {
   quickPlay?: string | null;
   /** Open Remined Relay tunnel after install prep, before the game process. */
   relayJoin?: { shareCode: string; port: number };
+  /** Party paths: keep the user on the Party tab instead of jumping to the pack rail. */
+  stayOnPage?: boolean;
 };
 
 /** Make sure `packId` is on disk before launching (never throws; returns ready). */
 async function prepareInstall(packId: string, quickPlay: boolean): Promise<boolean> {
   const markInstalled = () => usePackStore.getState().markInstalled(packId);
+  if (isVanillaPackId(packId)) {
+    // Vanilla is normally installed by the vanilla rail; a party join may need it first.
+    if (usePackStore.getState().installedIds.has(packId)) return true;
+    return installVersion("vanilla", versionFromPackId(packId));
+  }
   if (quickPlay || isReminedVanillaPackId(packId)) {
     await packApi.ensure(packId);
     markInstalled();
     return true;
   }
-  if (isVanillaPackId(packId)) return true; // installed via the vanilla rail
   return ensurePackUpToDate();
 }
 
-/** Remember the launched pack and jump to its rail. */
-function rememberLaunched(packId: string): void {
+/** Remember the launched pack and jump to its rail (unless the caller stays on its page). */
+function rememberLaunched(packId: string, stayOnPage: boolean): void {
   const versions = useVersionStore.getState();
   if (isVanillaPackId(packId)) {
     const ver = versionFromPackId(packId);
     versions.patch("vanilla", { pick: ver });
     writeLastPlayed({ vanilla: ver });
-    navigateTo(routeFor(RAIL.vanilla));
+    if (!stayOnPage) navigateTo(routeFor(RAIL.vanilla));
   } else if (isReminedVanillaPackId(packId)) {
     const ver = versionFromPackId(packId);
     versions.patch("remined-vanilla", { pick: ver });
     writeLastPlayed({ "remined-vanilla": ver });
-    navigateTo(routeFor(RAIL.reminedVanilla));
+    if (!stayOnPage) navigateTo(routeFor(RAIL.reminedVanilla));
   } else {
     writeLastPlayed({ java: packId });
-    navigateTo(routeFor(RAIL.java));
+    if (!stayOnPage) navigateTo(routeFor(RAIL.java));
   }
 }
 
-export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
+/** Resolves true only when the game process was started for `packId`. */
+export async function launchWithOpts(opts: LaunchOpts = {}): Promise<boolean> {
   const packId = opts.packId ?? getSelectedPack()?.id;
   const play = getPlayState();
-  if (!packId || play.busy) return;
+  if (!packId || play.busy) return false;
   if (!opts.packId && !play.packReady) {
     await downloadPack();
-    return;
+    return false;
   }
 
   const game = useGameStore.getState();
@@ -87,7 +94,7 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
   game.setPhase("launching");
   useInstallStore
     .getState()
-    .beginLaunch(quick ? MSG.launch.joiningFriend : MSG.launch.preparing);
+    .beginLaunch(quick ? MSG.launch.joiningFriend : MSG.launch.preparing, packId);
   if (!quick) {
     // Clear UI LAN chip. Never tear a live voice relay on Play.
     game.setHostingLan(null);
@@ -105,12 +112,12 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
       if (!useInstallStore.getState().status) {
         setStatus(MSG.launch.prepareFailed, "error");
       }
-      return;
+      return false;
     }
   } catch (err) {
     game.setPhase("idle");
     setStatus(errorMessage(err), "error");
-    return;
+    return false;
   }
 
   setStatus(quick ? MSG.launch.joiningFriend : "");
@@ -124,7 +131,7 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
     if (name.length < USERNAME.min || name.length > USERNAME.max) {
       game.setPhase("idle");
       setStatus(MSG.launch.usernameLength, "error");
-      return;
+      return false;
     }
     // Tunnel last — die if we open them before a long prepare.
     if (opts.relayJoin) {
@@ -157,7 +164,7 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
       }
       void netLog("ui", `game.launch FAILED: ${result.message}`);
       setStatus(result.message, "error");
-      return;
+      return false;
     }
     game.setRunningPackId(packId);
     game.setLastLaunchedPackId(packId);
@@ -168,8 +175,9 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
       void usePlaytimeStore.getState().record(packId, 0);
     }
     if (quick) unlockAchievement("first-network-join", toast);
-    rememberLaunched(packId);
+    rememberLaunched(packId, Boolean(opts.stayOnPage));
     if (quick) setStatus(MSG.launch.joined, "ok");
+    return true;
   } catch (err) {
     game.setRunningPackId(null);
     if (quick && opts.relayJoin) {
@@ -177,6 +185,7 @@ export async function launchWithOpts(opts: LaunchOpts = {}): Promise<void> {
     }
     game.setPhase("idle");
     setStatus(errorMessage(err), "error");
+    return false;
   }
 }
 

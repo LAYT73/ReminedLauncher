@@ -8,4 +8,6 @@ export const EVENT = {
   gameBridge: "game-bridge",
   /** In-game companion bridge connection: `{ connected }`. */
   gameBridgeStatus: "game-bridge-status",
+  /** `remined://` URL opened while the launcher runs (or queued from a cold start): raw string. */
+  deepLink: "deep-link",
 } as const;

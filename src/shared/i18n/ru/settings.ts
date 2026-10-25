@@ -61,6 +61,7 @@ export const settings: Dict<typeof en> = {
     title: "Уведомления",
     friendAlerts: "Оповещения о друзьях",
     shareActivity: "Показывать друзьям, чем я занят в игре",
+    systemNotify: "Системные уведомления, когда лаунчер свёрнут",
   },
   account: {
     title: "Аккаунт",
@@ -80,11 +81,15 @@ export const settings: Dict<typeof en> = {
     later: "Позже",
     check: "Проверить",
     checking: "Проверяем…",
+    autostart: "Запускать вместе с системой (свёрнуто в трей)",
   },
   java: {
     title: "Java",
     memory: "Память (RAM)",
     gb: "ГБ",
+    ramHint: "У тебя {total} ГБ — рекомендуем {rec} ГБ",
+    ramUseRecommended: "Взять рекомендуемое",
+    ramTooHigh: "Для системы останется меньше 2 ГБ.",
     path: "Путь к Java",
     pathPlaceholder: "Авто (OpenJDK 25)",
     browse: "Выбрать Java",

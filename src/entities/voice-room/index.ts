@@ -1,5 +1,8 @@
 export { useVoiceStatusStore } from "./model/status-store";
+export { usePartyStore, isPartyInvited, type PartyCommand } from "./model/party-store";
 export type {
+  PartyGameState,
+  PartyMemberState,
   VoiceInvite,
   VoiceInviteStatus,
   VoiceMember,
@@ -13,16 +16,20 @@ export {
   createVoiceRoom,
   ensureVoiceRoomMember,
   getVoiceRoom,
+  joinPartyRoom,
   leaveVoiceRoom,
   listMyOpenRooms,
+  setPartyGameState,
+  setPartyPack,
   setVoiceRoomShareCode,
 } from "./api/rooms";
 export {
   inviteFriendToRoom,
+  inviteToParty,
   listPendingInvites,
   respondVoiceInvite,
 } from "./api/invites";
-export { listRoomMembers } from "./api/members";
+export { getRoomHostName, listRoomMembers, setMyMemberState } from "./api/members";
 export { listMessages, sendMessage, VOICE_MESSAGE_PAGE_SIZE } from "./api/messages";
 export {
   subscribeInvites,

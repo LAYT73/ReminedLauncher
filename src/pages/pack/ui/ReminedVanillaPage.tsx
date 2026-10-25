@@ -1,10 +1,10 @@
-import type { CSSProperties } from "react";
 import reminedVanillaLogo from "@/shared/assets/remined-vanilla-logo.png";
 import reminedVanillaBanner from "@/shared/assets/remined-vanilla-banner.jpg";
 import { useT } from "@/shared/i18n";
 import { RAIL, routeFor } from "@/shared/config/routes";
 import { reminedVanillaPackId } from "@/shared/lib/packIds";
 import { EnchantParticles } from "@/shared/ui/EnchantParticles";
+import { PackHero } from "@/shared/ui/PackHero";
 import { PageMotion } from "@/shared/ui/PageMotion";
 import { usePlayState } from "@/features/play-game";
 import { useEditionState } from "@/entities/game-version";
@@ -20,17 +20,11 @@ export function ReminedVanillaPage() {
   return (
     <div className="pack-stage">
       <EnchantParticles className="pack-enchant" count={18} interactive />
-      <header
-        className="hero has-art"
-        style={
-          {
-            ["--hero-image"]: `url("${reminedVanillaBanner}")`,
-          } as CSSProperties
-        }
-      >
-        <p className="hero-kicker">{t("pack.page.fabricSkins")}</p>
-        <h1 className="hero-title">Remined Vanilla</h1>
-      </header>
+      <PackHero
+        image={reminedVanillaBanner}
+        kicker={t("pack.page.fabricSkins")}
+        title="Remined Vanilla"
+      />
       <PageMotion viewKey={viewKey}>
         <section className="pack-about">
           <div className="pack-about-head">

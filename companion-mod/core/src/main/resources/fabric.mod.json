@@ -7,6 +7,7 @@
   "authors": ["Remined"],
   "license": "MIT",
   "environment": "client",
+  "mixins": [{ "config": "remined_companion.mixins.json", "environment": "client" }],
   "entrypoints": {
     "client": ["dev.remined.companion.Companion"]
   },

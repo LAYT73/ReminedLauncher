@@ -1,6 +1,8 @@
+import { t } from "@/shared/i18n";
 import { MSG } from "@/shared/config/messages";
 import { errorMessage, isCancelledError } from "@/shared/lib/errors";
 import { isBrowserOnline } from "@/shared/lib/network";
+import { notifySystem } from "@/shared/lib/systemNotify";
 import { toast } from "@/shared/lib/toast";
 import { setStatus, useInstallStore } from "@/entities/install";
 import {
@@ -22,7 +24,7 @@ export async function syncPack(): Promise<void> {
   if (!packId) return;
   const install = useInstallStore.getState();
   install.setPackSyncing(true);
-  install.begin(MSG.install.updatingPack);
+  install.begin(MSG.install.updatingPack, packId);
   try {
     await packApi.ensure(packId);
     await bootstrapLauncher();
@@ -40,12 +42,16 @@ async function installActivePack(): Promise<boolean> {
   const pack = getActiveReminePack();
   if (!pack) return false;
   const install = useInstallStore.getState();
-  install.begin(MSG.install.preparing);
+  install.begin(MSG.install.preparing, pack.id);
   try {
     await packApi.ensure(pack.id);
     usePackStore.getState().markInstalled(pack.id);
     await bootstrapLauncher();
     setStatus(MSG.install.readyToPlay, "ok");
+    void notifySystem(
+      t("shell.notify.packReady.title"),
+      t("shell.notify.packReady.body", { name: pack.name }),
+    );
     return true;
   } catch (err) {
     if (isCancelledError(err)) setStatus(MSG.install.cancelled);

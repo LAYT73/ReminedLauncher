@@ -5,6 +5,7 @@ import { MSG } from "@/shared/config/messages";
 import { t } from "@/shared/i18n";
 import { errorMessage } from "@/shared/lib/errors";
 import { isBrowserOnline } from "@/shared/lib/network";
+import { notifySystem } from "@/shared/lib/systemNotify";
 import { toast } from "@/shared/lib/toast";
 import { setStatus } from "@/entities/install";
 import { useSessionStore } from "@/entities/session";
@@ -95,6 +96,10 @@ export const useLauncherUpdate = create<UpdateState>((set, get) => ({
         update,
       };
       set({ pending, promptOpen: true });
+      void notifySystem(
+        t("shell.notify.launcherUpdate.title"),
+        t("shell.notify.launcherUpdate.body", { v: update.version }),
+      );
       if (!silent) {
         setStatus(MSG.update.available(update.version), "ok");
         toast(MSG.update.available(update.version), "ok");

@@ -42,6 +42,7 @@ function ReminePackSelect() {
   const active = useActiveReminePack();
   return (
     <PackSelect
+      withIcons
       packs={packs}
       placeholder={packs.length ? undefined : t("pack.select.noPacks")}
       value={active?.id ?? ""}

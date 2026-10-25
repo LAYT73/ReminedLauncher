@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import brandLogo from "@/shared/assets/logo.png";
-import panorama from "@/shared/assets/remined-vanilla-banner.jpg";
+import poster from "@/shared/assets/home-wallpaper-poster.jpg";
+import wallpaper from "@/shared/assets/home-wallpaper.mp4";
 import { FALLBACK_APP_VERSION } from "@/shared/config/limits";
 import { TIMING } from "@/shared/config/timings";
 import { useT } from "@/shared/i18n";
@@ -65,7 +66,7 @@ export function LoadingScreen({ leaving }: { leaving: boolean }) {
   return (
     <div className={`gate-screen loading-screen${leaving ? " is-leaving" : ""}`}>
       <div className="loading-bg" aria-hidden>
-        <div className="loading-pan" style={{ backgroundImage: `url(${panorama})` }} />
+        <video className="loading-video" src={wallpaper} poster={poster} autoPlay muted loop playsInline />
       </div>
       <div className="loading-shade" aria-hidden />
       <div className="loading-grain" aria-hidden />

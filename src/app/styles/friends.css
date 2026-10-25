@@ -479,6 +479,31 @@ button.network-pill:hover {
   justify-self: end;
 }
 
+/* Join and party buttons share the action column of a friend row. */
+.friend-join-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  justify-self: end;
+  min-width: 88px;
+}
+
+.friend-party {
+  min-width: 88px;
+  white-space: nowrap;
+}
+
+.friend-party-tag {
+  font-size: 11px;
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+.friend-party-tag.is-invited {
+  color: #e0b84a;
+}
+
 .friend-avatar {
   display: block;
   border: 2px solid #000;
@@ -669,6 +694,7 @@ button.network-pill:hover {
   .friend-actions,
   .friend-join,
   .friend-join-slot,
+  .friend-join-group,
   .friend-remove {
     grid-column: 2;
   }

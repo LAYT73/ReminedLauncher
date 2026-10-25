@@ -11,6 +11,7 @@ import { PixelPlayIcon } from "@/shared/ui/PixelIcons";
 import { StateBadge } from "./VoiceBits";
 import { useT } from "@/shared/i18n";
 import { FALLBACK_USERNAME } from "@/shared/config/limits";
+import { effectiveMemberState } from "../lib/partyState";
 
 type Props = {
   userId: string;
@@ -20,6 +21,8 @@ type Props = {
   volumes: Record<string, number>;
   setVolumes: Dispatch<SetStateAction<Record<string, number>>>;
   lanJoin?: VoiceLanJoin;
+  /** Room has a party pack: show each member's party state chip. */
+  partyEnabled?: boolean;
 };
 
 /** Right-sidebar member list (compact rows, not cards). */
@@ -31,6 +34,7 @@ export function VoiceMembers({
   volumes,
   setVolumes,
   lanJoin,
+  partyEnabled = false,
 }: Props) {
   const t = useT();
   const friendRows = useFriendBadgeStore((s) => s.rows);
@@ -42,6 +46,22 @@ export function VoiceMembers({
     }
     return map;
   }, [friendRows]);
+  const partyLabel = (state: VoiceMember["state"], progress: number | null) => {
+    switch (state) {
+      case "installing":
+        return progress == null
+          ? t("voice.party.memberInstallingNoPct")
+          : t("voice.party.memberInstalling", { p: progress });
+      case "ready":
+        return t("voice.party.memberReady");
+      case "in_game":
+        return t("voice.party.memberInGame");
+      case "in_world":
+        return t("voice.party.memberInWorld");
+      default:
+        return t("voice.party.memberJoined");
+    }
+  };
   const liveIds = new Set(session?.participantIds() ?? []);
   const iAmLive = liveIds.has(userId);
 
@@ -113,6 +133,16 @@ export function VoiceMembers({
                     >
                       <span className="friend-status-kind">
                         {t("voice.members.speaking")}
+                      </span>
+                    </StatusBadge>
+                  ) : null}
+                  {partyEnabled ? (
+                    <StatusBadge
+                      tone="party"
+                      title={partyLabel(effectiveMemberState(m), m.progress)}
+                    >
+                      <span className="friend-status-kind">
+                        {partyLabel(effectiveMemberState(m), m.progress)}
                       </span>
                     </StatusBadge>
                   ) : null}

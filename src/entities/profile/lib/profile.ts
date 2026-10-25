@@ -10,6 +10,22 @@ import { FALLBACK_USERNAME } from "@/shared/config/limits";
 
 export const RAM_OPTIONS_GB = [2, 4, 6, 8, 10, 12, 16] as const;
 
+const MB_PER_GB = 1024;
+
+/**
+ * Memory to suggest for a PC with `totalMb` of RAM, in MB. Modded packs get
+ * 40% of RAM (4–8 GB), vanilla 25% (2–4 GB); always leaves 2 GB for the OS.
+ * Mirrors `recommend_ram_mb` in `src-tauri/src/lib.rs`; keep both in sync.
+ */
+export function recommendRamMb(totalMb: number, modded: boolean): number {
+  const totalGb = totalMb / MB_PER_GB;
+  const [minGb, maxGb, ratio] = modded ? [4, 8, 0.4] : [2, 4, 0.25];
+  const want = Math.min(maxGb, Math.max(minGb, totalGb * ratio));
+  const cap = Math.min(want, totalGb - 2);
+  const fits = RAM_OPTIONS_GB.filter((gb) => gb <= cap);
+  return (fits.length ? fits[fits.length - 1] : RAM_OPTIONS_GB[0]) * MB_PER_GB;
+}
+
 /** The launcher uses Remined Relay for all network sessions. */
 export function normalizeNetworkMode(_raw: unknown): NetworkMode {
   return "relay";

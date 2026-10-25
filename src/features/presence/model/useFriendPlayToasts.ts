@@ -2,12 +2,14 @@ import { useEffect, useRef } from "react";
 import { listFriendships, useFriendBadgeStore } from "@/entities/friend";
 import { sendGameNotifyWithHead } from "@/entities/skin";
 import { useGameStore } from "@/entities/game";
+import { usePartyStore } from "@/entities/voice-room";
 import { useProfileStore } from "@/entities/profile";
 import { selectUserId, useSessionStore } from "@/entities/session";
 import { getLocale, t } from "@/shared/i18n";
 import { TIMING } from "@/shared/config/timings";
 import { netLog } from "@/shared/api/netLog";
 import { showFriendDesktopToast } from "@/shared/lib/friendToast";
+import { notifySystem } from "@/shared/lib/systemNotify";
 import { useGameBridgePrefs } from "@/shared/lib/gameBridgePrefs";
 import { useGameBridgeStore } from "@/shared/lib/gameBridgeStore";
 import { toast } from "@/shared/lib/toast";
@@ -75,6 +77,14 @@ export function useFriendPlayToasts(): void {
               { userId: row.profile.id, skinUrl: row.profile.skin_path },
             );
           }
+          if (incomingPrimed.current && !prevIncoming.current.has(row.friendshipId)) {
+            void notifySystem(
+              t("shell.notify.friendRequest.title"),
+              t("shell.notify.friendRequest.body", {
+                name: row.profile.username || t("social.presence.friendFallback"),
+              }),
+            );
+          }
         }
         prevIncoming.current = incomingNow;
         incomingPrimed.current = true;
@@ -98,6 +108,10 @@ export function useFriendPlayToasts(): void {
             now - (lastSeenHostingAt.current.get(id) ?? -Infinity) < RECENT_PLAY_MS;
           if (isPlayingStatus(st)) lastSeenPlayingAt.current.set(id, now);
           if (st === "hosting") lastSeenHostingAt.current.set(id, now);
+          // A party member hosting: the party's own join prompt (usePartyWorldWatch) is the single source.
+          const party = usePartyStore.getState();
+          const hostingInMyParty =
+            st === "hosting" && Boolean(party.room) && party.members.some((m) => m.userId === id);
           const title =
             row.profile.username || t("social.presence.friendFallback");
           const kind =
@@ -111,6 +125,7 @@ export function useFriendPlayToasts(): void {
             primed.current &&
             inGame &&
             st === "hosting" &&
+            !hostingInMyParty &&
             was !== "hosting" &&
             !recentlyHosting &&
             runningPack &&
@@ -135,7 +150,8 @@ export function useFriendPlayToasts(): void {
             primed.current &&
             isPlayingStatus(st) &&
             !isPlayingStatus(was) &&
-            !recentlyPlaying
+            !recentlyPlaying &&
+            !hostingInMyParty
           ) {
             if (inGame) {
               // The invite notify above already covers this hosting start.

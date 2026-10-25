@@ -75,7 +75,10 @@ export async function installVersion(
   const { patch, select, setInstalled } = useVersionStore.getState();
   const install = useInstallStore.getState();
   patch(edition, { busy: true });
-  install.begin(EDITIONS[edition].installMessage(versionId));
+  install.begin(
+    EDITIONS[edition].installMessage(versionId),
+    EDITIONS[edition].packId(versionId),
+  );
   try {
     const st = await versionApi.install(edition, versionId);
     usePackStore.getState().markInstalled(st.id);

@@ -101,4 +101,40 @@ class ProtocolTest {
         assertThrows(IllegalArgumentException.class, () -> Bridge.Json.parse("{\"a\":}"));
         assertThrows(IllegalArgumentException.class, () -> Bridge.Json.parse("{\"a\":1} x"));
     }
+
+    @Test
+    void parsesOpenLan() {
+        Protocol.OpenLan o = Protocol.openLan(Bridge.Json.parse("{\"t\":\"open_lan\",\"port\":25565,\"cheats\":true}"));
+        assertEquals(25565, o.port);
+        assertTrue(o.cheats);
+    }
+
+    @Test
+    void openLanDefaultsToFreePortWithoutCheats() {
+        Protocol.OpenLan o = Protocol.openLan(Bridge.Json.parse("{\"t\":\"open_lan\"}"));
+        assertEquals(0, o.port);
+        assertFalse(o.cheats);
+    }
+
+    @Test
+    void openLanRejectsOutOfRangePort() {
+        assertEquals(-1, Protocol.openLan(Bridge.Json.parse("{\"t\":\"open_lan\",\"port\":70000}")).port);
+        assertEquals(-1, Protocol.openLan(Bridge.Json.parse("{\"t\":\"open_lan\",\"port\":-5}")).port);
+    }
+
+    @Test
+    void parsesBattery() {
+        Protocol.Battery b = Protocol.battery(Bridge.Json.parse("{\"t\":\"battery\",\"present\":true,\"level\":87,\"charging\":true}"));
+        assertTrue(b.present);
+        assertEquals(87, b.level);
+        assertTrue(b.charging);
+    }
+
+    @Test
+    void batteryClampsLevelAndHidesWithoutPresent() {
+        assertEquals(100, Protocol.battery(Bridge.Json.parse("{\"present\":true,\"level\":250}")).level);
+        Protocol.Battery none = Protocol.battery(Bridge.Json.parse("{\"t\":\"battery\",\"present\":false,\"charging\":true}"));
+        assertFalse(none.present);
+        assertFalse(none.charging);
+    }
 }

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { displayRoomTitle } from "../lib/roomName";
 import {
   listFriendships,
   type FriendRow,
 } from "@/entities/friend";
+import { sendGameNotifyWithHead } from "@/entities/skin";
 import {
   listMyOpenRooms,
   listPendingInvites,
@@ -13,6 +13,10 @@ import {
 } from "@/entities/voice-room";
 import { t } from "@/shared/i18n";
 import { errorMessage } from "@/shared/lib/errors";
+import { useGameBridgePrefs } from "@/shared/lib/gameBridgePrefs";
+import { useGameBridgeStore } from "@/shared/lib/gameBridgeStore";
+import { notifySystem } from "@/shared/lib/systemNotify";
+import { partyInviteText } from "../lib/partyPack";
 import type { ToastFn } from "./types";
 
 /** Friends, my open rooms and pending invites (live-updated), plus the invite toast. */
@@ -65,13 +69,24 @@ export function useVoiceLists(
     if (seen === null) return; // first load — don't announce what's already there
     const first = invites.find((i) => !seen.has(i.id));
     if (!first) return;
-    toastRef.current(
-      t("voice.invitedToast", {
-        name: first.fromName || t("voice.aFriend"),
-        room: displayRoomTitle(first.roomTitle) || t("voice.aVoiceRoom"),
-      }),
-      "ok",
-    );
+    const name = first.fromName || t("voice.aFriend");
+    const text = partyInviteText(name, first.roomPackId);
+    toastRef.current(text, "ok");
+    void notifySystem(t("shell.notify.partyInvite.title"), text);
+    if (
+      useGameBridgeStore.getState().connected &&
+      useGameBridgePrefs.getState().notifications
+    ) {
+      sendGameNotifyWithHead(
+        {
+          kind: "invite",
+          title: name,
+          body: text,
+          action: { type: "join", id: `party:${first.roomId}`, ttl: 30_000 },
+        },
+        { userId: first.fromId, skinUrl: first.fromSkinPath ?? null },
+      );
+    }
   }, [invites]);
 
   return { friends, rooms, invites, listsLoading, refreshLists };

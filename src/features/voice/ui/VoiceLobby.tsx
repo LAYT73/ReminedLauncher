@@ -7,6 +7,7 @@ import { useT } from "@/shared/i18n";
 import { EmptyState } from "@/shared/ui/EmptyState";
 import { PixelDiceIcon, PixelGearIcon } from "@/shared/ui/PixelIcons";
 import { displayRoomTitle, randomVoiceRoomTitle } from "../lib/roomName";
+import { partyInviteText } from "../lib/partyPack";
 
 type Props = {
     userId: string;
@@ -180,15 +181,11 @@ export function VoiceLobby({
                                         />
                                         <div className="friend-copy">
                                             <strong>
-                                                {displayRoomTitle(inv.roomTitle) || t("voice.voiceRoom")}
+                                                {partyInviteText(
+                                                    inv.fromName || t("voice.aFriend"),
+                                                    inv.roomPackId,
+                                                )}
                                             </strong>
-                                            <span className="friend-id-static">
-                                                {t("voice.lobby.fromName", {
-                                                    name:
-                                                        inv.fromName ||
-                                                        t("voice.friendLower"),
-                                                })}
-                                            </span>
                                         </div>
                                         <div className="friend-actions">
                                             <button
@@ -199,7 +196,7 @@ export function VoiceLobby({
                                                     void onAcceptInvite(inv)
                                                 }
                                             >
-                                                {t("voice.join")}
+                                                {t("social.friends.accept")}
                                             </button>
                                             <button
                                                 type="button"
@@ -209,7 +206,7 @@ export function VoiceLobby({
                                                     void onDeclineInvite(inv)
                                                 }
                                             >
-                                                {t("voice.decline")}
+                                                {t("social.friends.decline")}
                                             </button>
                                         </div>
                                     </li>

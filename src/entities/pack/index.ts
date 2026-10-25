@@ -27,4 +27,5 @@ export { localizePack } from "./lib/localize";
 export type { Pack, PackI18n, PackRelease, PackStatus } from "./model/types";
 export { PackGallery } from "./ui/PackGallery";
 export { PackSelect, type PackOption } from "./ui/PackSelect";
+export { PackIcon } from "./ui/PackIcon";
 export { progressPhaseLabel } from "./config/progress";

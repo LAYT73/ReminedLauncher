@@ -10,7 +10,8 @@ use tauri::{
 
 static ALLOW_EXIT: AtomicBool = AtomicBool::new(false);
 
-fn restore_main<R: Runtime>(app: &AppHandle<R>) {
+/// Show, unminimize and focus the main window (tray click, reopen, second launch, deep link).
+pub fn restore_main<R: Runtime>(app: &AppHandle<R>) {
     let Some(window) = app.get_webview_window("main") else {
         return;
     };

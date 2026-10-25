@@ -197,6 +197,14 @@
   image-rendering: pixelated;
 }
 
+.pack-select-pack-icon {
+  flex-shrink: 0;
+  object-fit: contain;
+  object-position: center;
+  image-rendering: auto;
+  pointer-events: none;
+}
+
 .pack-select-trigger .pack-select-skin {
   width: 24px;
   height: 24px;

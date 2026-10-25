@@ -1,7 +1,7 @@
 import { localizeServerError } from "@/shared/lib/errors";
 import { supabase } from "@/shared/api/supabase";
 import { TABLE } from "@/shared/config/supabase";
-import type { VoiceRoom, VoiceRoomStatus } from "../model/types";
+import type { PartyGameState, VoiceRoom, VoiceRoomStatus } from "../model/types";
 import { t } from "@/shared/i18n";
 import { LIVEKIT_LOCAL_WS_URL, LIVEKIT_TCP_PORT } from "@/shared/config/voice";
 
@@ -15,10 +15,15 @@ type RoomRow = {
   lk_tcp_port: number;
   lk_udp_start: number;
   lk_udp_end: number;
+  pack_id?: string | null;
+  game_state?: PartyGameState | null;
+  lan_port?: number | null;
+  max_members?: number | null;
   created_at: string;
 };
 
-function mapRoom(r: RoomRow): VoiceRoom {
+/** Rooms from pre-party launchers have no pack_id / game_state: they render as voice-only. */
+export function mapRoom(r: RoomRow): VoiceRoom {
   return {
     id: r.id,
     hostId: r.host_id,
@@ -29,6 +34,10 @@ function mapRoom(r: RoomRow): VoiceRoom {
     lkTcpPort: r.lk_tcp_port ?? LIVEKIT_TCP_PORT,
     lkUdpStart: r.lk_udp_start ?? 7882,
     lkUdpEnd: r.lk_udp_end ?? 7901,
+    packId: r.pack_id ?? null,
+    gameState: r.game_state ?? "idle",
+    lanPort: r.lan_port ?? null,
+    maxMembers: r.max_members ?? 8,
     createdAt: r.created_at,
   };
 }
@@ -41,6 +50,8 @@ export async function createVoiceRoom(opts: {
   tcpPort: number;
   udpStart: number;
   udpEnd: number;
+  /** Party pack chosen by the host (catalog id). */
+  packId?: string | null;
 }): Promise<VoiceRoom> {
   const title = opts.title.trim() || "Voice room";
   const { data: authData, error: authErr } = await supabase.auth.getUser();
@@ -62,6 +73,7 @@ export async function createVoiceRoom(opts: {
       lk_tcp_port: opts.tcpPort,
       lk_udp_start: opts.udpStart,
       lk_udp_end: opts.udpEnd,
+      pack_id: opts.packId ?? null,
     })
     .select("*")
     .single();
@@ -106,6 +118,33 @@ export async function closeVoiceRoom(roomId: string): Promise<void> {
   if (mErr) throw new Error(localizeServerError(mErr.message) || t("voice.errors.clearMembers"));
 }
 
+/** Host only (RLS: voice_rooms_update_host). Null clears the party pack. */
+export async function setPartyPack(roomId: string, packId: string | null): Promise<void> {
+  const { error } = await supabase
+    .from(TABLE.voiceRooms)
+    .update({ pack_id: packId, updated_at: new Date().toISOString() })
+    .eq("id", roomId);
+  if (error) throw new Error(localizeServerError(error.message) || t("voice.errors.savePartyPack"));
+}
+
+/**
+ * Host only. `lanPort` is written as given: pass a number when the world is open
+ * to LAN, null to clear it, or leave it undefined to keep the stored value.
+ */
+export async function setPartyGameState(
+  roomId: string,
+  gameState: PartyGameState,
+  lanPort?: number | null,
+): Promise<void> {
+  const patch: Record<string, unknown> = {
+    game_state: gameState,
+    updated_at: new Date().toISOString(),
+  };
+  if (lanPort !== undefined) patch.lan_port = lanPort;
+  const { error } = await supabase.from(TABLE.voiceRooms).update(patch).eq("id", roomId);
+  if (error) throw new Error(localizeServerError(error.message) || t("voice.errors.savePartyState"));
+}
+
 export async function setVoiceRoomShareCode(
   roomId: string,
   shareCode: string,
@@ -143,6 +182,38 @@ export async function ensureVoiceRoomMember(
     { onConflict: "room_id,user_id" },
   );
   if (error) throw new Error(localizeServerError(error.message) || t("voice.errors.joinRoom"));
+}
+
+/**
+ * Enter a party without an invite row: the RLS join policy admits the host's
+ * accepted friends. Throws a player-facing message for closed, full, or denied rooms.
+ */
+export async function joinPartyRoom(roomId: string, userId: string): Promise<VoiceRoom> {
+  const room = await getVoiceRoom(roomId);
+  if (!room || room.status !== "open") throw new Error(t("voice.party.closed"));
+  const { data: count } = await supabase.rpc("voice_room_member_count", { p_room: roomId });
+  if (typeof count === "number" && count >= room.maxMembers) {
+    throw new Error(t("voice.party.full"));
+  }
+  const { error } = await supabase.from(TABLE.voiceRoomMembers).upsert(
+    { room_id: roomId, user_id: userId, role: "member" },
+    { onConflict: "room_id,user_id" },
+  );
+  if (error) {
+    if (/row-level security|policy/i.test(error.message)) {
+      const { data: host } = await supabase
+        .from(TABLE.profiles)
+        .select("username, nick")
+        .eq("id", room.hostId)
+        .maybeSingle();
+      const name =
+        ((host?.username as string | undefined) || (host?.nick as string | undefined) || "").trim() ||
+        t("voice.aFriend");
+      throw new Error(t("voice.party.joinDenied", { host: name }));
+    }
+    throw new Error(localizeServerError(error.message) || t("voice.errors.joinRoom"));
+  }
+  return room;
 }
 
 export async function listMyOpenRooms(userId: string): Promise<VoiceRoom[]> {

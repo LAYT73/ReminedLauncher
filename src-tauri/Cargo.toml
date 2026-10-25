@@ -1,6 +1,6 @@
 [package]
 name = "remined"
-version = "1.0.2"
+version = "1.0.3"
 description = "Remined Minecraft Launcher"
 authors = ["Remined"]
 edition = "2021"
@@ -29,12 +29,19 @@ flate2 = "1.1.10"
 tar = "0.4.46"
 tauri-plugin-updater = "2.13.3"
 tauri-plugin-process = "2.4.0"
+tauri-plugin-single-instance = { version = "2.5.4", features = ["deep-link"] }
+tauri-plugin-deep-link = "2.6.1"
+tauri-plugin-autostart = "2.7.0"
+tauri-plugin-window-state = "2.5.0"
+tauri-plugin-notification = "2.7.0"
 uuid = { version = "1.28.0", features = ["v3", "v4", "std"] }
 futures = "0.3.34"
 tokio = { version = "1.53.2", features = ["time", "rt", "macros"] }
 libc = "0.2"
 jsonwebtoken = "9"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "alloc"] }
+sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
+starship-battery = { version = "0.12.0", default-features = false }
 
 [profile.release]
 codegen-units = 1

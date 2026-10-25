@@ -7,7 +7,7 @@ export const shell: Dict<typeof en> = {
     screenshots: "Скрины",
     friends: "Друзья",
     network: "Сеть",
-    voice: "Голос",
+    voice: "Пати",
   },
   rail: {
     home: "Главная",
@@ -71,5 +71,27 @@ export const shell: Dict<typeof en> = {
     dismiss: "Закрыть",
     hideHelp: "Скрыть подсказку",
     showHelp: "Показать подсказку",
+  },
+  /** Системные уведомления (отправляются, только когда окно лаунчера в фоне). */
+  notify: {
+    packReady: {
+      title: "Сборка готова",
+      body: "{name} установлена и готова к игре.",
+    },
+    launcherUpdate: {
+      title: "Доступно обновление лаунчера",
+      body: "Remined {v} готов к установке.",
+    },
+    friendRequest: {
+      title: "Заявка в друзья",
+      body: "{name} хочет добавить вас в друзья.",
+    },
+    partyInvite: {
+      title: "Приглашение в пати",
+    },
+    partyWorld: {
+      title: "{host} открыл мир",
+      body: "Зайди через вкладку Пати.",
+    },
   },
 };

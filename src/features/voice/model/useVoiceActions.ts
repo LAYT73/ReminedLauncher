@@ -6,7 +6,8 @@ import {
   closeVoiceRoom,
   createVoiceRoom,
   getVoiceRoom,
-  inviteFriendToRoom,
+  inviteToParty,
+  joinPartyRoom,
   leaveVoiceRoom,
   listMessages,
   listRoomMembers,
@@ -19,6 +20,7 @@ import {
   type VoiceRoom,
 } from "@/entities/voice-room";
 import { useGameStore } from "@/entities/game";
+import { getActiveReminePack } from "@/entities/pack";
 import { ensureRelayReady } from "@/shared/api/relay";
 import {
   voiceEnsureRuntime,
@@ -112,7 +114,12 @@ export function useVoiceActions({
       liveRef.current.resetLiveUi();
       onRoomStatusChangeRef.current?.(false);
       await listsRef.current.refreshLists().catch(() => undefined);
-      if (toastMsg) onToastRef.current(t("voice.toasts.hostEnded"), "ok");
+      if (toastMsg) {
+        const host =
+          roomRef.current.membersRef.current.find((m) => m.role === "host")?.username ||
+          t("voice.aFriend");
+        onToastRef.current(t("voice.toasts.hostEnded", { host }), "ok");
+      }
     } finally {
       guestKickInFlight.current = false;
     }
@@ -136,6 +143,26 @@ export function useVoiceActions({
         if (activeHostId === userId) return;
         void kickGuestRoomEnded(activeId);
         return;
+      }
+      if (
+        patch.packId !== undefined ||
+        patch.gameState !== undefined ||
+        patch.lanPort !== undefined
+      ) {
+        roomRef.current.setActive((prev) => {
+          if (!prev || prev.id !== activeId) return prev;
+          const next = {
+            ...prev,
+            packId: patch.packId !== undefined ? patch.packId : prev.packId,
+            gameState: patch.gameState ?? prev.gameState,
+            lanPort: patch.lanPort !== undefined ? patch.lanPort : prev.lanPort,
+          };
+          return next.packId === prev.packId &&
+            next.gameState === prev.gameState &&
+            next.lanPort === prev.lanPort
+            ? prev
+            : next;
+        });
       }
       if (patch.relayShareCode === undefined) return;
       const code = patch.relayShareCode;
@@ -196,7 +223,7 @@ export function useVoiceActions({
       await lists.refreshLists();
       onRoomStatusChange?.(true);
     } catch (err) {
-      await live.disconnect();
+      await live.disconnect().catch(() => undefined);
       if (!asGuest) await stopHostKeepingLan();
       else await voiceGuestDisconnect().catch(() => undefined);
       resetActiveUi();
@@ -205,7 +232,7 @@ export function useVoiceActions({
   }
 
   async function teardownFailedCreate(roomId: string | null) {
-    await live.disconnect();
+    await live.disconnect().catch(() => undefined);
     await stopHostKeepingLan();
     if (roomId) await closeVoiceRoom(roomId).catch(() => undefined);
     resetActiveUi();
@@ -225,11 +252,12 @@ export function useVoiceActions({
     }
   }
 
-  async function onCreate() {
-    if (busy || createInFlight.current) return;
+  /** Create a party as host. Resolves the new room id, or null when it did not start. */
+  async function onCreate(): Promise<string | null> {
+    if (busy || createInFlight.current) return null;
     if (active && live.sessionRef.current) {
       onToast(MSG.voice.alreadyInRoom, "err");
-      return;
+      return null;
     }
     createInFlight.current = true;
     setCreating(true);
@@ -279,6 +307,8 @@ export function useVoiceActions({
         tcpPort: livekit.tcp_port,
         udpStart: livekit.udp_start,
         udpEnd: livekit.udp_end,
+        // Party pack = the host's current Remined pack (null when none is installed/listed).
+        packId: getActiveReminePack()?.id ?? null,
       });
       createdRoomId = created.id;
       step(MSG.voice.connectingVoice, 93);
@@ -297,6 +327,7 @@ export function useVoiceActions({
       setTitle(randomVoiceRoomTitle());
       onToast(t("voice.toasts.roomLive"), "ok");
       unlockAchievement("first-voice-room", onToast);
+      return created.id;
     } catch (err) {
       await teardownFailedCreate(createdRoomId);
       const msg = errorMessage(err, "");
@@ -308,6 +339,7 @@ export function useVoiceActions({
         percent: 0,
         message: t("voice.runtime.failed"),
       }));
+      return null;
     } finally {
       unlisten?.();
       createInFlight.current = false;
@@ -316,40 +348,71 @@ export function useVoiceActions({
     }
   }
 
+  /** Leave the room this client is in (host closes it, guest leaves). Only used before switching rooms. */
+  async function leaveCurrentRoom() {
+    if (!active) return;
+    if (active.hostId === userId) {
+      await closeVoiceRoom(active.id).catch(() => undefined);
+      await stopHostKeepingLan();
+    } else {
+      await leaveVoiceRoom(active.id, userId).catch(() => undefined);
+      await voiceGuestDisconnect().catch(() => undefined);
+    }
+    await live.disconnect().catch(() => undefined);
+    resetActiveUi();
+  }
+
+  /** Accept an invite and enter its room. The caller has already left any previous room. */
+  async function acceptInviteAndEnter(inv: VoiceInvite) {
+    const joined = await respondVoiceInvite(inv.id, true, userId);
+    if (!joined) throw new Error(t("voice.errors.roomUnavailable"));
+    await enterRoomAsGuest(joined);
+  }
+
   const onAcceptInvite = (inv: VoiceInvite) =>
     guarded(async () => {
       live.setStatus(t("voice.s.acceptingInvite"));
       try {
         // Switching rooms: leave the current one first so the old session/SFU
         // does not linger (and so we don't keep hosting a dead room).
-        if (active && active.id !== inv.roomId) {
-          if (active.hostId === userId) {
-            await closeVoiceRoom(active.id).catch(() => undefined);
-            await stopHostKeepingLan();
-          } else {
-            await leaveVoiceRoom(active.id, userId).catch(() => undefined);
-            await voiceGuestDisconnect().catch(() => undefined);
-          }
-          await live.disconnect();
-          resetActiveUi();
-        }
-        const joined = await respondVoiceInvite(inv.id, true, userId);
-        if (!joined) throw new Error(t("voice.errors.roomUnavailable"));
-        live.setStatus(t("voice.s.preparingRelay"));
-        await ensureRelayReady();
-        // Host may still be publishing the Relay key after create — poll briefly.
-        let room = joined;
-        for (let i = 0; i < 10 && !room.relayShareCode; i++) {
-          live.setStatus(t("voice.s.waitingShareKey"));
-          await new Promise((r) => setTimeout(r, TIMING.hostKeyPoll));
-          room = (await getVoiceRoom(joined.id)) ?? room;
-        }
-        if (!room.relayShareCode) {
-          throw new Error(t("voice.errors.hostKeyNotReady"));
-        }
-        await openRoomSession(room, true);
-        onToast(t("voice.toasts.joined"), "ok");
-        unlockAchievement("first-voice-room", onToast);
+        if (active && active.id !== inv.roomId) await leaveCurrentRoom();
+        await acceptInviteAndEnter(inv);
+      } catch (err) {
+        void voiceGuestDisconnect().catch(() => undefined);
+        resetActiveUi();
+        throw err;
+      }
+    });
+
+  /** Guest entry once membership exists: wait for the host's Relay key, then open the voice session. */
+  async function enterRoomAsGuest(joined: VoiceRoom) {
+    live.setStatus(t("voice.s.preparingRelay"));
+    await ensureRelayReady();
+    // Host may still be publishing the Relay key after create — poll briefly.
+    let room = joined;
+    for (let i = 0; i < 10 && !room.relayShareCode; i++) {
+      live.setStatus(t("voice.s.waitingShareKey"));
+      await new Promise((r) => setTimeout(r, TIMING.hostKeyPoll));
+      room = (await getVoiceRoom(joined.id)) ?? room;
+    }
+    if (!room.relayShareCode) {
+      throw new Error(t("voice.errors.hostKeyNotReady"));
+    }
+    await openRoomSession(room, true);
+    onToast(t("voice.toasts.joined"), "ok");
+    unlockAchievement("first-voice-room", onToast);
+  }
+
+  /**
+   * Join a party by id (deep link, in-game key). Never leaves another room: the
+   * caller leaves first (VoicePanel's switch banner) or only calls this when no room is active.
+   */
+  const joinRoomById = (roomId: string) =>
+    guarded(async () => {
+      const invite = listsRef.current.invites.find((i) => i.roomId === roomId);
+      try {
+        if (invite) await acceptInviteAndEnter(invite);
+        else await enterRoomAsGuest(await joinPartyRoom(roomId, userId));
       } catch (err) {
         void voiceGuestDisconnect().catch(() => undefined);
         resetActiveUi();
@@ -402,7 +465,7 @@ export function useVoiceActions({
       throw new Error(t("voice.errors.lobbyNotReady"));
     }
     try {
-      await inviteFriendToRoom({ roomId: active.id, fromId: userId, toId: invitePick });
+      await inviteToParty({ roomId: active.id, fromId: userId, toId: invitePick });
       setInvitePick("");
       onToast(t("voice.toasts.inviteSent"), "ok");
     } catch (err) {
@@ -493,6 +556,7 @@ export function useVoiceActions({
     onDeclineInvite,
     onLeave,
     onInvite,
+    joinRoomById,
     onSend,
     onRejoin,
     onCloseListedRoom,

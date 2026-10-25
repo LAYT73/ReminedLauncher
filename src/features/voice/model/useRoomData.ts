@@ -26,14 +26,16 @@ export function useRoomData(userId: string, displayName: string) {
   const membersRef = useRef<VoiceMember[]>([]);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   membersRef.current = members;
+  // Subscriptions key on the room id only: game_state/lan patches replace `active` often.
+  const activeId = active?.id ?? null;
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   useEffect(() => {
-    if (!active) return;
-    const roomId = active.id;
+    if (!activeId) return;
+    const roomId = activeId;
     let disposed = false;
 
     const decorate = (msg: VoiceMessage): VoiceMessage => {
@@ -115,11 +117,11 @@ export function useRoomData(userId: string, displayName: string) {
       window.removeEventListener("focus", catchUp);
       window.removeEventListener("online", catchUp);
     };
-  }, [active, userId, displayName, membersRef]);
+  }, [activeId, userId, displayName, membersRef]);
 
   useEffect(() => {
-    if (!active) return;
-    const roomId = active.id;
+    if (!activeId) return;
+    const roomId = activeId;
     const refresh = () => {
       void listRoomMembers(roomId)
         .then(setMembers)
@@ -127,7 +129,7 @@ export function useRoomData(userId: string, displayName: string) {
     };
     refresh();
     return subscribeRoomMembers(roomId, refresh);
-  }, [active]);
+  }, [activeId]);
 
   function reset() {
     setActive(null);

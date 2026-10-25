@@ -39,6 +39,8 @@ export const TIMING = {
   pageSafety: 2_000,
   /** Voice room chat safety-net re-fetch. */
   voiceChatPoll: 12_000,
+  /** Min gap between party member progress writes (install %). */
+  partyProgressThrottle: 2_000,
   /** Voice room closed-state check while a room is open. */
   voiceRoomStatusPoll: 4_000,
   /** Re-check of the host's Relay key while a guest joins. */
@@ -47,6 +49,23 @@ export const TIMING = {
   offlineGrace: 2_500,
   /** Default online probe timeout. */
   networkProbe: 2_500,
+  /** A pack deep link waits this long for the catalog before it is dropped. */
+  deepLinkPackWait: 15_000,
   /** Presence activity change debounce. */
   activityDebounce: 5_000,
+  /** Party host: how long the mod may take to answer open_lan. */
+  partyOpenReply: 15_000,
+  /** Party host: after open_lan ok, how long until the game log shows the LAN port. */
+  partyOpenConfirm: 20_000,
+  /** Party write retry: first delay, doubling per failure, capped. */
+  partyRetryMin: 2_000,
+  partyRetryMax: 30_000,
+  /** Party member heartbeat: re-write my state so updated_at stays fresh. */
+  partyHeartbeat: 60_000,
+  /** A member row older than this is stale: shown as joined, host treated as offline. */
+  partyStaleAfter: 180_000,
+  /** Party "Invited" chip expires after this, so the host can invite again. */
+  partyInviteTtl: 120_000,
+  /** Re-render tick for stale-member checks while in a party. */
+  partyStaleTick: 30_000,
 } as const;

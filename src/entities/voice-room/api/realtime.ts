@@ -1,6 +1,6 @@
 import { supabase } from "@/shared/api/supabase";
 import { TABLE } from "@/shared/config/supabase";
-import type { VoiceMessage } from "../model/types";
+import type { PartyGameState, VoiceMessage } from "../model/types";
 
 /**
  * Live chat inserts. Self-healing: if the channel errors, times out or closes
@@ -137,6 +137,9 @@ export function subscribeRoomMembers(
 export type VoiceRoomRowPatch = {
   status?: string;
   relayShareCode?: string | null;
+  packId?: string | null;
+  gameState?: PartyGameState;
+  lanPort?: number | null;
 };
 
 /** Fires when the room row changes (closed, new Relay share code, …). */
@@ -158,6 +161,9 @@ export function subscribeVoiceRoom(
         const row = payload.new as {
           status?: string;
           relay_share_code?: string | null;
+          pack_id?: string | null;
+          game_state?: PartyGameState;
+          lan_port?: number | null;
         } | null;
         if (!row) return;
         onChange({
@@ -166,6 +172,9 @@ export function subscribeVoiceRoom(
             row.relay_share_code === undefined
               ? undefined
               : row.relay_share_code,
+          packId: row.pack_id === undefined ? undefined : row.pack_id,
+          gameState: row.game_state,
+          lanPort: row.lan_port === undefined ? undefined : row.lan_port,
         });
       },
     )

@@ -29,6 +29,13 @@ public interface Platform {
 
     void onHud(Hud hud);
 
+    /**
+     * Registers a hook drawn after every container screen (inventory, chest, crafting, furnace, ...) renders, on top
+     * of it. Not called for other screens (pause, chat, settings). No-op where the game has no such event.
+     */
+    default void onContainerScreen(Hud hud) {
+    }
+
     boolean hudHidden();
 
     boolean screenOpen();
@@ -43,6 +50,18 @@ public interface Platform {
     void uploadHead(String key, int[] argb);
 
     void releaseHead(String key);
+
+    /**
+     * Port the current single-player world is published to LAN on, 0 when it is not published, -1 when no
+     * integrated server runs (not in a single-player world). Throws when the game does not expose it.
+     */
+    int lanPort();
+
+    /**
+     * Publishes the current single-player world to LAN on port in the player's current game mode, then posts the
+     * vanilla "Local game hosted on port" line. False when the game refuses. Caller checks lanPort() first.
+     */
+    boolean publishLan(int port, boolean cheats);
 
     /** Translates a lang key. */
     String translate(String key);

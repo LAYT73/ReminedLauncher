@@ -20,6 +20,8 @@ final class Hub {
     final Notices notices = new Notices();
     private Config cfg = new Config();
     private Protocol.Voice voice = Protocol.Voice.off();
+    private final BatteryHud battery = new BatteryHud();
+    private volatile Protocol.Battery batteryState;
     private Sender sender;
     private boolean settingsOpen;
     private String inviteId;
@@ -39,9 +41,22 @@ final class Hub {
         platform.registerKey("mute", "key.remined.mute", "M");
         platform.registerKey("deafen", "key.remined.deafen", null);
         platform.registerKey("join", "key.remined.join", "J");
+        if (net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("echo_compass_hud")) {
+            HudToggle.COMPASS.init(file.getParent());
+            platform.registerKey("compass", "key.remined.compass", null);
+        }
+        if (java.nio.file.Files.exists(file.resolveSibling("remined-crosshair-hints"))) {
+            HudToggle.HINTS.init(file.getParent());
+            platform.registerKey("hints", "key.remined.hints", null);
+        }
         cfg = Config.load(file);
         platform.onTick(this::tick);
         platform.onHud(this::renderHud);
+        try {
+            platform.onContainerScreen(this::renderBattery);
+        } catch (Throwable e) {
+            log.log("battery hook unavailable", e);
+        }
     }
 
     void setSender(Sender sender) {
@@ -87,6 +102,11 @@ final class Hub {
     /** Drops an armed join invite (the launcher went away). */
     void clearInvite() {
         inviteId = null;
+    }
+
+    /** Latest laptop battery state from the launcher; null clears it (the launcher went away). */
+    void onBattery(Protocol.Battery b) {
+        batteryState = b;
     }
 
     void onHead(String id, int[] argb) {
@@ -155,6 +175,8 @@ final class Hub {
             for (int i = 0; i < 8 && platform.consumeClick("mute"); i++) sendAction("mute");
             for (int i = 0; i < 8 && platform.consumeClick("deafen"); i++) sendAction("deafen");
             for (int i = 0; i < 8 && platform.consumeClick("join"); i++) sendJoin();
+            for (int i = 0; i < 8 && platform.consumeClick("compass"); i++) HudToggle.COMPASS.toggle();
+            for (int i = 0; i < 8 && platform.consumeClick("hints"); i++) HudToggle.HINTS.toggle();
         } catch (Throwable e) {
             log.log("tick failed", e);
         }
@@ -182,6 +204,15 @@ final class Hub {
             notices.render(g, this, cfg.noticeCorner);
         } catch (Throwable e) {
             log.log("hud failed", e);
+        }
+    }
+
+    private void renderBattery(Gfx g) {
+        try {
+            Protocol.Battery b = batteryState;
+            if (b != null && b.present) battery.render(g, b);
+        } catch (Throwable e) {
+            log.log("battery hud failed", e);
         }
     }
 }

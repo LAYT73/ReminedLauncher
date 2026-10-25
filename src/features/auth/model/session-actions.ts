@@ -12,6 +12,7 @@ import { resolveMediaFromDisk } from "@/shared/lib/mediaCache";
 import { toast } from "@/shared/lib/toast";
 import { bootstrapLauncher, hydratePackMedia, usePackStore } from "@/entities/pack";
 import { usePlaytimeStore } from "@/entities/playtime";
+import { usePartyStore } from "@/entities/voice-room";
 import {
   applyOfflineAccount,
   loadLocalProfile,
@@ -226,6 +227,7 @@ export async function signOut(): Promise<void> {
   clearOfflineAccount();
   session().setOfflineMode(false);
   usePlaytimeStore.getState().clear();
+  usePartyStore.getState().reset();
   if (current) await supabase.auth.signOut();
   else {
     session().setGate("auth");

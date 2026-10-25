@@ -38,4 +38,4 @@ Done when:
 - Voice share column is `relay_share_code` (not `porthole_*`).
 - Releases bump version in package.json, tauri.conf.json, Cargo.toml, Cargo.lock, limits.ts, release.yml, plus README / docs RELEASE + ARCHITECTURE “current release” lines.
 - Companion jar lives in `src-tauri/resources/`; source in `companion-mod/`.
-- Migrations through `017_sessions_activity.sql` (pack i18n = 016, activity = 017).
+- Migrations through `019_party_invite_status.sql` (pack i18n = 016, activity = 017, party = 018–019).

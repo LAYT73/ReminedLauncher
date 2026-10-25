@@ -4,6 +4,7 @@ import { MSG } from "@/shared/config/messages";
 import { useT } from "@/shared/i18n";
 import { StatusBadge as SharedBadge } from "@/shared/ui/StatusBadge";
 import { FriendSkinPeek } from "./FriendSkinPeek";
+import { FriendPartyButton } from "./FriendPartyButton";
 
 type ToastFn = (message: string) => void;
 
@@ -110,18 +111,19 @@ export function FriendItem({
         onToast={onToast}
         status={<StatusBadge row={row} />}
       />
-      {canJoinFriend(row) ? (
-        <button
-          type="button"
-          className="btn-mc ok friend-join"
-          disabled={Boolean(joiningFriendId)}
-          onClick={() => onJoin(row)}
-        >
-          {joining ? t("social.friends.joining") : t("social.friends.join")}
-        </button>
-      ) : (
-        <span className="friend-join-slot" aria-hidden />
-      )}
+      <div className="friend-join-group">
+        {canJoinFriend(row) ? (
+          <button
+            type="button"
+            className="btn-mc ok friend-join"
+            disabled={Boolean(joiningFriendId)}
+            onClick={() => onJoin(row)}
+          >
+            {joining ? t("social.friends.joining") : t("social.friends.join")}
+          </button>
+        ) : null}
+        <FriendPartyButton row={row} onToast={onToast} />
+      </div>
       <button type="button" className="btn-mc danger friend-remove" onClick={onRemove}>
         {t("social.friends.remove")}
       </button>

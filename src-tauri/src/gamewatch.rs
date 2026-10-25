@@ -78,8 +78,16 @@ fn summarize_crash(text: &str) -> String {
     s
 }
 
+/// The shutdown watchdog fires after the game already closed normally when some mod leaves a
+/// non-daemon thread running. Not a crash the player needs to hear about.
+fn is_exit_watchdog(text: &str) -> bool {
+    text.lines()
+        .find_map(|l| l.strip_prefix("Description:"))
+        .is_some_and(|d| d.trim().starts_with("Client shutdown"))
+}
+
 pub fn latest_crash(instance: &Path, since_ms: u64) -> Option<CrashInfo> {
-    let mut best: Option<(u64, PathBuf)> = None;
+    let mut found: Vec<(u64, PathBuf)> = Vec::new();
     let dirs = [instance.join("crash-reports"), instance.to_path_buf()];
     for dir in dirs {
         let Ok(rd) = fs::read_dir(&dir) else { continue };
@@ -92,13 +100,16 @@ pub fn latest_crash(instance: &Path, since_ms: u64) -> Option<CrashInfo> {
                 continue;
             }
             let t = mtime_ms(&p);
-            if t >= since_ms && best.as_ref().map(|(bt, _)| t > *bt).unwrap_or(true) {
-                best = Some((t, p));
+            if t >= since_ms {
+                found.push((t, p));
             }
         }
     }
-    let (_, path) = best?;
-    let text = fs::read_to_string(&path).unwrap_or_default();
+    found.sort_by(|a, b| b.0.cmp(&a.0));
+    let (path, text) = found.into_iter().find_map(|(_, p)| {
+        let text = fs::read_to_string(&p).unwrap_or_default();
+        (!is_exit_watchdog(&text)).then_some((p, text))
+    })?;
     let summary = if path.extension().map(|e| e == "log").unwrap_or(false) {
         crate::i18n::tr("game.crash_hs_err").to_string()
     } else {
@@ -697,6 +708,27 @@ pub async fn screenshots_dir(app: AppHandle, pack_id: String) -> Result<String, 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn skips_exit_watchdog_reports() {
+        let dir = std::env::temp_dir().join(format!("remined-crash-{}", std::process::id()));
+        let reports = dir.join("crash-reports");
+        fs::create_dir_all(&reports).unwrap();
+        fs::write(
+            reports.join("crash-a-client.txt"),
+            "Description: Rendering overlay\n\njava.lang.NullPointerException\n",
+        )
+        .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        fs::write(
+            reports.join("crash-b-client.txt"),
+            "Description: Client shutdown from post-main\n\njava.lang.Error: Watchdog\n",
+        )
+        .unwrap();
+        let got = latest_crash(&dir, 0).unwrap();
+        assert_eq!(got.name, "crash-a-client.txt");
+        fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn parses_world_then_menu() {

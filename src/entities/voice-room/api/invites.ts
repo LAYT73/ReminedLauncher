@@ -5,6 +5,7 @@ import type { VoiceInvite, VoiceInviteStatus, VoiceRoom } from "../model/types";
 import { getVoiceRoom } from "./rooms";
 import { FALLBACK_USERNAME } from "@/shared/config/limits";
 import { t } from "@/shared/i18n";
+import { usePartyStore } from "../model/party-store";
 
 export async function inviteFriendToRoom(opts: {
   roomId: string;
@@ -23,6 +24,16 @@ export async function inviteFriendToRoom(opts: {
   if (error) throw new Error(localizeServerError(error.message) || t("voice.errors.sendInvite"));
 }
 
+/** Party invite (same row as a room invite). Marks the friend "Invited" in the party store. */
+export async function inviteToParty(opts: {
+  roomId: string;
+  fromId: string;
+  toId: string;
+}): Promise<void> {
+  await inviteFriendToRoom(opts);
+  usePartyStore.getState().markInvited(opts.roomId, opts.toId);
+}
+
 export async function listPendingInvites(userId: string): Promise<VoiceInvite[]> {
   const { data, error } = await supabase
     .from(TABLE.voiceInvites)
@@ -39,7 +50,7 @@ export async function listPendingInvites(userId: string): Promise<VoiceInvite[]>
   const [{ data: rooms }, { data: profiles }] = await Promise.all([
     supabase
       .from(TABLE.voiceRooms)
-      .select("id, title, status")
+      .select("id, title, status, pack_id")
       .in("id", roomIds),
     supabase
       .from(TABLE.profiles)
@@ -50,6 +61,9 @@ export async function listPendingInvites(userId: string): Promise<VoiceInvite[]>
     (rooms ?? [])
       .filter((r) => (r.status as string) === "open")
       .map((r) => [r.id as string, (r.title as string) || t("voice.voiceRoom")]),
+  );
+  const roomPacks = new Map(
+    (rooms ?? []).map((r) => [r.id as string, (r.pack_id as string | null) ?? null]),
   );
   const profileBy = new Map(
     (profiles ?? []).map((p) => [
@@ -74,6 +88,7 @@ export async function listPendingInvites(userId: string): Promise<VoiceInvite[]>
         status: r.status as VoiceInviteStatus,
         createdAt: r.created_at as string,
         roomTitle: openRooms.get(r.room_id as string),
+        roomPackId: roomPacks.get(r.room_id as string) ?? null,
         fromName: from?.name,
         fromSkinPath: from?.skin ?? null,
       };

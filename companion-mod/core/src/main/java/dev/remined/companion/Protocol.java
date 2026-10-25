@@ -6,7 +6,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-/** Parses launcher to mod messages (protocol v2) into plain values. Pure Java, no Minecraft. */
+/** Parses launcher to mod messages (protocol v3) into plain values. Pure Java, no Minecraft. */
 final class Protocol {
     static final int MAX_MEMBERS = 64;
     static final long DEFAULT_TTL_MS = 15_000L;
@@ -135,6 +135,40 @@ final class Protocol {
             ttl = Math.max(MIN_TTL_MS, Math.min(MAX_TTL_MS, num(a, "ttl", DEFAULT_TTL_MS)));
         }
         return new Notice(kind, title == null ? "" : title, body == null ? "" : body, head, actionType, actionId, ttl);
+    }
+
+    /** open_lan request. port 0 picks a free port; port -1 means the requested port is out of range. */
+    static final class OpenLan {
+        final int port;
+        final boolean cheats;
+
+        OpenLan(int port, boolean cheats) {
+            this.port = port;
+            this.cheats = cheats;
+        }
+    }
+
+    static OpenLan openLan(Map<String, Object> m) {
+        long p = num(m, "port", 0L);
+        return new OpenLan(p < 0 || p > 65_535 ? -1 : (int) p, bool(m, "cheats"));
+    }
+
+    /** Laptop battery state. present=false hides the indicator; level is clamped to 0..100. */
+    static final class Battery {
+        final boolean present;
+        final int level;
+        final boolean charging;
+
+        Battery(boolean present, int level, boolean charging) {
+            this.present = present;
+            this.level = level;
+            this.charging = charging;
+        }
+    }
+
+    static Battery battery(Map<String, Object> m) {
+        boolean present = bool(m, "present");
+        return new Battery(present, (int) Math.max(0L, Math.min(100L, num(m, "level", 0L))), present && bool(m, "charging"));
     }
 
     @SuppressWarnings("unchecked")

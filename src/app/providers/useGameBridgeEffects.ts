@@ -1,11 +1,15 @@
 import { useEffect } from "react";
 import { useFriendBadgeStore } from "@/entities/friend";
 import { joinFriendSession } from "@/features/play-game";
+import { usePartyStore } from "@/entities/voice-room";
 import { onGameBridgeEvent } from "@/shared/api/gameBridge";
 import { relayStopGameJoin } from "@/shared/api/relay";
 import { t } from "@/shared/i18n";
 import { useGameBridgeSync } from "@/shared/lib/gameBridgeStore";
 import { toast } from "@/shared/lib/toast";
+
+/** Join-key id prefix for party invites and open worlds (`party:<roomId>`). */
+const PARTY_KEY = "party:";
 
 /** Launcher side of the in-game companion bridge (no-op while the mod is not connected). */
 export function useGameBridgeEffects(): void {
@@ -16,7 +20,10 @@ export function useGameBridgeEffects(): void {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
     void onGameBridgeEvent((ev) => {
-      if (ev.t === "key" && ev.action === "join" && typeof ev.id === "string") {
+      if (ev.t === "key" && ev.action === "join" && typeof ev.id === "string" && ev.id.startsWith(PARTY_KEY)) {
+        // Party invite / open world: the voice feature accepts or joins (it owns the session).
+        usePartyStore.getState().request({ kind: "join", roomId: ev.id.slice(PARTY_KEY.length) });
+      } else if (ev.t === "key" && ev.action === "join" && typeof ev.id === "string") {
         const id = ev.id;
         const row = useFriendBadgeStore
           .getState()

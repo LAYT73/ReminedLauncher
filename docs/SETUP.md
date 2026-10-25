@@ -39,7 +39,7 @@ role keys, relay credentials and updater signing keys outside the repository.
 ## Supabase
 
 Apply every file in `supabase/migrations/` in lexical order. The current
-sequence ends at `017_sessions_activity.sql`.
+sequence ends at `019_party_invite_status.sql`.
 
 Required product configuration:
 
@@ -60,6 +60,7 @@ Feature dependencies:
 | Voice Relay share code | `015` |
 | Pack catalog locale overrides | `016` |
 | Friend activity codes | `017` |
+| Party (shared world per voice room) | `018`, `019` |
 
 ## Pack repository hygiene
 

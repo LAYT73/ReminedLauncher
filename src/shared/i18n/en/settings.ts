@@ -58,6 +58,7 @@ export const settings = {
     title: "Notifications",
     friendAlerts: "Friend alerts",
     shareActivity: "Share in-game activity with friends",
+    systemNotify: "System notifications when the launcher is in the background",
   },
   account: {
     title: "Account",
@@ -77,11 +78,15 @@ export const settings = {
     later: "Later",
     check: "Check for updates",
     checking: "Checking…",
+    autostart: "Launch at system startup (minimized to tray)",
   },
   java: {
     title: "Java",
     memory: "Memory (RAM)",
     gb: "GB",
+    ramHint: "Your PC has {total} GB — recommended {rec} GB",
+    ramUseRecommended: "Use recommended",
+    ramTooHigh: "Leaves less than 2 GB for the system.",
     path: "Java path",
     pathPlaceholder: "Auto (OpenJDK 25)",
     browse: "Browse for Java",

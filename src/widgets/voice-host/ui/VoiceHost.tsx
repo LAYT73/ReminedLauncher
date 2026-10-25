@@ -4,7 +4,12 @@ import { RAIL } from "@/shared/config/routes";
 import { toast } from "@/shared/lib/toast";
 import { transitionTo } from "@/shared/lib/pageTransition";
 import { VoicePanel } from "@/features/voice";
-import { joinFriendSession, useJoiningFriend } from "@/features/play-game";
+import {
+  joinFriendSession,
+  joinPartyWorld,
+  launchWithOpts,
+  useJoiningFriend,
+} from "@/features/play-game";
 import { useGameStore } from "@/entities/game";
 import { useGameBridgeStore } from "@/shared/lib/gameBridgeStore";
 import { useProfileStore } from "@/entities/profile";
@@ -41,6 +46,12 @@ export function VoiceHost() {
         onJoin: (row) => void joinFriendSession(row),
         joiningFriendId,
         blocked: gameBusy,
+      }}
+      party={{
+        play: async (packId) => {
+          await launchWithOpts({ packId, stayOnPage: true });
+        },
+        joinWorld: joinPartyWorld,
       }}
     />,
     getVoiceHost(),

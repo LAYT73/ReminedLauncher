@@ -10,12 +10,15 @@ import java.util.Map;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
@@ -72,6 +75,15 @@ public final class Boot1201 implements Platform {
     }
 
     @Override
+    public void onContainerScreen(Hud hud) {
+        ScreenEvents.AFTER_INIT.register((mc, screen, w, h) -> {
+            if (screen instanceof AbstractContainerScreen<?>) {
+                ScreenEvents.afterRender(screen).register((s, g, mx, my, delta) -> hud.render(new Gfx1201(g)));
+            }
+        });
+    }
+
+    @Override
     public boolean hudHidden() {
         return Minecraft.getInstance().options.hideGui;
     }
@@ -114,6 +126,24 @@ public final class Boot1201 implements Platform {
     @Override
     public void releaseHead(String key) {
         Minecraft.getInstance().getTextureManager().release(head(key));
+    }
+
+    @Override
+    public int lanPort() {
+        IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
+        if (server == null) return -1;
+        return server.isPublished() ? server.getPort() : 0;
+    }
+
+    @Override
+    public boolean publishLan(int port, boolean cheats) {
+        Minecraft mc = Minecraft.getInstance();
+        IntegratedServer server = mc.getSingleplayerServer();
+        if (server == null || server.isPublished() || mc.gameMode == null) return false;
+        if (!server.publishServer(mc.gameMode.getPlayerMode(), cheats, port)) return false;
+        // publishServer only logs; the vanilla "Open to LAN" screen posts this line itself.
+        mc.gui.getChat().addMessage(Component.translatable("commands.publish.started", port));
+        return true;
     }
 
     @Override

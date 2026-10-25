@@ -29,13 +29,30 @@ export function gameBridgeStatus(): Promise<boolean> {
   return call<boolean>(CMD.gameBridgeStatus);
 }
 
+/** Connection plus what the mod advertised in its hello reply. */
+export type GameBridgeInfo = {
+  connected: boolean;
+  /** Protocol version (0 when unknown). */
+  v: number;
+  /** Launcher-to-mod message types the mod handles (e.g. "open_lan"). */
+  caps: string[];
+};
+
+export function gameBridgeInfo(): Promise<GameBridgeInfo> {
+  return call<GameBridgeInfo>(CMD.gameBridgeInfo);
+}
+
 export function onGameBridgeEvent(cb: (ev: GameBridgeEvent) => void): Promise<UnlistenFn> {
   return listen<GameBridgeEvent>(EVENT.gameBridge, (e) => cb(e.payload));
 }
 
-export function onGameBridgeStatus(cb: (connected: boolean) => void): Promise<UnlistenFn> {
-  return listen<{ connected: boolean }>(EVENT.gameBridgeStatus, (e) =>
-    cb(Boolean(e.payload?.connected)),
+export function onGameBridgeStatus(cb: (info: GameBridgeInfo) => void): Promise<UnlistenFn> {
+  return listen<Partial<GameBridgeInfo>>(EVENT.gameBridgeStatus, (e) =>
+    cb({
+      connected: Boolean(e.payload?.connected),
+      v: typeof e.payload?.v === "number" ? e.payload.v : 0,
+      caps: Array.isArray(e.payload?.caps) ? e.payload.caps.filter((c) => typeof c === "string") : [],
+    }),
   );
 }
 

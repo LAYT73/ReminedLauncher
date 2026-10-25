@@ -17,6 +17,8 @@ public final class Companion implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        daemonizeStrayExecutors();
+        startExitGuard();
         Path dir = null;
         try {
             dir = FabricLoader.getInstance().getGameDir().resolve(".remined");
@@ -34,6 +36,69 @@ public final class Companion implements ClientModInitializer {
         } catch (Throwable e) {
             log("bridge failed", e);
         }
+    }
+
+    /**
+     * Some mods create a scheduled executor with the default (non-daemon) thread factory and never shut it
+     * down, so the JVM can't exit after the game closes and the shutdown watchdog writes a crash report.
+     * Swap in a daemon factory before their first task spawns a thread.
+     */
+    private void daemonizeStrayExecutors() {
+        String[][] targets = {
+            {"mousewheelie", "de.siphalor.mousewheelie.client.network.InteractionManager", "scheduledExecutor"},
+        };
+        for (String[] t : targets) {
+            if (!FabricLoader.getInstance().isModLoaded(t[0])) continue;
+            try {
+                java.lang.reflect.Field f = Class.forName(t[1], true, Companion.class.getClassLoader()).getDeclaredField(t[2]);
+                f.setAccessible(true);
+                final String name = t[0] + "-scheduler";
+                ((java.util.concurrent.ThreadPoolExecutor) f.get(null)).setThreadFactory(r -> {
+                    Thread th = new Thread(r, name);
+                    th.setDaemon(true);
+                    return th;
+                });
+            } catch (Throwable e) {
+                log("could not daemonize " + t[0] + " executor", e);
+            }
+        }
+    }
+
+    /**
+     * NightConfig's FileWatcher (shaded by LambDynamicLights, nested in Forge Config API Port) starts a
+     * default-factory debounce executor on the first config change and only shuts it down in stop(), which
+     * nobody calls on exit. Once the game thread ends, stop the watchers so the JVM can exit cleanly.
+     */
+    private void startExitGuard() {
+        final Thread game = Thread.currentThread();
+        Thread t = new Thread(() -> {
+            try {
+                game.join();
+            } catch (InterruptedException e) {
+                return;
+            }
+            String[] watchers = {
+                "com.electronwill.nightconfig.core.file.FileWatcher",
+                "dev.lambdaurora.lambdynlights.shadow.nightconfig.core.file.FileWatcher",
+            };
+            for (String name : watchers) {
+                try {
+                    Class<?> c = Class.forName(name, false, Companion.class.getClassLoader());
+                    java.lang.reflect.Field f = c.getDeclaredField("DEFAULT_INSTANCE");
+                    f.setAccessible(true);
+                    Object watcher = f.get(null);
+                    if (watcher != null) {
+                        c.getMethod("stop").invoke(watcher);
+                        log("stopped " + name + " on exit", null);
+                    }
+                } catch (ClassNotFoundException ignored) {
+                } catch (Throwable e) {
+                    log("could not stop " + name, e);
+                }
+            }
+        }, "remined-exit-guard");
+        t.setDaemon(true);
+        t.start();
     }
 
     /** Starts the in-game UI for this Minecraft version, or returns null (bridge and state still work). */

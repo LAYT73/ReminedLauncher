@@ -1,0 +1,9 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "dev.remined.companion.mc26.mixin",
+  "plugin": "dev.remined.companion.MixinGate",
+  "compatibilityLevel": "JAVA_21",
+  "injectors": { "defaultRequire": 0 },
+  "mixins": []
+}

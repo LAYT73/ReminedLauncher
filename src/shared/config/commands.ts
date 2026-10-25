@@ -2,6 +2,8 @@
 export const CMD = {
   // i18n
   setUiLocale: "set_ui_locale",
+  // system
+  systemMemoryMb: "system_memory_mb",
   // pack
   listPacks: "list_packs",
   getPackStatus: "get_pack_status",
@@ -47,6 +49,10 @@ export const CMD = {
   // in-game companion bridge (localhost socket to the Fabric mod)
   gameBridgeSend: "game_bridge_send",
   gameBridgeStatus: "game_bridge_status",
+  gameBridgeInfo: "game_bridge_info",
+  // deep links (`remined://…`) received before the frontend subscribed
+  drainDeepLinks: "drain_deep_links",
+  releaseDeepLinks: "release_deep_links",
   // voice
   voiceLogPath: "voice_log_path",
   voiceLogAppend: "voice_log_append",
