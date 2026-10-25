@@ -379,8 +379,6 @@ pub async fn sync_pack(app: &AppHandle, root: &Path, pack_id: &str) -> Result<Pa
     // Player data survives updates: move it aside, swap in the new pack, move it back.
     let keep_root = root.join(".remined").join("cache").join(format!("{pack_id}-keep"));
     let _ = fs::remove_dir_all(&keep_root);
-    let old_options = fs::read_to_string(dest.join("options.txt")).ok();
-    let old_defaults = fs::read_to_string(defaults_snapshot(&dest)).ok();
     if dest.exists() {
         for rel in PRESERVE {
             let from = dest.join(rel);
@@ -411,14 +409,6 @@ pub async fn sync_pack(app: &AppHandle, root: &Path, pack_id: &str) -> Result<Pa
         }
     }
     let _ = fs::remove_dir_all(&keep_root);
-    // The pack's own options.txt becomes the defaults snapshot; the player's settings merge over it.
-    if let Ok(pack_options) = fs::read_to_string(dest.join("options.txt")) {
-        let _ = crate::paths::write_atomic(&defaults_snapshot(&dest), &pack_options);
-        if let Some(user) = old_options {
-            let merged = merge_options(&pack_options, &user, old_defaults.as_deref());
-            let _ = crate::paths::write_atomic(&dest.join("options.txt"), &merged);
-        }
-    }
 
     let meta = PackInstallMeta {
         id: release.id.clone(),
@@ -463,46 +453,6 @@ const PRESERVE: &[&str] = &[
     "config/remined-hints-hidden",
 ];
 
-fn defaults_snapshot(instance: &Path) -> PathBuf {
-    instance.join(".remined").join("pack-options.txt")
-}
-
-/// Merge the player's options.txt into the new pack defaults.
-/// With the previous pack defaults known, a key keeps the player's value only if they changed it.
-/// Without them (first update from an older launcher) personal settings are kept, but keybinds and
-/// the resource-pack list come from the new pack, which ships its own binds and packs.
-fn merge_options(pack: &str, user: &str, old_defaults: Option<&str>) -> String {
-    fn parse(text: &str) -> Vec<(String, String)> {
-        text.lines()
-            .filter_map(|l| l.split_once(':').map(|(k, v)| (k.to_string(), v.to_string())))
-            .collect()
-    }
-    let pack = parse(pack);
-    let user_lines = parse(user);
-    let user: std::collections::HashMap<&str, &str> =
-        user_lines.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
-    let old: Option<std::collections::HashMap<String, String>> =
-        old_defaults.map(|t| parse(t).into_iter().collect());
-    let pack_owned =
-        |k: &str| k.starts_with("key_") || k == "resourcePacks" || k == "incompatibleResourcePacks";
-    let mut out = String::new();
-    for (k, pack_value) in &pack {
-        let value = match (user.get(k.as_str()), &old) {
-            (Some(u), Some(old)) if old.get(k).map(String::as_str) != Some(*u) => u.to_string(),
-            (Some(u), None) if !pack_owned(k) => u.to_string(),
-            _ => pack_value.clone(),
-        };
-        out.push_str(&format!("{k}:{value}\n"));
-    }
-    // Keys the pack does not ship (e.g. binds of mods the player added) stay as they are.
-    for (k, v) in &user_lines {
-        if !pack.iter().any(|(pk, _)| pk == k) {
-            out.push_str(&format!("{k}:{v}\n"));
-        }
-    }
-    out
-}
-
 /// Remove an installed pack directory (and cached zip if present).
 pub fn delete_pack(root: &Path, pack_id: &str) -> Result<(), String> {
     let id = pack_id.trim();
@@ -537,27 +487,3 @@ pub fn delete_pack(root: &Path, pack_id: &str) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(test)]
-mod merge_tests {
-    use super::merge_options;
-
-    #[test]
-    fn keeps_player_changes_and_takes_new_defaults() {
-        let old = "fov:70\nkey_key.jump:key.keyboard.space\nresourcePacks:[\"a\"]\n";
-        let user = "fov:90\nkey_key.jump:key.keyboard.space\nresourcePacks:[\"a\"]\nkey_key.mymod:key.keyboard.g\n";
-        let pack = "fov:70\nkey_key.jump:key.keyboard.c\nresourcePacks:[\"a\",\"b\"]\n";
-        let out = merge_options(pack, user, Some(old));
-        assert!(out.contains("fov:90\n"));
-        assert!(out.contains("key_key.jump:key.keyboard.c\n"));
-        assert!(out.contains("resourcePacks:[\"a\",\"b\"]\n"));
-        assert!(out.contains("key_key.mymod:key.keyboard.g\n"));
-    }
-
-    #[test]
-    fn first_update_keeps_personal_settings_but_not_binds() {
-        let user = "fov:90\nkey_key.jump:key.keyboard.x\n";
-        let pack = "fov:70\nkey_key.jump:key.keyboard.c\n";
-        let out = merge_options(pack, user, None);
-        assert_eq!(out, "fov:90\nkey_key.jump:key.keyboard.c\n");
-    }
-}
