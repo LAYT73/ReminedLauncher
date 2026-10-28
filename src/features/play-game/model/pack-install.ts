@@ -72,12 +72,23 @@ export async function downloadPack(): Promise<void> {
 export async function ensurePackUpToDate(): Promise<boolean> {
   const pack = getActiveReminePack();
   if (!pack) return false;
-  setStatus(MSG.install.checkingPackUpdate);
+  const offline = useSessionStore.getState().offlineMode || !isBrowserOnline();
   try {
-    const [remote, local] = await Promise.all([
-      packApi.latestRelease(pack.id),
-      packApi.status(pack.id),
-    ]);
+    const local = await packApi.status(pack.id);
+    // Offline: launch the installed pack without checking for updates.
+    if (local.installed && offline) return true;
+    setStatus(MSG.install.checkingPackUpdate);
+    const remote = await packApi
+      .latestRelease(pack.id)
+      .catch((err: unknown) => {
+        if (!local.installed) throw err;
+        return null;
+      });
+    if (!remote) {
+      // Installed pack stays playable when the update check fails.
+      toast(MSG.offline.updateCheck);
+      return true;
+    }
     if (local.installed && local.local_version === remote.version) return true;
     setStatus(
       local.installed
