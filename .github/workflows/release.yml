@@ -116,10 +116,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v1.0.5
-          releaseName: Remined v1.0.5
+          tagName: v1.0.6
+          releaseName: Remined v1.0.6
           releaseBody: |
-            Remined launcher v1.0.5 — Play works offline: an installed pack launches without the update check (no more catalog.json error without internet); if the check fails online, the game still starts.
+            Remined launcher v1.0.6 — closing the game no longer hangs for ~15 seconds or writes a "Client shutdown from post-main" crash report (Remined Companion now stops Mouse Wheelie's background scheduler on exit).
             macOS (arm64 + x64) and Windows builds.
           releaseDraft: false
           prerelease: false

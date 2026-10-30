@@ -67,7 +67,8 @@ public final class Companion implements ClientModInitializer {
     /**
      * NightConfig's FileWatcher (shaded by LambDynamicLights, nested in Forge Config API Port) starts a
      * default-factory debounce executor on the first config change and only shuts it down in stop(), which
-     * nobody calls on exit. Once the game thread ends, stop the watchers so the JVM can exit cleanly.
+     * nobody calls on exit. Mouse Wheelie's static scheduler is never shut down either. Once the game thread
+     * ends, stop the watchers and executors so the JVM can exit cleanly.
      */
     private void startExitGuard() {
         final Thread game = Thread.currentThread();
@@ -94,6 +95,24 @@ public final class Companion implements ClientModInitializer {
                 } catch (ClassNotFoundException ignored) {
                 } catch (Throwable e) {
                     log("could not stop " + name, e);
+                }
+            }
+            String[][] executors = {
+                {"de.siphalor.mousewheelie.client.network.InteractionManager", "scheduledExecutor"},
+            };
+            for (String[] target : executors) {
+                try {
+                    Class<?> c = Class.forName(target[0], false, Companion.class.getClassLoader());
+                    java.lang.reflect.Field f = c.getDeclaredField(target[1]);
+                    f.setAccessible(true);
+                    Object executor = f.get(null);
+                    if (executor instanceof java.util.concurrent.ExecutorService) {
+                        ((java.util.concurrent.ExecutorService) executor).shutdownNow();
+                        log("stopped " + target[0] + "." + target[1] + " on exit", null);
+                    }
+                } catch (ClassNotFoundException ignored) {
+                } catch (Throwable e) {
+                    log("could not stop " + target[0] + "." + target[1], e);
                 }
             }
         }, "remined-exit-guard");
