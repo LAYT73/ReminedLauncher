@@ -1,6 +1,6 @@
 # Release procedure
 
-The current release is `1.0.6`.
+The current release is `1.0.7`.
 
 ## Version surface
 

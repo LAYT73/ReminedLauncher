@@ -656,18 +656,32 @@ async fn materialize_skin(root: &Path, skin: &str) -> Result<PathBuf, String> {
         .user_agent("ReminedLauncher/0.2")
         .build()
         .map_err(|e| e.to_string())?;
+    let dir = root.join(".remined").join("skins");
+    let cache_dir = dir.join("cache");
+    let cache_file = cache_dir.join(format!("{}.png", skin_cache_key(skin)));
     // Skins are upserted at a stable URL — skip intermediary caches.
-    let bytes = client
-        .get(skin)
-        .header(reqwest::header::CACHE_CONTROL, "no-cache")
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .error_for_status()
-        .map_err(|e| e.to_string())?
-        .bytes()
-        .await
-        .map_err(|e| e.to_string())?;
+    let fetched: Result<_, String> = async {
+        let resp = client
+            .get(skin)
+            .header(reqwest::header::CACHE_CONTROL, "no-cache")
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        let resp = resp.error_for_status().map_err(|e| e.to_string())?;
+        resp.bytes().await.map_err(|e| e.to_string())
+    }
+    .await;
+    let bytes = match fetched {
+        Ok(bytes) => bytes,
+        Err(err) if cache_file.is_file() => {
+            eprintln!("[remined] skin download failed, using cache: {err}");
+            fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+            let dest = dir.join("active.png");
+            fs::copy(&cache_file, &dest).map_err(|e| e.to_string())?;
+            return Ok(dest);
+        }
+        Err(err) => return Err(err),
+    };
     if bytes.len() < 24 || &bytes[0..8] != b"\x89PNG\r\n\x1a\n" {
         return Err(i18n::tr("skin.dl_not_png").into());
     }
@@ -675,11 +689,40 @@ async fn materialize_skin(root: &Path, skin: &str) -> Result<PathBuf, String> {
         return Err(i18n::tr("skin.dl_too_large").into());
     }
 
-    let dir = root.join(".remined").join("skins");
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    if let Err(err) = fs::create_dir_all(&cache_dir).and_then(|_| fs::write(&cache_file, &bytes)) {
+        eprintln!("[remined] skin cache write failed: {err}");
+    }
     let dest = dir.join("active.png");
     fs::write(&dest, &bytes).map_err(|e| e.to_string())?;
     Ok(dest)
+}
+
+/// Stable per-URL cache key for downloaded skins.
+fn skin_cache_key(url: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    url.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
+/// Launch-time skin: `Ok(None)` means use default Steve. Remote skin failures
+/// fall back to default; local path errors still abort.
+async fn materialize_launch_skin(
+    root: &Path,
+    skin_path: Option<&str>,
+) -> Result<Option<PathBuf>, String> {
+    let Some(skin) = skin_path else {
+        return Ok(None);
+    };
+    match materialize_skin(root, skin).await {
+        Ok(local) => Ok(Some(local)),
+        Err(err) if is_http_url(skin) => {
+            eprintln!("[remined] skin materialize failed, using default skin: {err}");
+            Ok(None)
+        }
+        Err(err) => Err(err),
+    }
 }
 
 #[tauri::command]
@@ -1310,26 +1353,25 @@ async fn launch_pack(
         let version_id = pack_id
             .strip_prefix("vanilla-")
             .unwrap_or(pack_id.as_str());
-        let skin_local = if let Some(ref skin) = skin_path {
-            match materialize_skin(&root, skin).await {
-                Ok(local) => local,
-                Err(err) => {
+        let skin_local = match materialize_launch_skin(&root, skin_path.as_deref()).await {
+            Ok(Some(local)) => local,
+            Ok(None) => {
+                let dir = root.join(".remined").join("skins");
+                if let Err(err) = fs::create_dir_all(&dir) {
                     diag::lock_session(&session).phase = GamePhase::Idle;
-                    return Err(err);
+                    return Err(err.to_string());
                 }
+                let dest = dir.join("active.png");
+                if let Err(err) = fs::write(&dest, default_steve_png()) {
+                    diag::lock_session(&session).phase = GamePhase::Idle;
+                    return Err(err.to_string());
+                }
+                dest
             }
-        } else {
-            let dir = root.join(".remined").join("skins");
-            if let Err(err) = fs::create_dir_all(&dir) {
+            Err(err) => {
                 diag::lock_session(&session).phase = GamePhase::Idle;
-                return Err(err.to_string());
+                return Err(err);
             }
-            let dest = dir.join("active.png");
-            if let Err(err) = fs::write(&dest, default_steve_png()) {
-                diag::lock_session(&session).phase = GamePhase::Idle;
-                return Err(err.to_string());
-            }
-            dest
         };
         if let Err(err) =
             vanilla_skin_pack::apply(&instance, &skin_local, &model, version_id, name)
@@ -1357,39 +1399,38 @@ async fn launch_pack(
         // SkinShuffle + CSL LocalSkin must stay in sync. If Remined API 404s,
         // CSL falls through to LocalSkin/skins/{nick}.png — stale files look like
         // "old skin still exists" even after Storage/profile cleared.
-        let skin_for_local = if let Some(ref skin) = skin_path {
-            match materialize_skin(&root, skin).await {
-                Ok(local) => {
-                    if let Err(err) = apply_skinshuffle(&instance, &local, &model) {
-                        diag::lock_session(&session).phase = GamePhase::Idle;
-                        return Err(err);
-                    }
-                    local
-                }
-                Err(err) => {
+        let skin_for_local = match materialize_launch_skin(&root, skin_path.as_deref()).await {
+            Ok(Some(local)) => {
+                if let Err(err) = apply_skinshuffle(&instance, &local, &model) {
                     diag::lock_session(&session).phase = GamePhase::Idle;
                     return Err(err);
                 }
+                local
             }
-        } else {
-            // No cloud skin → Remined default Steve (same as UI), not blank Mojang.
-            if let Err(err) = apply_default_steve_skin(&instance, &model) {
-                let _ = clear_skinshuffle(&instance);
-                clear_csl_local_skin(&instance, name);
+            Ok(None) => {
+                // No cloud skin → Remined default Steve (same as UI), not blank Mojang.
+                if let Err(err) = apply_default_steve_skin(&instance, &model) {
+                    let _ = clear_skinshuffle(&instance);
+                    clear_csl_local_skin(&instance, name);
+                    diag::lock_session(&session).phase = GamePhase::Idle;
+                    return Err(err);
+                }
+                let dir = root.join(".remined").join("skins");
+                if let Err(err) = fs::create_dir_all(&dir) {
+                    diag::lock_session(&session).phase = GamePhase::Idle;
+                    return Err(err.to_string());
+                }
+                let dest = dir.join("default_steve.png");
+                if let Err(err) = fs::write(&dest, default_steve_png()) {
+                    diag::lock_session(&session).phase = GamePhase::Idle;
+                    return Err(err.to_string());
+                }
+                dest
+            }
+            Err(err) => {
                 diag::lock_session(&session).phase = GamePhase::Idle;
                 return Err(err);
             }
-            let dir = root.join(".remined").join("skins");
-            if let Err(err) = fs::create_dir_all(&dir) {
-                diag::lock_session(&session).phase = GamePhase::Idle;
-                return Err(err.to_string());
-            }
-            let dest = dir.join("default_steve.png");
-            if let Err(err) = fs::write(&dest, default_steve_png()) {
-                diag::lock_session(&session).phase = GamePhase::Idle;
-                return Err(err.to_string());
-            }
-            dest
         };
         if let Err(err) = apply_csl_local_skin(&instance, name, &skin_for_local) {
             eprintln!("[remined] skin LocalSkin: {err}");
