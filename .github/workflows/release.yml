@@ -116,10 +116,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v1.0.8
-          releaseName: Remined v1.0.8
+          tagName: v1.0.9
+          releaseName: Remined v1.0.9
           releaseBody: |
-            Remined launcher v1.0.8 — new Schematics tab: import .litematic / .schem / .nbt or add builds from the built-in catalog (houses, farms, mini builds, portals, decor), then follow them layer by layer in 3D with a block grid, materials list, build steps, measuring tape and a view cube.
+            Remined launcher v1.0.9 — new in-game Performance tab (press V in Fabric packs that ship a performance profile, e.g. VanillaPro 0.1.14): presets and live toggles for shaders, animations, models, particles and sound, with FPS cost hints. The launcher now applies the tab's mod on/off choices before each launch and keeps them across pack updates. Companion settings panel is centered; Echo Compass HUD drawn without a background.
             macOS (arm64 + x64) and Windows builds.
           releaseDraft: false
           prerelease: false

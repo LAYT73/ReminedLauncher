@@ -75,6 +75,85 @@ client that passes `hello` replaces the old one. Field details live in `core/...
 
 Keys can be rebound in the Minecraft Controls menu.
 
+### Performance tab
+
+The settings screen (key `V`) gets a second tab, "Performance", when the pack ships
+`<gameDir>/config/remined-performance-profile.json` and the backend supports it (only `mc26` does; other families
+simply hide the tab). It lists the profile's items with an FPS-cost badge (1 to 3 bars, green, amber, red), a preset
+selector ("Custom" lights up when the pending values match no preset), and Apply / Revert / Done. Hovering a row shows its
+hint. Rows for things that are not installed are greyed. Apply runs on the client thread, with one resource reload at
+most; a failing item is reported in a notice and never crashes the game. After a mod change a banner offers "Quit game".
+
+**Profile** (pack-owned, read-only; absent or invalid means no tab):
+
+```json
+{ "version": 1, "defaultPreset": "high",
+  "presets": [ { "id": "ultra", "name": {"ru": "Ультра", "en": "Ultra"}, "values": { "<itemId>": true } } ],
+  "sections": [ { "name": {"ru": "...", "en": "..."}, "items": [
+    { "id": "shaders", "kind": "shaders", "pack": "Mellow v3.4.1a.zip", "name": {"ru": "...", "en": "..."},
+      "hint": {"ru": "...", "en": "..."}, "impact": 3 } ] } ] }
+```
+
+| kind | fields | control | effect |
+|------|--------|---------|--------|
+| `shaders` | `pack` | switch | Iris. On: selects `pack` when the current shader pack is empty or missing, then enables shaders. Live |
+| `dh` | | switch | Distant Horizons rendering (`DhApi.Delayed.configs.graphics().renderingEnabled()`). Live |
+| `dh_radius` | `values` (ints) | choice | `chunkRenderDistance()`. Live |
+| `option` | `option`, `values`, optional `labels` | choice, or switch when `values` is absent (booleans) | vanilla video option, saved to options.txt. `renderDistance`, `simulationDistance`, `entityDistanceScaling` (double), `particles` (`all`/`decreased`/`minimal`), `clouds` (`off`/`fast`/`fancy`), `entityShadows`, `ambientOcclusion`, `biomeBlendRadius`, `mipmapLevels` (reloads resources) |
+| `packs` | `packs` (ids as in options.txt `resourcePacks`, e.g. `file/X.zip`) | switch | on = these resource packs are selected; missing ids are ignored. Order is preserved, see `packOrder` |
+| `config` | `on`, `off`, optional `probe` | switch | see below: edits the mod's config file and applies it live by reflection |
+| `mods` | `mods` (mod ids) | switch, marked with a restart sign | on = mods enabled. recorded in the state file; the launcher renames the jars before the next launch |
+
+A `config` item is a switch over another mod's own config: `"on"` and `"off"` are ordered op lists, run for the new value.
+Ops: `{"file": "<path under config/>", "format": "json|json5|toml|properties", "key": "a.b", "value": V}` persists a value
+(json is parsed and rewritten pretty, key path nests by dots; the other formats edit the first line whose key matches and
+keep everything else; strings are quoted for json/json5/toml, raw for properties; a missing file or key is skipped and
+logged once); `{"set": "<path>", "value": V}` sets a field by reflection; `{"call": "<path>"}` invokes a method;
+`{"packs": ["file/X.zip"], "value": true}` selects or deselects resource packs with the same order-preserving logic as the
+`packs` kind (missing ids ignored, merged into the one reload); `{"reload": "resources"}` asks for the resource reload (merged with the pack and mipmap reload, so at most one per Apply).
+Paths are `pkg.Class.FIELD.field`, with method segments `name(args)` anywhere (`Cls.getConfig().enabled`,
+`Cls.CONFIG.enabled.set(true)`); the class is the longest prefix that loads (nested classes are tried with `$`), static
+members are tried first, args are JSON literals, methods are picked by name and argument count, and values convert to the
+field or parameter type (boxing, numbers, String to enum exact then case-insensitive). If a `set` or `call` fails while the
+file ops succeeded, a notice says the item applies after a restart; otherwise it is a failure. The current value is read
+from `"probe"` (`{"get": "<path>", "equals": V}` or a file op) or, without one, from the first file op of `on` (equal to its
+value means on; a missing file or key counts as on). Config items take part in the startup re-apply.
+
+Every item also has `id` (unique), `kind`, `name` (`{ru, en}`), optional `hint`, and `impact` 1 to 3. Preset `values` map
+item ids to `true`/`false`, a number or a string; presets need not list every item. Unknown kinds are skipped.
+
+Mods: the game never renames jars while it runs (it loads classes lazily from them). Apply only writes the wanted
+`mods` map to the state file, and the Remined launcher renames `x.jar` and `x.jar.disabled` from it before the next
+launch, so mod changes take effect on the next launch from the launcher. A mod is never disabled while another loaded,
+still-enabled mod depends on it or on one of its `provides` aliases (a notice names the blocker). A disabled mod is not
+enabled while one of its `depends` is, or stays, disabled (the notice names the dependency). A mod is recorded as `false` only when it has a top-level jar in `mods/` (`.jar` or `.jar.disabled`); a mod with no top-level jar is reported as "cannot disable" and not recorded. A `shaders` item without `pack` only
+toggles shaders. `remined-companion` itself is never touched.
+
+**Player state** (written by the mod on Apply, temp file + rename):
+
+```json
+{ "version": 1, "preset": "high" | "custom", "packVersion": "1.2.3", "values": { "<itemId>": true },
+  "mods": { "<modid>": true }, "packOrder": [ "vanilla", "file/A.zip" ] }
+```
+
+`mods` lists every mod id of every `mods` item (true = enabled); the launcher reads only this key, so it is stable.
+`values` is the actual state after the last Apply. `packOrder` is the selected resource pack order from before the first
+removal, refreshed on every Apply by putting the currently removed packs back at their baseline positions; a pack that
+is switched on again goes right after the last pack that precedes it in this baseline and is selected (or first).
+
+**Startup re-apply**: the launcher rewrites options.txt when the pack updates. The state file stores `packVersion`, the
+`version` of `<gameDir>/.remined-pack.json` (written by the launcher's pack export, `""` when the file is missing). Once the
+title screen first shows, if the state file exists and its `packVersion` differs from the current one, every live item
+whose actual state differs from `values` is applied again (one resource reload at most, silent on success, failures only
+logged) and the new `packVersion` is saved. On a launch without a pack update the player's own changes stay. Every Apply
+also writes `packVersion`. Without a state file nothing changes.
+
+Targets verified against the jars of the VanillaPro pack: `net.irisshaders.iris.api.v0.IrisApi.getInstance().getConfig()`
+(`areShadersEnabled()`, `setShadersEnabledAndApply(boolean)`), `net.irisshaders.iris.Iris.getIrisConfig()` ->
+`net.irisshaders.iris.config.IrisConfig` (`Optional<String> getShaderPackName()`, `setShaderPackName(String)`, `save()`),
+`com.seibel.distanthorizons.api.DhApi$Delayed.configs` -> `IDhApiConfig.graphics()` -> `IDhApiGraphicsConfig`
+(`renderingEnabled()`, `chunkRenderDistance()`) -> `IDhApiConfigValue` (`getValue()`, `setValue(Object)`).
+
 ### Build
 
 Multi-project build: `core` (plain Java, unit tests), the version families `mc1201`, `mc121`, `mc1212`, `mc1216`,

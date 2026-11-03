@@ -1033,6 +1033,9 @@ pub async fn spawn_game(opts: LaunchOpts) -> Result<LaunchedGame, String> {
             .map_err(|e| e.to_string())?;
 
     install_companion_mod(&opts.instance, &version);
+    if let Err(e) = crate::perf_mods::apply_mod_toggles(&opts.instance) {
+        crate::diag::log("perf-mods", &e);
+    }
 
     let jars = collect_classpath_paths(
         &opts.root,

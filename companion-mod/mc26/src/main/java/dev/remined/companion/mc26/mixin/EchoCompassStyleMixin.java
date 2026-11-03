@@ -6,10 +6,9 @@ import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** Optional: Echo Compass HUD as a single strip (no coordinates row), recoloured to the Overgrown palette. */
+/** Optional: Echo Compass HUD as a bare strip (no coordinates row, no background plates), recoloured to the Overgrown palette. */
 @Pseudo
 @Mixin(targets = "ua.lazydev418.echo_compass_hud.gui.ThemeRenderer", remap = false)
 public abstract class EchoCompassStyleMixin {
@@ -23,18 +22,10 @@ public abstract class EchoCompassStyleMixin {
         ci.cancel();
     }
 
-    // First fill in renderBackground is the dark plate behind the coordinates row.
-    @Redirect(method = "renderBackground",
-        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;fill(IIIII)V", ordinal = 0),
-        remap = false, require = 0)
-    private static void remined$noInfoPlate(GuiGraphicsExtractor g, int x0, int y0, int x1, int y1, int color) {
-    }
-
-    @Redirect(method = "renderBackground",
-        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;fill(IIIII)V", ordinal = 1),
-        remap = false, require = 0)
-    private static void remined$fadedStripPlate(GuiGraphicsExtractor g, int x0, int y0, int x1, int y1, int color) {
-        g.fill(x0, y0, x1, y1, fade(color));
+    // No background plates at all: only the strip itself is drawn.
+    @Inject(method = "renderBackground", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
+    private static void remined$noBackground(CallbackInfo ci) {
+        ci.cancel();
     }
 
     @ModifyArg(method = "renderCompassStrip",

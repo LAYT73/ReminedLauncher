@@ -23,6 +23,9 @@ final class Hub {
     private final BatteryHud battery = new BatteryHud();
     private volatile Protocol.Battery batteryState;
     private Sender sender;
+    private Perf perf;
+    /** Tab the settings screen last showed (0 Interface, 1 Performance), kept across openings. */
+    int settingsTab;
     private boolean settingsOpen;
     private String inviteId;
     private long inviteUntilMs;
@@ -50,6 +53,11 @@ final class Hub {
             platform.registerKey("hints", "key.remined.hints", null);
         }
         cfg = Config.load(file);
+        try {
+            perf = Perf.create(this, log, platform.perf(), file.getParent());
+        } catch (Throwable e) {
+            log.log("performance tab unavailable", e);
+        }
         platform.onTick(this::tick);
         platform.onHud(this::renderHud);
         try {
@@ -133,6 +141,21 @@ final class Hub {
             cfg.noticeSeconds * 1000L, false);
     }
 
+    /** Shows an info card with a raw body text, even when notices are off (feedback for a button the player pressed). */
+    void notice(String kind, String body) {
+        notices.add(kind, translate("remined.notice.default_title"), body, null, cfg.noticeSeconds * 1000L, false);
+    }
+
+    /** "ru" or "en": the language of the lang file in use, for text that comes from a pack JSON. */
+    String lang() {
+        return "ru".equals(translate("remined.lang")) ? "ru" : "en";
+    }
+
+    /** The Performance tab model, or null when this pack or Minecraft version has none. */
+    Perf perf() {
+        return perf;
+    }
+
     /** Sends a mute or deafen toggle when in a voice room, otherwise shows an info card. */
     void sendAction(String action) {
         if (!voice.active) {
@@ -171,6 +194,7 @@ final class Hub {
     private void tick() {
         try {
             heads.ensureDefault();
+            if (perf != null) perf.tick();
             for (int i = 0; i < 8 && platform.consumeClick("menu"); i++) toggleSettings();
             for (int i = 0; i < 8 && platform.consumeClick("mute"); i++) sendAction("mute");
             for (int i = 0; i < 8 && platform.consumeClick("deafen"); i++) sendAction("deafen");

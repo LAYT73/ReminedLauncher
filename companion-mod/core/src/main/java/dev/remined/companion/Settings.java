@@ -13,6 +13,7 @@ import java.util.function.IntConsumer;
  */
 final class Settings implements Surface {
     private static final int PANEL_W = 214;
+    private static final int PERF_W = 440;
     private static final int TOP = 8;
     private static final int FOOTER_H = 80;
     private static final int ROW_H = 16;
@@ -83,9 +84,14 @@ final class Settings implements Surface {
     private int grabY;
     private int guideX = -1;
     private int guideY = -1;
+    private int tab;
+    private PerfProfile.Item hoverItem;
 
     Settings(Hub hub) {
         this.hub = hub;
+        Perf perf = hub.perf();
+        tab = perf != null ? hub.settingsTab : 0;
+        if (tab == 1) perf.open();
     }
 
     @Override
@@ -96,10 +102,16 @@ final class Settings implements Surface {
         screenH = g.height();
         ctls.clear();
         Config cfg = hub.cfg();
+        Perf perf = hub.perf();
+        if (perf == null) tab = 0;
+        if (tab == 1) {
+            renderPerf(g, perf);
+            return;
+        }
 
         g.fill(0, 0, screenW, screenH, 0x66000000);
         panelW = Math.min(PANEL_W, screenW - 16);
-        panelX = 8;
+        panelX = (screenW - panelW) / 2;
         panelY = TOP;
         panelH = screenH - 16;
         drawPanel(g, panelX, panelY, panelW, panelH);
@@ -109,6 +121,7 @@ final class Settings implements Surface {
         int cx = panelX + 10;
         int cw = panelW - 20;
         int top = panelY + 24;
+        if (perf != null) top = tabs(g, cx, top, cw, 0, perf);
         int footerTop = panelY + panelH - FOOTER_H;
         clipTop = top;
         clipBottom = footerTop;
@@ -216,17 +229,43 @@ final class Settings implements Surface {
         c.opts = opts;
         c.sel = sel;
         c.onSeg = set;
+        segCells(g, c, x, y + 11, w, opts, sel);
+        return y + 11 + 14 + 6;
+    }
+
+    private void segCells(Gfx g, Ctl c, int x, int y, int w, String[] opts, int sel) {
         int n = opts.length;
         int cell = (w - (n - 1) * 2) / n;
         for (int i = 0; i < n; i++) {
             int cx = x + i * (cell + 2);
             boolean hover = hovered(c) && mouseX >= cx && mouseX < cx + cell;
             int bg = i == sel ? (hover ? ON_HOVER : ON) : (hover ? HOVER : TRACK);
-            g.fill(cx, y + 11, cx + cell, y + 25, bg);
-            int tw = g.textWidth(opts[i]);
-            g.text(opts[i], cx + (cell - tw) / 2, y + 14, i == sel ? 0xFFFFFFFF : DIM, false);
+            g.fill(cx, y, cx + cell, y + 14, bg);
+            String label = g.textWidth(opts[i]) > cell - 2 ? VoiceHud.trimTo(g, opts[i], cell - 2) : opts[i];
+            int tw = g.textWidth(label);
+            g.text(label, cx + (cell - tw) / 2, y + 3, i == sel ? 0xFFFFFFFF : DIM, false);
         }
-        return y + 11 + 14 + 6;
+    }
+
+    /** Interface / Performance tab strip. Returns the y where the content starts. */
+    private int tabs(Gfx g, int x, int y, int w, int sel, Perf perf) {
+        int cell = (w - 2) / 2 - 6;
+        String perfLabel = tr("remined.tab.performance");
+        if (g.textWidth(perfLabel) > cell) perfLabel = tr("remined.tab.performance_short");
+        if (g.textWidth(perfLabel) > cell) perfLabel = tr("remined.tab.fps");
+        String[] opts = {tr("remined.tab.interface"), perfLabel};
+        Ctl c = add(Ctl.SEG, x, y, w, 14, false);
+        c.opts = opts;
+        c.sel = sel;
+        c.onSeg = i -> {
+            if (i == tab) return;
+            tab = i;
+            hub.settingsTab = i;
+            scroll = 0;
+            if (i == 1) perf.open();
+        };
+        segCells(g, c, x, y, w, opts, sel);
+        return y + 14 + 6;
     }
 
     private int slider(Gfx g, int x, int y, int w, String label, String value, double v, double min, double max,
@@ -366,6 +405,152 @@ final class Settings implements Surface {
 
     private void close() {
         hub.closeSettings();
+    }
+
+    private void renderPerf(Gfx g, Perf perf) {
+        Config cfg = hub.cfg();
+        hudBox = null;
+        hoverItem = null;
+        g.fill(0, 0, screenW, screenH, 0x66000000);
+        panelW = Math.min(PERF_W, screenW - 16);
+        panelX = (screenW - panelW) / 2;
+        panelY = TOP;
+        panelH = screenH - 16;
+        drawPanel(g, panelX, panelY, panelW, panelH);
+        g.text(tr("remined.settings.title"), panelX + 10, panelY + 7, 0xFFFFFFFF, true);
+        g.fill(panelX + 1, panelY + 19, panelX + panelW - 1, panelY + 20, 0xFF3A3A3A);
+
+        int cx = panelX + 10;
+        int cw = panelW - 20;
+        int top = tabs(g, cx, panelY + 24, cw, 1, perf);
+        boolean banner = perf.restartPending();
+        int footerTop = panelY + panelH - 34 - (banner ? 24 : 0);
+        clipTop = top;
+        clipBottom = footerTop;
+        g.scissor(panelX + 1, top, panelX + panelW - 1, footerTop);
+        int y = top - scroll;
+        List<PerfProfile.Preset> presets = perf.profile.presets;
+        if (!presets.isEmpty()) {
+            int n = presets.size();
+            String[] opts = new String[n + 1];
+            String cur = perf.presetId();
+            int sel = n;
+            for (int i = 0; i < n; i++) {
+                opts[i] = PerfProfile.text(presets.get(i).name, hub.lang());
+                if (presets.get(i).id.equals(cur)) sel = i;
+            }
+            opts[n] = tr("remined.perf.custom");
+            y = seg(g, cx, y, cw, tr("remined.perf.preset"), opts, sel, i -> {
+                if (i < n) perf.select(presets.get(i));
+            });
+            y += 2;
+        }
+        for (PerfProfile.Section sec : perf.profile.sections) {
+            y = section(g, cx, y, cw, PerfProfile.text(sec.name, hub.lang()));
+            for (PerfProfile.Item it : sec.items) y = perfItem(g, perf, cx, y, cw, it);
+            y += 6;
+        }
+        int contentH = y + scroll - top;
+        maxScroll = Math.max(0, contentH - (footerTop - top));
+        if (scroll > maxScroll) scroll = maxScroll;
+        g.unscissor();
+
+        drawPerfFooter(g, perf, cx, footerTop, cw, banner);
+        if (hoverItem != null) tooltip(g, perf, hoverItem);
+        hub.notices.render(g, hub, cfg.noticeCorner);
+    }
+
+    private int perfItem(Gfx g, Perf perf, int x, int y, int w, PerfProfile.Item it) {
+        String name = PerfProfile.text(it.name, hub.lang());
+        Object v = perf.value(it);
+        int ny;
+        if (!perf.available(it)) {
+            g.text(name, x, y + 4, DIM, false);
+            badges(g, x + g.textWidth(name) + 6, y + 4, it);
+            String na = tr("remined.perf.unavailable");
+            g.text(na, x + w - g.textWidth(na), y + 4, DIM, false);
+            ny = y + ROW_H + 2;
+        } else if (it.toggle()) {
+            boolean on = Boolean.TRUE.equals(v);
+            ny = toggle(g, x, y, w, name, on, () -> perf.set(it, !on));
+            badges(g, x + g.textWidth(name) + 6, y + 4, it);
+        } else {
+            int n = it.values.size();
+            String[] opts = new String[n];
+            int sel = -1;
+            for (int i = 0; i < n; i++) {
+                opts[i] = i < it.labels.size() ? PerfProfile.text(it.labels.get(i), hub.lang()) : String.valueOf(it.values.get(i));
+                if (PerfProfile.same(it.values.get(i), v)) sel = i;
+            }
+            ny = seg(g, x, y, w, name, opts, sel, i -> perf.set(it, it.values.get(i)));
+            badges(g, x + g.textWidth(name) + 6, y, it);
+        }
+        if (inside(x, y, w, ny - y - 2, mouseX, mouseY) && mouseY >= clipTop && mouseY < clipBottom) hoverItem = it;
+        return ny;
+    }
+
+    /** FPS cost bars (green, amber, red by impact 1 to 3) and the restart mark of mod items. */
+    private void badges(Gfx g, int x, int y, PerfProfile.Item it) {
+        int color = it.impact >= 3 ? 0xFFE05050 : it.impact == 2 ? 0xFFE0A030 : 0xFF55CC55;
+        for (int i = 0; i < 3; i++) {
+            int h = 3 + i * 2;
+            g.fill(x + i * 4, y + 8 - h, x + i * 4 + 3, y + 8, i < it.impact ? color : TRACK);
+        }
+        if (it.restart()) g.text("\u21BB", x + 15, y, 0xFFFFC857, false);
+    }
+
+    private void tooltip(Gfx g, Perf perf, PerfProfile.Item it) {
+        int maxW = Math.min(200, screenW - 16);
+        List<String> lines = new ArrayList<>();
+        String hint = PerfProfile.text(it.hint, hub.lang());
+        if (!hint.isEmpty()) lines.addAll(Notices.wrap(g, hint, maxW - 10, 6));
+        lines.add(tr("remined.perf.impact") + ": " + tr("remined.perf.impact." + it.impact));
+        if (it.restart()) lines.add(tr("remined.perf.restart_hint"));
+        if (!perf.available(it)) lines.add(tr("remined.perf.unavailable"));
+        int w = 0;
+        for (String l : lines) w = Math.max(w, g.textWidth(l));
+        w = Math.min(maxW, w + 10);
+        int h = lines.size() * 9 + 8;
+        int tx = Math.max(4, Math.min(mouseX + 10, screenW - w - 4));
+        int ty = Math.max(4, Math.min(mouseY + 12, screenH - h - 4));
+        drawPanel(g, tx, ty, w, h);
+        int ly = ty + 4;
+        for (String l : lines) {
+            g.text(l, tx + 5, ly, DIM, false);
+            ly += 9;
+        }
+    }
+
+    private void drawPerfFooter(Gfx g, Perf perf, int cx, int footerTop, int cw, boolean banner) {
+        int y = footerTop + 6;
+        if (banner) {
+            int bw = 108;
+            List<String> lines = Notices.wrap(g, tr("remined.perf.restart"), cw - bw - 6, 2);
+            int ty = y + (lines.size() > 1 ? 0 : 4);
+            for (String line : lines) {
+                g.text(line, cx, ty, 0xFFFFC857, false);
+                ty += 9;
+            }
+            button(g, cx + cw - bw, y, bw, tr("remined.perf.quit"), perf::quit);
+            y += 24;
+        }
+        int third = (cw - 8) / 3;
+        boolean dirty = perf.dirty();
+        if (dirty) {
+            button(g, cx, y, third, tr("remined.perf.apply"), perf::apply);
+            button(g, cx + third + 4, y, third, tr("remined.perf.revert"), perf::revert);
+        } else {
+            disabledButton(g, cx, y, third, tr("remined.perf.apply"));
+            disabledButton(g, cx + third + 4, y, third, tr("remined.perf.revert"));
+        }
+        int dx = cx + 2 * (third + 4);
+        button(g, dx, y, cx + cw - dx, tr("remined.btn.done"), this::close);
+    }
+
+    private void disabledButton(Gfx g, int x, int y, int w, String label) {
+        g.fill(x, y, x + w, y + 16, 0xFF000000);
+        g.fill(x + 1, y + 1, x + w - 1, y + 15, 0xFF1A1A1A);
+        g.text(label, x + (w - g.textWidth(label)) / 2, y + 4, 0xFF5A5A5A, false);
     }
 
     private String tr(String key) {

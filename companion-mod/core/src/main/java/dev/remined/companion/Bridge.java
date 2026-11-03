@@ -474,7 +474,7 @@ final class Bridge {
         private Map<String, Object> object() {
             if (++depth > MAX_DEPTH) throw err();
             expect('{');
-            Map<String, Object> m = new HashMap<>();
+            Map<String, Object> m = new java.util.LinkedHashMap<>();
             ws();
             if (peek() == '}') {
                 i++;

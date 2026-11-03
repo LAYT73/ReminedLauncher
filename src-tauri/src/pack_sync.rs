@@ -451,6 +451,7 @@ const PRESERVE: &[&str] = &[
     "config/remined-companion.json",
     "config/remined-compass-hidden",
     "config/remined-hints-hidden",
+    "config/remined-performance.json",
 ];
 
 /// Remove an installed pack directory (and cached zip if present).

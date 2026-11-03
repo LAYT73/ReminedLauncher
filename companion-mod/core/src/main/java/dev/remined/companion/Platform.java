@@ -63,6 +63,11 @@ public interface Platform {
      */
     boolean publishLan(int port, boolean cheats);
 
+    /** Performance tab services, or null when this version has none (the tab is hidden). */
+    default PerfBackend perf() {
+        return null;
+    }
+
     /** Translates a lang key. */
     String translate(String key);
 }

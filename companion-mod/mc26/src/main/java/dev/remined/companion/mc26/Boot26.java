@@ -3,6 +3,7 @@ package dev.remined.companion.mc26;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.platform.NativeImage;
 import dev.remined.companion.Gfx;
+import dev.remined.companion.PerfBackend;
 import dev.remined.companion.Platform;
 import dev.remined.companion.Surface;
 import java.lang.reflect.Field;
@@ -212,10 +213,22 @@ public final class Boot26 implements Platform {
         // publishServer only logs, so post the line the LAN screen shows. The chat accessor moved within 26.x;
         // the world is already published, so a missing method must not turn this into a failure.
         try {
-            mc.gui.getChat().addClientSystemMessage(Component.translatable("commands.publish.started", port));
+            systemMessage(mc, Component.translatable("commands.publish.started", port));
         } catch (Throwable ignored) {
         }
         return true;
+    }
+
+    /** Gui.getChat().addClientSystemMessage on 26.1; Gui.addClientSystemMessage on 26.2+ (the chat accessor is gone). */
+    private static void systemMessage(Minecraft mc, Component message) throws ReflectiveOperationException {
+        Object gui = Minecraft.class.getField("gui").get(mc);
+        Object target = gui;
+        try {
+            target = gui.getClass().getMethod("getChat").invoke(gui);
+        } catch (NoSuchMethodException e) {
+            // 26.2+: the message goes to Gui itself
+        }
+        target.getClass().getMethod("addClientSystemMessage", Component.class).invoke(target, message);
     }
 
     /**
@@ -248,6 +261,17 @@ public final class Boot26 implements Platform {
             if ("LAN".equals(((Enum<?>) c).name())) return c;
         }
         throw new IllegalStateException("no LAN scope");
+    }
+
+    @Override
+    public PerfBackend perf() {
+        return new Perf26(() -> {
+            try {
+                return currentScreen(Minecraft.getInstance());
+            } catch (ReflectiveOperationException e) {
+                return null;
+            }
+        });
     }
 
     @Override

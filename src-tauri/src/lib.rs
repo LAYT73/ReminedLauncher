@@ -11,6 +11,7 @@ mod java_runtime;
 mod onboarding;
 mod pack_sync;
 mod paths;
+mod perf_mods;
 mod process_ext;
 mod progress;
 mod remined_vanilla;
