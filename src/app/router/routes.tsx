@@ -10,6 +10,7 @@ import { InstallationsPage } from "@/pages/installations";
 import { JavaPackPage, ReminedVanillaPage, VanillaPage } from "@/pages/pack";
 import { ProfilePage } from "@/pages/profile";
 import { ScreenshotsPage } from "@/pages/screenshots";
+import { SchematicsPage } from "@/pages/schematics";
 import { SettingsPage } from "@/pages/settings";
 import { VoicePage } from "@/pages/voice";
 import { RouteError } from "./RouteError";
@@ -23,11 +24,12 @@ function Motion({ children }: { children: ReactNode }) {
 
 const settingsNetwork = `/${RAIL.settings}#network`;
 
-/** Friends / Voice on every rail that shows tabs. Network → Settings. */
+/** Friends / Voice / Schematics on every rail that shows tabs. Network → Settings. */
 const socialRoutes: RouteObject[] = [
   { path: TAB.friends, element: <Motion><FriendsPage /></Motion> },
   { path: TAB.network, element: <Navigate to={settingsNetwork} replace /> },
   { path: TAB.voice, element: <VoicePage /> },
+  { path: TAB.schematics, element: <SchematicsPage /> },
 ];
 
 const packRoutes = (page: ReactNode): RouteObject[] => [

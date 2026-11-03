@@ -3,6 +3,7 @@
 @import "./rail.css";
 @import "./enchant-burst.css";
 @import "./mc-toggle.css";
+@import "./kbd.css";
 @import "./stage.css";
 @import "./empty-state.css";
 
@@ -18,3 +19,4 @@
 @import "./friend-toast.css";
 @import "./voice.css";
 @import "./tray-screenshots.css";
+@import "./schematics.css";

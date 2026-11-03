@@ -1,0 +1,2107 @@
+/* Schematics tab: library | viewport | materials & steps */
+.toast {
+  white-space: pre-line;
+}
+
+/* The page fills .content exactly (window-sized): .schem-layout is absolutely
+   positioned so nothing inside can change the page's height. */
+.content:has(.schem-page) {
+  overflow: hidden;
+}
+
+.schem-page {
+  position: relative;
+  flex: 1 1 0;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.schem-layout {
+  --schem-left: 260px;
+  --schem-right: 320px;
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: var(--schem-left) minmax(0, 1fr) var(--schem-right);
+  grid-template-rows: minmax(0, 1fr);
+  transition: grid-template-columns 0.2s ease;
+}
+
+.schem-layout.is-left-collapsed {
+  --schem-left: 44px;
+}
+
+.schem-layout.is-right-collapsed {
+  --schem-right: 44px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .schem-layout {
+    transition: none;
+  }
+}
+
+/* ---------- shared bits ---------- */
+.schem-library,
+.schem-side {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-panel);
+}
+
+/* Fixed-width content so collapsing slides it away instead of squeezing it. */
+.schem-panel-inner {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  opacity: 1;
+  transition: opacity 0.15s ease;
+}
+
+.schem-library .schem-panel-inner {
+  width: 257px;
+}
+
+.schem-side .schem-panel-inner {
+  width: 317px;
+}
+
+.is-collapsed > .schem-panel-inner {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.12s ease, visibility 0s linear 0.2s;
+}
+
+.schem-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 38px;
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease 0.08s, visibility 0s linear 0.08s;
+}
+
+.is-collapsed > .schem-strip {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.schem-side-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 12px 0;
+}
+
+.schem-side-head .schem-side-tabs {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.schem-library {
+  border-right: 3px solid #000;
+}
+
+.schem-side {
+  border-left: 3px solid #000;
+}
+
+.schem-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 12px 10px;
+  border-bottom: 3px solid #000;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+
+.schem-panel-head h2 {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.schem-import-btn {
+  height: 34px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.schem-import-btn .btn-pixel-icon,
+.schem-copy-btn .btn-pixel-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.schem-library .schem-cards,
+.schem-side-body,
+.schem-mat-list,
+.schem-step-list {
+  scrollbar-width: thin;
+  scrollbar-color: var(--mc-stone-hi) transparent;
+}
+
+.schem-icon-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 2px solid transparent;
+}
+
+.schem-icon-btn:hover {
+  color: var(--text);
+  background: var(--overlay-hover);
+  border-color: #000;
+}
+
+.schem-icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* segmented control */
+.schem-seg {
+  display: inline-flex;
+  background: var(--bg-input);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-inset);
+}
+
+.schem-seg.is-wide {
+  display: flex;
+}
+
+.schem-seg.is-wide > button {
+  flex: 1;
+}
+
+.schem-seg > button {
+  height: 28px;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border: 0;
+}
+
+.schem-seg > button + button {
+  border-left: 2px solid #000;
+}
+
+.schem-seg > button:hover {
+  color: var(--text);
+  background: var(--overlay-hover);
+}
+
+.schem-seg > button.is-active {
+  background: var(--mc-green);
+  color: var(--text-on-accent);
+  text-shadow: 1px 1px 0 var(--accent-shadow);
+}
+
+/* progress */
+.schem-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.schem-progress-bar {
+  position: relative;
+  flex: 1;
+  height: 8px;
+  background: var(--bg-input);
+  border: 2px solid #000;
+  overflow: hidden;
+}
+
+.schem-progress-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--mc-green-mid);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.25);
+  transition: width 0.2s ease;
+}
+
+.schem-progress-bar > span.is-full {
+  background: var(--mc-gold);
+}
+
+.schem-progress-bar.is-wide {
+  width: 220px;
+  height: 12px;
+}
+
+.schem-progress-bar.is-indeterminate > span {
+  position: absolute;
+  width: 35%;
+  animation: schem-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes schem-slide {
+  0% {
+    left: -35%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+.schem-progress-pct {
+  min-width: 34px;
+  text-align: right;
+  font-family: var(--font-display);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* ---------- library ---------- */
+.schem-cards {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 10px;
+  list-style: none;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.schem-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 10px 10px 12px;
+  background: var(--mc-stone);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.schem-card:hover {
+  background: var(--mc-stone-mid);
+}
+
+.schem-card.is-selected {
+  background: var(--accent-wash);
+  border-color: var(--mc-green);
+  box-shadow:
+    var(--bevel-panel),
+    0 0 0 2px #000;
+}
+
+.schem-card-top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.schem-card-name {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  border: 0;
+  text-align: left;
+  font-family: var(--font-display);
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.schem-card-input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 6px;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 2px solid var(--mc-green);
+  font-family: var(--font-display);
+  font-size: 13px;
+}
+
+.schem-card-menu {
+  position: relative;
+}
+
+.schem-menu {
+  position: absolute;
+  z-index: 5;
+  top: 28px;
+  right: 0;
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-menu);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel), 0 6px 0 rgba(0, 0, 0, 0.4);
+}
+
+.schem-menu button {
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--text);
+  border: 0;
+  text-align: left;
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.schem-menu button:hover {
+  background: var(--overlay-hover);
+}
+
+.schem-menu button.is-danger {
+  color: var(--danger-text);
+}
+
+.schem-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.schem-badge {
+  padding: 1px 6px;
+  background: var(--chip-bg);
+  border: 2px solid #000;
+  color: var(--chip-text);
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+
+/* ---------- viewport ---------- */
+.schem-center {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.schem-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  container-type: inline-size;
+  background:
+    radial-gradient(ellipse at 50% 35%, #2c2f2b 0%, #1b1d1a 55%, #121312 100%);
+}
+
+.schem-canvas-host {
+  position: absolute;
+  inset: 0;
+}
+
+.schem-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+  touch-action: none;
+}
+
+.schem-toolbar {
+  position: absolute;
+  z-index: 3;
+  top: 12px;
+  left: 12px;
+  right: 172px;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.schem-toolbar > *,
+.schem-toolbar .schem-seg {
+  flex: 0 0 auto;
+}
+
+.schem-tool-menu {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.schem-tool-caret {
+  width: 12px;
+  height: 12px;
+}
+
+.schem-popover-wrap {
+  position: relative;
+}
+
+.schem-popover {
+  position: absolute;
+  z-index: 8;
+  top: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px;
+  min-width: 230px;
+  background: var(--bg-panel);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-btn);
+}
+
+.schem-popover .schem-tool-label {
+  padding-left: 0;
+}
+
+.schem-popover .schem-seg {
+  height: 32px;
+}
+
+.schem-popover .schem-seg > button {
+  height: 100%;
+}
+
+/* view cube (canvas created by ViewCube.ts) + buttons under it */
+.schem-cube-canvas {
+  position: absolute;
+  z-index: 2;
+  top: 30px;
+  right: 30px;
+  width: 112px;
+  height: 112px;
+  touch-action: none;
+}
+
+.schem-cube-tools {
+  position: absolute;
+  z-index: 3;
+  top: 166px;
+  right: 12px;
+  width: 148px;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+
+.schem-cube-btn {
+  min-width: 32px;
+  height: 28px;
+  padding: 0 6px;
+  background: var(--mc-stone);
+  color: var(--text-on-stone);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-btn);
+  font-family: var(--font-display);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.schem-cube-btn.is-text {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.schem-cube-btn:hover {
+  background: var(--mc-stone-mid);
+}
+
+.schem-cube-btn:active {
+  transform: translateY(2px);
+  box-shadow: var(--bevel-btn-press);
+}
+
+.schem-cube-btn.is-active {
+  background: var(--mc-green);
+}
+
+.schem-toolbar > * {
+  pointer-events: auto;
+}
+
+.schem-tool {
+  height: 34px;
+  padding: 0 10px;
+  background: var(--mc-stone);
+  color: var(--text-on-stone);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-btn);
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-shadow: 1px 1px 0 var(--shadow-soft);
+}
+
+.schem-tool:hover {
+  background: var(--mc-stone-mid);
+}
+
+.schem-tool:active {
+  transform: translateY(2px);
+  box-shadow: var(--bevel-btn-press);
+}
+
+.schem-tool.is-active {
+  background: var(--mc-green);
+  text-shadow: 1px 1px 0 var(--accent-shadow);
+}
+
+.schem-toolbar .schem-seg {
+  height: 34px;
+  box-shadow: var(--bevel-btn);
+}
+
+.schem-toolbar .schem-seg > button {
+  height: 100%;
+}
+
+.schem-tool-label {
+  padding: 0 2px 0 6px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  text-shadow: 1px 1px 0 #000;
+}
+
+.schem-tooltip {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  max-width: 240px;
+  background: rgba(16, 10, 24, 0.92);
+  border: 2px solid #2a0a4a;
+  box-shadow: inset 0 0 0 2px rgba(120, 60, 200, 0.35);
+  font-size: 12px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.schem-tooltip strong {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.schem-tooltip-prop {
+  color: var(--text-muted);
+}
+
+/* stepper */
+.schem-stepper {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  padding: 6px;
+  background: color-mix(in srgb, var(--bg-deep) 88%, transparent);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel);
+}
+
+.schem-step-btn,
+.schem-step-built {
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--mc-stone);
+  color: var(--text-on-stone);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-btn);
+}
+
+.schem-step-btn:hover:not(:disabled),
+.schem-step-built:hover {
+  background: var(--mc-stone-mid);
+}
+
+.schem-step-btn:active:not(:disabled),
+.schem-step-built:active {
+  transform: translateY(2px);
+  box-shadow: var(--bevel-btn-press);
+}
+
+.schem-step-btn:disabled {
+  opacity: 0.4;
+}
+
+.schem-step-btn svg,
+.schem-step-built svg {
+  width: 20px;
+  height: 20px;
+}
+
+.schem-step-built {
+  color: var(--text-muted);
+}
+
+.schem-step-built.is-on {
+  background: var(--mc-green);
+  color: #fff;
+}
+
+.schem-step-label {
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.schem-step-label strong {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+}
+
+/* vertical slider */
+.schem-slider {
+  position: absolute;
+  top: 170px;
+  right: 14px;
+  bottom: 84px;
+  width: 44px;
+  display: flex;
+  justify-content: center;
+  padding: 18px 0;
+  touch-action: none;
+  cursor: ns-resize;
+}
+
+.schem-slider-track {
+  position: relative;
+  width: 8px;
+  height: 100%;
+  background: var(--bg-input);
+  border: 2px solid #000;
+}
+
+.schem-tick {
+  position: absolute;
+  left: 50%;
+  width: 14px;
+  height: 2px;
+  margin-bottom: -1px;
+  transform: translateX(-50%);
+  background: var(--text-muted);
+  opacity: 0.6;
+}
+
+.schem-tick.is-built {
+  background: var(--mc-green-hi);
+  opacity: 1;
+}
+
+.schem-tick.is-empty {
+  opacity: 0.25;
+}
+
+.schem-slider-thumb {
+  position: absolute;
+  left: 50%;
+  min-width: 30px;
+  height: 22px;
+  margin-bottom: -11px;
+  padding: 0 4px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--mc-green);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-btn);
+  font-family: var(--font-display);
+  font-size: 11px;
+  color: #fff;
+  text-shadow: 1px 1px 0 var(--accent-shadow);
+  pointer-events: none;
+}
+
+/* overlays */
+.schem-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 10, 10, 0.55);
+}
+
+.schem-overlay.is-passive {
+  background: transparent;
+  pointer-events: none;
+}
+
+.schem-loading,
+.schem-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 360px;
+  padding: 22px 26px;
+  text-align: center;
+  background: var(--bg-panel);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel), 0 8px 0 rgba(0, 0, 0, 0.45);
+}
+
+.schem-loading p,
+.schem-error p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.schem-loading p {
+  font-family: var(--font-display);
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+
+.schem-error strong {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 15px;
+  color: var(--danger-text);
+}
+
+.schem-spinner {
+  width: 22px;
+  height: 22px;
+  background: var(--mc-green);
+  border: 3px solid #000;
+  animation: schem-spin 1s steps(8) infinite;
+}
+
+@keyframes schem-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.schem-placeholder {
+  font-family: var(--font-display);
+  color: var(--text-muted);
+}
+
+/* ---------- side panel ---------- */
+.schem-side-tabs {
+  margin: 0;
+}
+
+.schem-side-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px 12px;
+  overflow: hidden;
+}
+
+.schem-materials,
+.schem-steps {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.schem-search {
+  height: 34px;
+  padding: 0 10px;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-inset);
+  font-size: 13px;
+}
+
+.schem-search:focus {
+  outline: none;
+  border-color: var(--mc-green);
+}
+
+.schem-mat-list,
+.schem-step-list {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0 2px 0 0;
+  list-style: none;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.schem-mat {
+  display: grid;
+  grid-template-columns: auto 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  background: var(--mc-stone);
+  border: 2px solid #000;
+}
+
+.schem-mat:hover {
+  background: var(--mc-stone-mid);
+}
+
+.schem-mat.is-done {
+  opacity: 0.5;
+}
+
+.schem-mat.is-done .schem-mat-name {
+  text-decoration: line-through;
+}
+
+.schem-mat-icon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.schem-mat-icon.is-placeholder {
+  background:
+    linear-gradient(135deg, var(--mc-stone-hi) 25%, transparent 25% 50%, var(--mc-stone-hi) 50% 75%, transparent 75%)
+      0 0 / 8px 8px,
+    var(--bg-input);
+  border: 2px solid #000;
+  box-sizing: border-box;
+}
+
+.schem-mat-name {
+  min-width: 0;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.schem-mat-count {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+}
+
+.schem-mat-count strong {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 14px;
+}
+
+.schem-mat-count small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.schem-mat-empty {
+  padding: 20px 8px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* square checkbox (matches the settings toggle look) */
+.schem-mat-check {
+  position: relative;
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.schem-mat-check input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.schem-mat-check span {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-input);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-inset);
+}
+
+.schem-mat-check input:checked + span {
+  background: var(--mc-green)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8' shape-rendering='crispEdges'%3E%3Cpath fill='%23fff' d='M1 4h1v1h1v1h1V5h1V4h1V2h1V1H6v1H5v1H4v1H3V3H2v1z'/%3E%3C/svg%3E")
+    center / 100% 100% no-repeat;
+}
+
+.schem-mat-check input:focus-visible + span {
+  outline: 2px solid var(--mc-green-hi);
+  outline-offset: 1px;
+}
+
+.schem-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+/* steps */
+.schem-steps-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.schem-steps-progress strong {
+  font-family: var(--font-display);
+  font-weight: 400;
+}
+
+.schem-next-btn {
+  white-space: normal;
+  line-height: 1.15;
+  height: auto;
+  min-height: 40px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.schem-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.schem-step {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px 7px 10px;
+  background: var(--mc-stone);
+  border: 2px solid #000;
+  cursor: pointer;
+}
+
+.schem-step:hover {
+  background: var(--mc-stone-mid);
+}
+
+.schem-step.is-current {
+  background: var(--accent-wash);
+  border-color: var(--mc-green);
+}
+
+.schem-step.is-empty .schem-step-name {
+  color: var(--text-muted);
+}
+
+.schem-step-name {
+  font-family: var(--font-display);
+  font-size: 13px;
+}
+
+.schem-step.is-built .schem-step-name {
+  color: var(--accent-text);
+}
+
+.schem-step-count {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ---------- empty state ---------- */
+.schem-empty {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+
+.schem-empty-zone {
+  width: min(560px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 36px 32px;
+  text-align: center;
+  background: var(--bg-panel);
+  border: 3px dashed var(--mc-stone-hi);
+  box-shadow: var(--bevel-panel);
+}
+
+.schem-empty-icon {
+  width: 64px;
+  height: 64px;
+  color: var(--mc-green-hi);
+}
+
+.schem-empty-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 24px;
+}
+
+.schem-empty-body {
+  margin: 0;
+  max-width: 440px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.schem-empty-formats {
+  width: 100%;
+  margin: 4px 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.schem-empty-formats li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  background: var(--mc-stone);
+  border: 3px solid #000;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.schem-empty-formats strong {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.schem-empty-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.schem-empty-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ---------- drop overlay ---------- */
+.schem-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 14, 8, 0.78);
+  pointer-events: none;
+}
+
+.schem-drop-card {
+  position: absolute;
+  inset: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  border: 4px dashed var(--mc-green-hi);
+  background: var(--accent-wash);
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: 0.04em;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.schem-drop-icon {
+  width: 56px;
+  height: 56px;
+  color: var(--mc-green-hi);
+}
+
+/* ---------- narrow: right panel becomes a drawer ---------- */
+.schem-drawer-toggle {
+  display: none;
+}
+
+@media (max-width: 1099px) {
+  .schem-layout {
+    grid-template-columns: var(--schem-left) minmax(0, 1fr);
+  }
+
+  .schem-side .schem-panel-inner {
+    width: 100%;
+  }
+
+  /* right panel is a drawer here: collapse state does not apply */
+  .schem-side .schem-side-collapse,
+  .schem-side .schem-strip {
+    display: none;
+  }
+
+  .schem-side.is-collapsed > .schem-panel-inner {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .schem-side {
+    position: absolute;
+    z-index: 15;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(320px, 90%);
+    transform: translateX(100%);
+    transition: transform 0.2s ease;
+    box-shadow: -8px 0 0 rgba(0, 0, 0, 0.35);
+  }
+
+  .schem-layout.is-drawer-open .schem-side {
+    transform: none;
+  }
+
+  .schem-drawer-toggle {
+    position: absolute;
+    z-index: 16;
+    bottom: 16px;
+    right: 12px;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--mc-stone);
+    color: var(--text-on-stone);
+    border: 3px solid #000;
+    box-shadow: var(--bevel-btn);
+  }
+
+  .schem-drawer-toggle svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .schem-drawer-toggle[aria-expanded="true"] {
+    background: var(--mc-green);
+  }
+
+  .schem-slider {
+    right: 10px;
+  }
+}
+
+/* measuring tape */
+.schem-tool-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.schem-tool:has(.schem-tool-icon) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.schem-tooltip.is-compact {
+  padding: 4px 8px;
+}
+
+.schem-tape-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.schem-grid-tick {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 0 3px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 10px;
+  line-height: 1.3;
+  background: rgba(16, 10, 24, 0.55);
+  will-change: transform;
+}
+
+.schem-tape-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 3px 8px;
+  white-space: nowrap;
+  background: rgba(16, 10, 24, 0.9);
+  border: 2px solid #ffd24a;
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.2;
+  will-change: transform;
+}
+
+.schem-tape-label strong {
+  color: #ffd24a;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.schem-tape-label.is-edge {
+  padding: 0 5px;
+  border-width: 1px;
+  background: rgba(16, 10, 24, 0.75);
+}
+
+.schem-tape-label.is-edge strong {
+  font-size: 11px;
+}
+
+.schem-tape-x {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: #000;
+  border: 1px solid #ffd24a;
+  color: #fff;
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.schem-tape-x:hover {
+  background: #7a1f1f;
+}
+
+.schem-tape-panel {
+  position: absolute;
+  z-index: 3;
+  bottom: 16px;
+  left: 12px;
+  width: 280px;
+  max-width: calc(100% - 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--bg-deep) 88%, transparent);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel);
+}
+
+/* The centered layer stepper is ~350px wide: below this viewport width stack the panel above it. */
+@container (max-width: 960px) {
+  .schem-tape-panel {
+    bottom: 94px;
+  }
+}
+
+.schem-tape-divider {
+  width: 100%;
+  height: 0;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.schem-tape-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.schem-tape-collapse {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.schem-tape-collapse:hover {
+  color: var(--text);
+}
+
+.schem-tape-collapse svg {
+  width: 14px;
+  height: 14px;
+}
+
+.schem-tape-collapse .is-flipped {
+  transform: rotate(180deg);
+}
+
+.schem-keys {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.schem-key-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.schem-key-row > em {
+  min-width: 0;
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schem-key-row > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  width: 88px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.schem-tape-panel ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.schem-tape-panel li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 20px;
+  font-size: 12px;
+  white-space: nowrap;
+  color: #ffd24a;
+}
+
+.schem-tape-panel .schem-tape-x {
+  position: static;
+}
+
+.schem-tape-clear {
+  align-self: flex-start;
+  height: 28px;
+}
+
+/* view cube rotation arrows */
+.schem-cube-arrows {
+  position: absolute;
+  z-index: 3;
+  top: 12px;
+  right: 12px;
+  width: 148px;
+  height: 148px;
+  pointer-events: none;
+}
+
+.schem-cube-arrow {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  border: 0;
+  color: var(--text-muted);
+  opacity: 0.7;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.schem-cube-arrow:hover {
+  background: var(--mc-green);
+  color: #fff;
+  opacity: 1;
+}
+
+.schem-cube-arrow:active {
+  transform: translateY(1px);
+}
+
+.schem-cube-arrow svg {
+  width: 14px;
+  height: 14px;
+}
+
+.schem-cube-arrow.is-up {
+  top: 0;
+  left: 65px;
+}
+
+.schem-cube-arrow.is-down {
+  bottom: 0;
+  left: 65px;
+}
+
+.schem-cube-arrow.is-left {
+  left: 0;
+  top: 65px;
+}
+
+.schem-cube-arrow.is-right {
+  right: 0;
+  top: 65px;
+}
+
+.schem-cube-arrow.is-rollLeft {
+  top: 0;
+  left: 0;
+}
+
+.schem-cube-arrow.is-rollRight {
+  top: 0;
+  right: 0;
+}
+
+/* hotkey legend popover */
+.schem-help {
+  position: absolute;
+  z-index: 6;
+  top: 204px;
+  right: 12px;
+  width: 300px;
+  max-width: calc(100% - 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--bg-panel);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-btn);
+}
+
+.schem-help-title {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.schem-help .schem-key-row > span:first-child {
+  width: 118px;
+}
+
+/* hover tooltip: block icon + name */
+.schem-tooltip {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px 5px 6px;
+  white-space: nowrap;
+  max-width: 280px;
+}
+
+.schem-tooltip strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.schem-tooltip-icon {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  image-rendering: auto;
+}
+
+.schem-tooltip-icon.is-placeholder {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ---------- catalog ---------- */
+.schem-viewport-slot {
+  position: absolute;
+  inset: 0;
+}
+
+.schem-viewport-slot.is-hidden {
+  display: none;
+}
+
+.schem-layout.is-catalog {
+  grid-template-columns: var(--schem-left) minmax(0, 1fr);
+}
+
+.schem-layout.is-catalog .schem-side,
+.schem-layout.is-catalog .schem-drawer-toggle {
+  display: none;
+}
+
+.schem-source {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 0;
+}
+
+.schem-source .schem-seg {
+  flex: 1;
+  min-width: 0;
+}
+
+.schem-source .schem-seg > button {
+  padding: 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.schem-badge.is-catalog {
+  background: var(--accent-wash);
+  border-color: var(--mc-green);
+  color: var(--accent-text);
+}
+
+.schem-card-author {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schem-catalog-search {
+  padding: 10px 10px 4px;
+}
+
+.schem-catalog-search input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-inset);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  outline: none;
+}
+
+.schem-catalog-search input:focus {
+  border-color: var(--mc-green);
+}
+
+.schem-cats {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 6px 10px 10px;
+  list-style: none;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--mc-stone-hi) transparent;
+}
+
+.schem-cat {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--mc-stone);
+  color: var(--text-secondary);
+  border: 3px solid #000;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  text-align: left;
+}
+
+.schem-cat:hover {
+  background: var(--mc-stone-mid);
+  color: var(--text);
+}
+
+.schem-cat.is-active {
+  background: var(--accent-wash);
+  border-color: var(--mc-green);
+  color: var(--text);
+}
+
+.schem-cat-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schem-cat-count {
+  padding: 0 6px;
+  background: var(--chip-bg);
+  color: var(--chip-text);
+  font-size: 11px;
+}
+
+.schem-gallery {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.schem-gallery-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 3px solid #000;
+  background: var(--bg-panel);
+}
+
+.schem-gallery-title {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.schem-gallery-title h2 {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.schem-gallery-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.schem-gallery-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--mc-stone-hi) transparent;
+}
+
+.schem-cgrid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.schem-ccard {
+  display: flex;
+  flex-direction: column;
+  background: var(--mc-stone);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.schem-ccard:hover {
+  background: var(--mc-stone-mid);
+}
+
+.schem-ccard.is-skeleton {
+  cursor: default;
+}
+
+.schem-thumb {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-bottom: 3px solid #000;
+  background:
+    repeating-conic-gradient(var(--bg-deep) 0% 25%, var(--bg-input) 0% 50%) 0 0 / 16px 16px;
+}
+
+.schem-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+}
+
+.schem-thumb-ph {
+  width: 40px;
+  height: 40px;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.schem-thumb.is-loading {
+  animation: schem-pulse 1.15s ease-in-out infinite;
+}
+
+.schem-ccard-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  min-width: 0;
+}
+
+.schem-ccard-name {
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  border: 0;
+  text-align: left;
+  font-family: var(--font-display);
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schem-ccard-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.8em;
+}
+
+.schem-ccard-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.schem-ccard-author {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schem-ccard-body .schem-add-btn {
+  margin-top: auto;
+}
+
+.schem-diff {
+  padding: 1px 6px;
+  border: 2px solid #000;
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: #fff;
+}
+
+.schem-diff.is-easy {
+  background: var(--mc-green);
+}
+
+.schem-diff.is-medium {
+  background: var(--mc-gold);
+  color: #1a1400;
+}
+
+.schem-diff.is-hard {
+  background: var(--mc-red);
+}
+
+.schem-add-btn {
+  height: 34px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.schem-add-btn.is-small {
+  height: 30px;
+}
+
+.schem-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: schem-spin 0.7s linear infinite;
+}
+
+.schem-skel {
+  display: block;
+  background: var(--bg-raised);
+  animation: schem-pulse 1.15s ease-in-out infinite;
+}
+
+.schem-gallery-state {
+  max-width: 420px;
+  margin: 64px auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.schem-gallery-state h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.schem-gallery-state p {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.schem-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.schem-modal {
+  position: relative;
+  width: min(520px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  background: var(--bg-panel);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel);
+  scrollbar-width: thin;
+}
+
+.schem-modal .schem-thumb {
+  aspect-ratio: 16 / 9;
+}
+
+.schem-modal-close {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  right: 8px;
+  background: var(--mc-stone);
+  border: 2px solid #000;
+}
+
+.schem-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 16px;
+}
+
+.schem-modal-body h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  letter-spacing: 0.03em;
+}
+
+.schem-modal-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.schem-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.schem-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px 12px;
+}
+
+.schem-facts dt {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.schem-facts dd {
+  margin: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.schem-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+@keyframes schem-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes schem-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .schem-thumb.is-loading,
+  .schem-skel,
+  .schem-spinner {
+    animation: none;
+  }
+}

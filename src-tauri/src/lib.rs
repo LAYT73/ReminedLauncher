@@ -15,6 +15,7 @@ mod process_ext;
 mod progress;
 mod remined_vanilla;
 mod runtime;
+mod schematic;
 mod skinshuffle_patch;
 mod smoke;
 mod vanilla;
@@ -1786,6 +1787,17 @@ pub fn run() {
             drain_deep_links,
             release_deep_links,
             system_memory_mb,
+            schematic::schematic_list,
+            schematic::schematic_import,
+            schematic::schematic_delete,
+            schematic::schematic_rename,
+            schematic::schematic_set_built,
+            schematic::schematic_load,
+            schematic::catalog::schematic_catalog,
+            schematic::catalog::schematic_catalog_thumb,
+            schematic::catalog::schematic_install,
+            schematic::assets::schematic_assets,
+            schematic::assets::schematic_read_assets,
         ]);
 
     #[cfg(desktop)]

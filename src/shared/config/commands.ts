@@ -81,6 +81,18 @@ export const CMD = {
   relayStartGameJoin: "relay_start_game_join",
   relayStopGameJoin: "relay_stop_game_join",
   relayStopHost: "relay_stop_host",
+  // schematics
+  schematicList: "schematic_list",
+  schematicImport: "schematic_import",
+  schematicDelete: "schematic_delete",
+  schematicRename: "schematic_rename",
+  schematicSetBuilt: "schematic_set_built",
+  schematicLoad: "schematic_load",
+  schematicAssets: "schematic_assets",
+  schematicReadAssets: "schematic_read_assets",
+  schematicCatalog: "schematic_catalog",
+  schematicCatalogThumb: "schematic_catalog_thumb",
+  schematicInstall: "schematic_install",
 } as const;
 
 export type Command = (typeof CMD)[keyof typeof CMD];

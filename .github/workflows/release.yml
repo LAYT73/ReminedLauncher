@@ -116,10 +116,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v1.0.7
-          releaseName: Remined v1.0.7
+          tagName: v1.0.8
+          releaseName: Remined v1.0.8
           releaseBody: |
-            Remined launcher v1.0.7 — Play works without internet even with a cloud skin: the launcher uses the last downloaded skin (or default Steve) instead of failing on the skin download.
+            Remined launcher v1.0.8 — new Schematics tab: import .litematic / .schem / .nbt or add builds from the built-in catalog (houses, farms, mini builds, portals, decor), then follow them layer by layer in 3D with a block grid, materials list, build steps, measuring tape and a view cube.
             macOS (arm64 + x64) and Windows builds.
           releaseDraft: false
           prerelease: false

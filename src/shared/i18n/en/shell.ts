@@ -5,6 +5,7 @@ export const shell = {
     friends: "Friends",
     network: "Network",
     voice: "Party",
+    schematics: "Schematics",
   },
   rail: {
     home: "Home",
