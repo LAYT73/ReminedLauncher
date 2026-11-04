@@ -4,7 +4,7 @@ import type { TKey } from "@/shared/i18n";
  * Route model of the launcher. The router (`app/router`) is built from this;
  * widgets and features use the helpers to build links and read the location.
  *
- *   /home[/friends|voice|schematics]
+ *   /home[/friends|voice|schematics|recipes]
  *   /java|vanilla|remined-vanilla[/screenshots|friends|voice]
  *   /installations  /settings  /profile
  * Network Play lives under Settings (legacy `/…/network` redirects there).
@@ -33,6 +33,7 @@ export const TAB = {
   network: "network",
   voice: "voice",
   schematics: "schematics",
+  recipes: "recipes",
 } as const;
 
 export type Tab = (typeof TAB)[keyof typeof TAB];
@@ -45,16 +46,19 @@ export const TAB_LABEL_KEY: Record<Tab, TKey> = {
   network: "shell.tabs.network",
   voice: "shell.tabs.voice",
   schematics: "shell.tabs.schematics",
+  recipes: "shell.tabs.recipes",
 };
 
 const SOCIAL_TABS: readonly Tab[] = [TAB.friends, TAB.voice, TAB.schematics];
+/** Recipes are bound to the pack/version selected in the sidebar, so only pack rails get the tab. */
+const PACK_TABS: readonly Tab[] = [...SOCIAL_TABS, TAB.recipes];
 
 /** Tabs shown in the top nav per rail (empty = no tab strip). */
 export const RAIL_TABS: Record<Rail, readonly Tab[]> = {
   [RAIL.home]: SOCIAL_TABS,
-  [RAIL.java]: [TAB.play, TAB.screenshots, ...SOCIAL_TABS],
-  [RAIL.vanilla]: [TAB.play, TAB.screenshots, ...SOCIAL_TABS],
-  [RAIL.reminedVanilla]: [TAB.play, TAB.screenshots, ...SOCIAL_TABS],
+  [RAIL.java]: [TAB.play, TAB.screenshots, ...PACK_TABS],
+  [RAIL.vanilla]: [TAB.play, TAB.screenshots, ...PACK_TABS],
+  [RAIL.reminedVanilla]: [TAB.play, TAB.screenshots, ...PACK_TABS],
   [RAIL.installations]: [],
   [RAIL.settings]: [],
   [RAIL.profile]: [],

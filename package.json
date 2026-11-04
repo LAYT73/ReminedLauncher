@@ -1,7 +1,7 @@
 {
   "name": "remined-launcher",
   "private": true,
-  "version": "1.0.9",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit",
     "check:fsd": "node scripts/check-fsd.mjs",
     "check:schematic": "node scripts/check-schematic.mjs",
+    "check:recipes": "node scripts/check-recipes.mjs",
+    "gen:recipe-fixture": "node scripts/gen-recipe-fixture.mjs",
     "mod:build": "node scripts/build-mod.mjs",
     "preview": "vite preview",
     "tauri": "tauri",

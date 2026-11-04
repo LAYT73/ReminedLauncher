@@ -6,6 +6,7 @@ export const shell = {
     network: "Network",
     voice: "Party",
     schematics: "Schematics",
+    recipes: "Recipes",
   },
   rail: {
     home: "Home",

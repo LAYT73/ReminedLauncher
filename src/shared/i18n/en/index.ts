@@ -9,3 +9,4 @@ export { shell } from "./shell";
 export { screenshots } from "./screenshots";
 export { network } from "./network";
 export { schematics } from "./schematics";
+export { recipes } from "./recipes";

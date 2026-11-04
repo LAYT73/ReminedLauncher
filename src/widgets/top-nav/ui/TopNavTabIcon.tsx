@@ -4,6 +4,7 @@ import {
   PixelFriendsIcon,
   PixelMicIcon,
   PixelPlayIcon,
+  PixelRecipeIcon,
   PixelSchematicIcon,
   PixelWifiIcon,
 } from "@/shared/ui/PixelIcons";
@@ -50,6 +51,7 @@ export function TopNavTabIcon({
     );
   }
   if (id === "schematics") return <PixelSchematicIcon className="topnav-tab-icon" />;
+  if (id === "recipes") return <PixelRecipeIcon className="topnav-tab-icon" />;
   if (id === "network") return <PixelWifiIcon className="topnav-tab-icon" />;
   if (id === "voice") {
     return (

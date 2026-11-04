@@ -9,6 +9,7 @@ import { HomePage } from "@/pages/home";
 import { InstallationsPage } from "@/pages/installations";
 import { JavaPackPage, ReminedVanillaPage, VanillaPage } from "@/pages/pack";
 import { ProfilePage } from "@/pages/profile";
+import { RecipesPage } from "@/pages/recipes";
 import { ScreenshotsPage } from "@/pages/screenshots";
 import { SchematicsPage } from "@/pages/schematics";
 import { SettingsPage } from "@/pages/settings";
@@ -24,7 +25,7 @@ function Motion({ children }: { children: ReactNode }) {
 
 const settingsNetwork = `/${RAIL.settings}#network`;
 
-/** Friends / Voice / Schematics on every rail that shows tabs. Network → Settings. */
+/** Friends / Voice / Schematics / Recipes on every rail that shows tabs. Network → Settings. */
 const socialRoutes: RouteObject[] = [
   { path: TAB.friends, element: <Motion><FriendsPage /></Motion> },
   { path: TAB.network, element: <Navigate to={settingsNetwork} replace /> },
@@ -36,6 +37,7 @@ const packRoutes = (page: ReactNode): RouteObject[] => [
   { index: true, element: page },
   { path: TAB.screenshots, element: <Motion><ScreenshotsPage /></Motion> },
   ...socialRoutes,
+  { path: TAB.recipes, element: <RecipesPage /> },
 ];
 
 const home = routeFor(RAIL.home);

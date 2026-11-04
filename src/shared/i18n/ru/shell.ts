@@ -9,6 +9,7 @@ export const shell: Dict<typeof en> = {
     network: "Сеть",
     voice: "Пати",
     schematics: "Схематики",
+    recipes: "Рецепты",
   },
   rail: {
     home: "Главная",

@@ -14,6 +14,7 @@ mod paths;
 mod perf_mods;
 mod process_ext;
 mod progress;
+mod recipes;
 mod remined_vanilla;
 mod runtime;
 mod schematic;
@@ -1799,6 +1800,9 @@ pub fn run() {
             schematic::catalog::schematic_install,
             schematic::assets::schematic_assets,
             schematic::assets::schematic_read_assets,
+            recipes::recipe_sources,
+            recipes::recipe_index,
+            recipes::recipe_read_index,
         ]);
 
     #[cfg(desktop)]

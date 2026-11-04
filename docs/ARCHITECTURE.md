@@ -1,6 +1,6 @@
 # Architecture
 
-**Release:** `1.0.9`
+**Release:** `1.1.0`
 **Stack:** Tauri 2, Rust, React 19, TypeScript, Vite, Supabase
 
 This document describes the implementation currently in the repository. The

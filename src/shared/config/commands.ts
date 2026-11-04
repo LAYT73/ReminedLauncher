@@ -93,6 +93,10 @@ export const CMD = {
   schematicCatalog: "schematic_catalog",
   schematicCatalogThumb: "schematic_catalog_thumb",
   schematicInstall: "schematic_install",
+  // recipes
+  recipeSources: "recipe_sources",
+  recipeIndex: "recipe_index",
+  recipeReadIndex: "recipe_read_index",
 } as const;
 
 export type Command = (typeof CMD)[keyof typeof CMD];

@@ -88,6 +88,7 @@ export const PixelFolderIcon = make("PixelFolderIcon");
 export const PixelGearIcon = make("PixelGearIcon");
 export const PixelCameraIcon = make("PixelCameraIcon");
 export const PixelSchematicIcon = make("PixelSchematicIcon");
+export const PixelRecipeIcon = make("PixelRecipeIcon");
 export const PixelRulerIcon = make("PixelRulerIcon");
 export const PixelMouseIcon = make("PixelMouseIcon");
 export const PixelPencilIcon = make("PixelPencilIcon");

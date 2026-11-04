@@ -134,6 +134,9 @@ final class PerfProfile {
     private static Item item(Map<String, Object> m) {
         String id = Protocol.str(m, "id");
         String kind = Protocol.str(m, "kind");
+        String os = Protocol.str(m, "os");
+        if (os != null && !os.isEmpty()
+            && !System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains(os.toLowerCase(java.util.Locale.ROOT))) return null;
         if (id == null || id.isEmpty() || kind == null) return null;
         Item it = new Item();
         it.id = id;

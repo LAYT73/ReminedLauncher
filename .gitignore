@@ -23,3 +23,6 @@ src-tauri/resources/remined-companion.jar
 *.orig
 *~
 *.tmp
+
+# Dev: real recipe indexes for the recipes harness
+dev-data/

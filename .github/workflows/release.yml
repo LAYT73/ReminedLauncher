@@ -116,10 +116,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v1.0.9
-          releaseName: Remined v1.0.9
+          tagName: v1.1.0
+          releaseName: Remined v1.1.0
           releaseBody: |
-            Remined launcher v1.0.9 — new in-game Performance tab (press V in Fabric packs that ship a performance profile, e.g. VanillaPro 0.1.14): presets and live toggles for shaders, animations, models, particles and sound, with FPS cost hints. The launcher now applies the tab's mod on/off choices before each launch and keeps them across pack updates. Companion settings panel is centered; Echo Compass HUD drawn without a background.
+            Remined launcher v1.1.0 — new Recipes tab on every installed pack and version: browse all vanilla and modded items and recipes without starting the game, with search, how-to-craft and where-used views in the game's item order. The Performance tab can now hide platform-specific options.
             macOS (arm64 + x64) and Windows builds.
           releaseDraft: false
           prerelease: false

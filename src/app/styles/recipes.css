@@ -1,0 +1,568 @@
+/* Recipes tab: item grid | recipe viewer. Reuses schematics chrome (.schem-seg, .schem-search, .schem-error). */
+.content:has(.rcp-page) {
+  overflow: hidden;
+}
+
+.rcp-page {
+  position: relative;
+  flex: 1 1 0;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+
+.rcp-center {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.rcp-center .schem-loading {
+  max-width: 420px;
+}
+
+.rcp-loading-hint {
+  font-family: var(--font-ui) !important;
+  color: var(--text-muted) !important;
+  letter-spacing: 0 !important;
+}
+
+.rcp-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(320px, 36%, 440px);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.rcp-main {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rcp-side {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg-panel);
+  border-left: 3px solid #000;
+  scrollbar-width: thin;
+  scrollbar-color: var(--mc-stone-hi) transparent;
+}
+
+/* ---------- toolbar ---------- */
+.rcp-toolbar {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 10px 14px;
+}
+
+.rcp-search {
+  flex: 1 1 200px;
+  min-width: 0;
+  height: 46px;
+  align-self: flex-end;
+}
+
+.rcp-toolbar .rcp-select {
+  width: 200px;
+  flex: none;
+}
+
+.rcp-count {
+  flex: none;
+  align-self: center;
+  min-width: 90px;
+  text-align: right;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+/* ---------- item grid (fixed cells => no jitter) ---------- */
+.rcp-grid-scroll {
+  flex: 1;
+  min-height: 0;
+  margin: 0 14px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #8b8b8b;
+  border: 3px solid #000;
+  box-shadow: var(--bevel-inset);
+  scrollbar-width: thin;
+  scrollbar-color: var(--mc-stone-hi) transparent;
+}
+
+.rcp-grid-inner {
+  position: relative;
+  width: 100%;
+}
+
+.rcp-grid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: grid;
+  grid-auto-rows: 44px;
+}
+
+.rcp-cell {
+  width: 44px;
+  height: 44px;
+  padding: 6px;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+
+/* Minecraft inventory slot: mid-grey inside, dark top-left / light bottom-right bevel. */
+.rcp-cell,
+.rcp-slot {
+  --slot-bg: #8b8b8b;
+  background: var(--slot-bg);
+  box-shadow: inset 2px 2px 0 #373737, inset -2px -2px 0 #fff;
+}
+
+.rcp-cell:hover,
+.rcp-slot:not(.is-empty):hover {
+  background: #a6a6a6;
+  outline: 2px solid var(--mc-green);
+  outline-offset: -2px;
+}
+
+.rcp-icon {
+  display: inline-block;
+  flex: none;
+  vertical-align: middle;
+}
+
+.rcp-icon img {
+  display: block;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.75));
+  image-rendering: auto;
+  pointer-events: none;
+}
+
+.rcp-grid-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.rcp-legend {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.rcp-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ---------- tooltip ---------- */
+.rcp-tooltip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 6px;
+  max-width: 320px;
+  background: rgba(16, 10, 24, 0.94);
+  border: 2px solid #2a0a4a;
+  box-shadow: inset 0 0 0 2px rgba(120, 60, 200, 0.35);
+  pointer-events: none;
+}
+
+.rcp-tooltip-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rcp-tooltip-copy strong {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rcp-tooltip-copy span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.rcp-tooltip-copy .rcp-tooltip-tag {
+  color: var(--mc-gold-mid);
+}
+
+/* ---------- viewer ---------- */
+.rcp-viewer,
+.rcp-viewer-empty {
+  min-height: 100%;
+}
+
+.rcp-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+.rcp-viewer-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.rcp-viewer > .rcp-viewer-empty {
+  min-height: 160px;
+  flex: 1;
+}
+
+.rcp-viewer-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rcp-viewer-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rcp-viewer-title strong {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rcp-viewer-title span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.rcp-icon-btn {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 2px solid transparent;
+}
+
+.rcp-icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.rcp-icon-btn:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--overlay-hover);
+  border-color: #000;
+}
+
+.rcp-icon-btn:disabled {
+  opacity: 0.35;
+}
+
+.rcp-modes > button {
+  font-size: 10px;
+}
+
+.rcp-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.rcp-tab {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--mc-stone);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-btn);
+}
+
+.rcp-tab:hover {
+  background: var(--mc-stone-mid);
+}
+
+.rcp-tab.is-active {
+  background: var(--accent-wash);
+  border-color: var(--mc-green);
+}
+
+.rcp-tab-glyph {
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.rcp-tab-count {
+  position: absolute;
+  right: 1px;
+  bottom: 0;
+  font-family: var(--font-display);
+  font-size: 10px;
+  color: var(--text);
+  text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+}
+
+.rcp-group-title {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.rcp-pager.is-hidden {
+  visibility: hidden;
+}
+
+.rcp-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.rcp-pager-num {
+  min-width: 56px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ---------- recipe card ---------- */
+.rcp-card-wrap {
+  min-height: 190px;
+}
+
+.rcp-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background: var(--mc-stone);
+  border: 3px solid #000;
+  box-shadow: var(--bevel-panel);
+}
+
+.rcp-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.rcp-inputs {
+  display: grid;
+  grid-auto-rows: 40px;
+  gap: 2px;
+}
+
+.rcp-inline,
+.rcp-outputs {
+  display: flex;
+  gap: 2px;
+}
+
+.rcp-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.rcp-flame {
+  width: 16px;
+  height: 20px;
+}
+
+.rcp-slot {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 4px;
+  border: 2px solid #000;
+  cursor: pointer;
+}
+
+.rcp-slot.is-empty {
+  cursor: default;
+}
+
+.rcp-slot.is-big {
+  width: 48px;
+  height: 48px;
+  padding: 7px;
+}
+
+.rcp-slot.is-multi {
+  --slot-bg: #9a9784;
+}
+
+.rcp-slot-count {
+  position: absolute;
+  right: 2px;
+  bottom: 0;
+  font-family: var(--font-display);
+  font-size: 12px;
+  line-height: 1.1;
+  color: #fff;
+  text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000;
+  pointer-events: none;
+}
+
+/* pixel arrow (8x7 blocks of 4px) */
+.rcp-arrow {
+  flex: none;
+  width: 32px;
+  height: 24px;
+  background:
+    linear-gradient(var(--text-muted), var(--text-muted)) 0 10px / 24px 4px no-repeat,
+    linear-gradient(var(--text-muted), var(--text-muted)) 20px 6px / 4px 12px no-repeat,
+    linear-gradient(var(--text-muted), var(--text-muted)) 24px 10px / 4px 4px no-repeat,
+    linear-gradient(var(--text-muted), var(--text-muted)) 16px 2px / 4px 20px no-repeat;
+}
+
+.rcp-mark {
+  position: absolute;
+  left: 0;
+  top: -4px;
+  padding: 1px 6px;
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mc-gold-mid);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid #000;
+}
+
+.rcp-meta {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.rcp-extras {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 14px;
+  padding-top: 10px;
+  border-top: 2px solid rgba(0, 0, 0, 0.45);
+}
+
+.rcp-extra {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.rcp-extra > span {
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.rcp-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 10px;
+  font-style: normal;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 2px solid #000;
+  box-shadow: var(--bevel-inset);
+}
+
+.rcp-card-id {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+  .rcp-layout {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+  .rcp-toolbar .rcp-select {
+    width: 150px;
+  }
+}
+
+/* mod filter: the placeholder text is enough, hide the small label */
+.rcp-toolbar .pack-select-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.rcp-toolbar {
+  align-items: center;
+}
+
+.rcp-toolbar .rcp-search {
+  align-self: center;
+}

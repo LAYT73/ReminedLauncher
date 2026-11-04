@@ -18,7 +18,7 @@ fn b64(bytes: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }
 
-fn cache_dir(root: &Path) -> PathBuf {
+pub(crate) fn cache_dir(root: &Path) -> PathBuf {
     root.join(".remined").join("cache").join("schematic-assets")
 }
 
@@ -165,7 +165,7 @@ fn lang_names(
 }
 
 /// Download (or reuse cached) ru_ru.json for the version. Errors are non-fatal for callers.
-fn fetch_ru_lang(cache: &Path, version: &str, pack_dir: Option<&Path>) -> Result<Value, String> {
+pub(crate) fn fetch_ru_lang(cache: &Path, version: &str, pack_dir: Option<&Path>) -> Result<Value, String> {
     let dest = cache.join(format!("{version}-ru_ru.json"));
     if let Ok(b) = fs::read(&dest) {
         if let Ok(v) = serde_json::from_slice::<Value>(&b) {
